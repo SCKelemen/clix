@@ -52,8 +52,30 @@ func NewCommand(name string) *Command {
 // AddCommand registers a subcommand. The parent/child relationship is managed
 // automatically.
 func (c *Command) AddCommand(cmd *Command) {
-	cmd.parent = c
+	cmd.prepare(c)
 	c.Subcommands = append(c.Subcommands, cmd)
+}
+
+func (c *Command) prepare(parent *Command) {
+	c.parent = parent
+
+	if c.Flags == nil {
+		c.Flags = NewFlagSet(c.Name)
+	}
+
+	if c.Flags.lookup("help") == nil {
+		c.Flags.BoolVar(&BoolVarOptions{
+			Name:  "help",
+			Short: "h",
+			Usage: "Show help information",
+		})
+	}
+
+	for _, sub := range c.Subcommands {
+		if sub != nil {
+			sub.prepare(c)
+		}
+	}
 }
 
 // Path returns the command path from the root.

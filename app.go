@@ -29,6 +29,7 @@ type App struct {
 	DefaultTheme  PromptTheme
 	configLoaded  bool
 	configLoadErr error
+	rootPrepared  bool
 }
 
 // NewApp constructs an application with sensible defaults. Callers are still
@@ -93,6 +94,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return errors.New("clix: no root command configured")
 	}
 
+	a.ensureRootPrepared()
 	a.AddDefaultCommands()
 
 	if args == nil {
@@ -168,6 +170,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	return nil
+}
+
+func (a *App) ensureRootPrepared() {
+	if a.Root == nil || a.rootPrepared {
+		return
+	}
+	a.Root.prepare(nil)
+	a.rootPrepared = true
 }
 
 func (a *App) ensureConfigLoaded(ctx context.Context) error {

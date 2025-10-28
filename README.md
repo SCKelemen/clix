@@ -71,6 +71,37 @@ before executing the command handler.
 The full runnable version of this example (including flag parsing and
 configuration usage) can be found in [`examples/basic`](examples/basic).
 
+### Static command trees
+
+If you prefer to describe your CLI hierarchy using Go struct literals, assign
+the fully populated command tree to `app.Root`. `clix` will automatically wire
+up parent references and ensure a help flag is available on every command when
+the application starts.
+
+```go
+app.Root = &clix.Command{
+        Name:  "demo",
+        Short: "Demo application",
+        Subcommands: []*clix.Command{{
+                Name:  "greet",
+                Short: "Print a greeting",
+                Usage: "demo greet [name]",
+                Arguments: []*clix.Argument{{
+                        Name:     "name",
+                        Prompt:   "Name of the person to greet",
+                        Required: true,
+                }},
+                Run: func(ctx *clix.Context) error {
+                        fmt.Fprintf(ctx.App.Out, "Hello %s!\n", ctx.Args[0])
+                        return nil
+                },
+        }},
+}
+```
+
+Both construction styles are fully supported—mix and match them as your
+application grows.
+
 ## Pre- and post-run hooks
 
 Every command exposes optional `PreRun` and `PostRun` hooks in addition to the
