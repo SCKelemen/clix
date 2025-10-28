@@ -145,6 +145,10 @@ printed to integrate completion into your environment.
 
 - [`examples/basic`](examples/basic): end-to-end application demonstrating
   commands, flags, prompting, and configuration usage.
+- [`examples/gh`](examples/gh): a GitHub CLI-style hierarchy with familiar
+  subcommands, aliases, and interactive prompts.
+- [`examples/gcloud`](examples/gcloud): a Google Cloud CLI-inspired tree with
+  large command groups, global flags, and configuration interactions.
 
 More scenarios (including prompting workflows and advanced flag composition)
 will be added over time.
