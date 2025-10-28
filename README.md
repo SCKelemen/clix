@@ -17,17 +17,18 @@ and contextual execution hooks for you.
 
 ## Quick start
 
-Applications built with `clix` work best when the entry point and command tree
-are defined in separate packages. A minimal layout looks like:
+Applications built with `clix` work best when the executable wiring and the
+command implementations live in separate packages. A minimal layout looks like:
 
 ```
 demo/
   cmd/demo/main.go
-  internal/demo/app.go
+  cmd/demo/app.go
+  internal/greet/command.go
 ```
 
-`cmd/demo/main.go` wires up cancellation, logging, and error handling while the
-`internal/demo` package defines the command hierarchy:
+`cmd/demo/main.go` bootstraps cancellation, logging, and error handling for the
+process:
 
 ```go
 // cmd/demo/main.go
@@ -37,12 +38,10 @@ import (
         "context"
         "fmt"
         "os"
-
-        "example.com/demo/internal/demo"
 )
 
 func main() {
-        app := demo.NewApp()
+        app := newApp()
 
         if err := app.Run(context.Background(), nil); err != nil {
                 fmt.Fprintln(app.Err, err)
@@ -51,9 +50,46 @@ func main() {
 }
 ```
 
+`cmd/demo/app.go` owns the `clix.App` and root command definition while
+delegating subcommands to the `internal/` tree:
+
 ```go
-// internal/demo/app.go
-package demo
+// cmd/demo/app.go
+package main
+
+import (
+        "clix"
+        "example.com/demo/internal/greet"
+)
+
+func newApp() *clix.App {
+        app := clix.NewApp("demo")
+        app.Description = "Demonstrates the clix CLI framework"
+
+        var project string
+        app.GlobalFlags.StringVar(&clix.StringVarOptions{
+                Name:    "project",
+                Usage:   "Project to operate on",
+                EnvVar:  "DEMO_PROJECT",
+                Value:   &project,
+                Default: "sample-project",
+        })
+
+        root := clix.NewCommand("demo")
+        root.Short = "Root of the demo application"
+        root.AddCommand(greet.NewCommand(&project))
+
+        app.Root = root
+        return app
+}
+```
+
+The implementation of the `greet` command (including flags, arguments, and
+handlers) lives in `internal/greet`:
+
+```go
+// internal/greet/command.go
+package greet
 
 import (
         "fmt"
@@ -61,36 +97,27 @@ import (
         "clix"
 )
 
-func NewApp() *clix.App {
-        app := clix.NewApp("demo")
-
-        root := clix.NewCommand("demo")
-        root.Short = "Demo application"
-
-        greet := clix.NewCommand("greet")
-        greet.Short = "Print a friendly greeting"
-        greet.Arguments = []*clix.Argument{{
+func NewCommand(project *string) *clix.Command {
+        cmd := clix.NewCommand("greet")
+        cmd.Short = "Print a friendly greeting"
+        cmd.Arguments = []*clix.Argument{{
                 Name:     "name",
                 Required: true,
                 Prompt:   "Name of the person to greet",
         }}
-        greet.PreRun = func(ctx *clix.Context) error {
-                fmt.Fprintln(ctx.App.Out, "Preparing to greet...")
+        cmd.PreRun = func(ctx *clix.Context) error {
+                fmt.Fprintf(ctx.App.Out, "Using project %s\n", *project)
                 return nil
         }
-        greet.Run = func(ctx *clix.Context) error {
+        cmd.Run = func(ctx *clix.Context) error {
                 fmt.Fprintf(ctx.App.Out, "Hello %s!\n", ctx.Args[0])
                 return nil
         }
-        greet.PostRun = func(ctx *clix.Context) error {
+        cmd.PostRun = func(ctx *clix.Context) error {
                 fmt.Fprintln(ctx.App.Out, "Done!")
                 return nil
         }
-
-        root.AddCommand(greet)
-        app.Root = root
-
-        return app
+        return cmd
 }
 ```
 
@@ -98,7 +125,7 @@ When no positional arguments are provided, `clix` will prompt the user for any
 required values. For example `demo greet` will prompt for the `name` argument
 before executing the command handler.
 
-The full runnable version of this example (including flag parsing and
+The full runnable version of this example (including additional flags and
 configuration usage) can be found in [`examples/basic`](examples/basic).
 
 ### Static command trees

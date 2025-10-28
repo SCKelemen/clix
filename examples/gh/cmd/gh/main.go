@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-
-	"clix/examples/gh/internal/gh"
 )
 
 func main() {
-	app := gh.NewApp()
+	app := newApp()
 
 	if err := app.Run(context.Background(), nil); err != nil {
 		fmt.Fprintln(app.Err, err)
