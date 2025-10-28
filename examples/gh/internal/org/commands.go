@@ -25,8 +25,9 @@ func NewCommand() *clix.Command {
 		fmt.Fprintf(ctx.App.Out, "Organization: %s\n", ctx.Args[0])
 		return nil
 	}
-
-	cmd.AddCommand(list)
-	cmd.AddCommand(view)
+	cmd.Subcommands = []*clix.Command{
+		list,
+		view,
+	}
 	return cmd
 }

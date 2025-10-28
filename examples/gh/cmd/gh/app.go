@@ -54,26 +54,28 @@ gh pr checkout 321`)
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
 
-	root.AddCommand(authcmd.NewCommand())
-	root.AddCommand(simplecmd.NewCommand("browse", "Open repositories, issues, pull requests, and more in the browser"))
-	root.AddCommand(simplecmd.NewCommand("codespace", "Connect to and manage codespaces"))
-	root.AddCommand(simplecmd.NewCommand("gist", "Manage gists"))
-	root.AddCommand(simplecmd.NewCommand("issue", "Manage issues"))
-	root.AddCommand(orgcmd.NewCommand())
-	root.AddCommand(prcmd.NewCommand())
-	root.AddCommand(simplecmd.NewCommand("project", "Work with GitHub Projects."))
-	root.AddCommand(simplecmd.NewCommand("release", "Manage releases"))
-	root.AddCommand(repocmd.NewCommand())
-	root.AddCommand(simplecmd.NewCommand("cache", "Manage GitHub Actions caches"))
-	root.AddCommand(simplecmd.NewCommand("run", "View details about workflow runs"))
-	root.AddCommand(simplecmd.NewCommand("workflow", "View details about GitHub Actions workflows"))
-	root.AddCommand(simplecmd.NewCommand("alias", "Create command shortcuts"))
-	root.AddCommand(simplecmd.NewCommand("api", "Make an authenticated GitHub API request"))
-	root.AddCommand(simplecmd.NewCommand("completion", "Generate shell completion scripts"))
-	root.AddCommand(simplecmd.NewCommand("config", "Manage configuration for gh"))
-	root.AddCommand(simplecmd.NewCommand("extension", "Manage gh extensions"))
-	root.AddCommand(simplecmd.NewCommand("search", "Search for repositories, issues, and pull requests"))
-	root.AddCommand(simplecmd.NewCommand("status", "Print information about relevant issues, pull requests, and notifications across repositories"))
+	root.Subcommands = []*clix.Command{
+		authcmd.NewCommand(),
+		simplecmd.NewCommand("browse", "Open repositories, issues, pull requests, and more in the browser"),
+		simplecmd.NewCommand("codespace", "Connect to and manage codespaces"),
+		simplecmd.NewCommand("gist", "Manage gists"),
+		simplecmd.NewCommand("issue", "Manage issues"),
+		orgcmd.NewCommand(),
+		prcmd.NewCommand(),
+		simplecmd.NewCommand("project", "Work with GitHub Projects."),
+		simplecmd.NewCommand("release", "Manage releases"),
+		repocmd.NewCommand(),
+		simplecmd.NewCommand("cache", "Manage GitHub Actions caches"),
+		simplecmd.NewCommand("run", "View details about workflow runs"),
+		simplecmd.NewCommand("workflow", "View details about GitHub Actions workflows"),
+		simplecmd.NewCommand("alias", "Create command shortcuts"),
+		simplecmd.NewCommand("api", "Make an authenticated GitHub API request"),
+		simplecmd.NewCommand("completion", "Generate shell completion scripts"),
+		simplecmd.NewCommand("config", "Manage configuration for gh"),
+		simplecmd.NewCommand("extension", "Manage gh extensions"),
+		simplecmd.NewCommand("search", "Search for repositories, issues, and pull requests"),
+		simplecmd.NewCommand("status", "Print information about relevant issues, pull requests, and notifications across repositories"),
+	}
 
 	app.Root = root
 	return app

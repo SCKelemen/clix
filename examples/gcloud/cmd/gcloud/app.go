@@ -74,6 +74,7 @@ func newApp() *clix.App {
 	}
 
 	added := map[string]struct{}{}
+	var subcommands []*clix.Command
 	for _, group := range groups {
 		for _, entry := range group.Entries {
 			if _, exists := added[entry.Name]; exists {
@@ -83,9 +84,9 @@ func newApp() *clix.App {
 				if !builder.Enabled {
 					continue
 				}
-				root.AddCommand(builder.Build())
+				subcommands = append(subcommands, builder.Build())
 			} else {
-				root.AddCommand(simplecmd.NewCommand(entry.Name, entry.Description))
+				subcommands = append(subcommands, simplecmd.NewCommand(entry.Name, entry.Description))
 			}
 			added[entry.Name] = struct{}{}
 		}
@@ -96,10 +97,12 @@ func newApp() *clix.App {
 			if _, exists := added[entry.Name]; exists {
 				continue
 			}
-			root.AddCommand(simplecmd.NewCommand(entry.Name, entry.Description))
+			subcommands = append(subcommands, simplecmd.NewCommand(entry.Name, entry.Description))
 			added[entry.Name] = struct{}{}
 		}
 	}
+
+	root.Subcommands = subcommands
 
 	app.Root = root
 	return app

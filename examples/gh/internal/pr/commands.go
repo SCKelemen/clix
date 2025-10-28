@@ -38,8 +38,9 @@ func NewCommand() *clix.Command {
 		fmt.Fprintf(ctx.App.Out, "Merging PR #%s using %s strategy\n", ctx.Args[0], strategy)
 		return nil
 	}
-
-	cmd.AddCommand(checkout)
-	cmd.AddCommand(merge)
+	cmd.Subcommands = []*clix.Command{
+		checkout,
+		merge,
+	}
 	return cmd
 }

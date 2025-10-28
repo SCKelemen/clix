@@ -75,9 +75,11 @@ func newApp() *clix.App {
                 Default: "sample-project",
         })
 
-        root := clix.NewCommand("demo")
-        root.Short = "Root of the demo application"
-        root.AddCommand(greet.NewCommand(&project))
+       root := clix.NewCommand("demo")
+       root.Short = "Root of the demo application"
+       root.Subcommands = []*clix.Command{
+               greet.NewCommand(&project),
+       }
 
         app.Root = root
         return app
@@ -160,6 +162,27 @@ builders := map[string]commandBuilder{
 
 Setting one of the feature flags to `false` removes that command tree entirely
 without having to touch the implementation living under `internal/`.
+
+Because each internal package describes its own child commands declaratively,
+those modules can run as standalone CLIs and slot into a larger binary without
+rewiring. A team can prototype a `database` tool under
+`internal/database/commands.go`, ship a dedicated `cmd/database/main.go` for
+their day-to-day workflows, and later publish that same package to the broader
+`dev` CLI simply by importing it:
+
+```go
+// cmd/dev/app.go
+root := clix.NewCommand("dev")
+root.Subcommands = []*clix.Command{
+        authcmd.NewCommand(),         // shared authentication helpers
+        databasecmd.NewCommand(),     // promoted from the database team's CLI
+        vulnerabilitycmd.NewCommand() // opt-in tooling from the security team
+}
+```
+
+Feature-specific binaries can keep additional subcommands private (for example,
+advanced vulnerability auditing routines) while the shared packages expose only
+the commands intended for the wider engineering org.
 
 ### Static command trees
 

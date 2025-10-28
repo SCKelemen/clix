@@ -33,8 +33,9 @@ func NewCommand() *clix.Command {
 		fmt.Fprintf(ctx.App.Out, "Creating %s repository %s\n", visibility, ctx.Args[0])
 		return nil
 	}
-
-	cmd.AddCommand(clone)
-	cmd.AddCommand(create)
+	cmd.Subcommands = []*clix.Command{
+		clone,
+		create,
+	}
 	return cmd
 }

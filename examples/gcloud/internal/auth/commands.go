@@ -46,7 +46,9 @@ func NewCommand() *clix.Command {
 		return nil
 	}
 
-	cmd.AddCommand(login)
-	cmd.AddCommand(activate)
+	cmd.Subcommands = []*clix.Command{
+		login,
+		activate,
+	}
 	return cmd
 }

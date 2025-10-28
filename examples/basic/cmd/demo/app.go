@@ -20,7 +20,9 @@ func newApp() *clix.App {
 
 	root := clix.NewCommand("demo")
 	root.Short = "Root of the demo application"
-	root.AddCommand(greet.NewCommand(&project))
+	root.Subcommands = []*clix.Command{
+		greet.NewCommand(&project),
+	}
 
 	app.Root = root
 	return app
