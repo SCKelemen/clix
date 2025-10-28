@@ -17,7 +17,20 @@ and contextual execution hooks for you.
 
 ## Quick start
 
+Applications built with `clix` work best when the entry point and command tree
+are defined in separate packages. A minimal layout looks like:
+
+```
+demo/
+  cmd/demo/main.go
+  internal/demo/app.go
+```
+
+`cmd/demo/main.go` wires up cancellation, logging, and error handling while the
+`internal/demo` package defines the command hierarchy:
+
 ```go
+// cmd/demo/main.go
 package main
 
 import (
@@ -25,10 +38,30 @@ import (
         "fmt"
         "os"
 
-        "clix"
+        "example.com/demo/internal/demo"
 )
 
 func main() {
+        app := demo.NewApp()
+
+        if err := app.Run(context.Background(), nil); err != nil {
+                fmt.Fprintln(app.Err, err)
+                os.Exit(1)
+        }
+}
+```
+
+```go
+// internal/demo/app.go
+package demo
+
+import (
+        "fmt"
+
+        "clix"
+)
+
+func NewApp() *clix.App {
         app := clix.NewApp("demo")
 
         root := clix.NewCommand("demo")
@@ -57,10 +90,7 @@ func main() {
         root.AddCommand(greet)
         app.Root = root
 
-        if err := app.Run(context.Background(), nil); err != nil {
-                fmt.Fprintln(app.Err, err)
-                os.Exit(1)
-        }
+        return app
 }
 ```
 

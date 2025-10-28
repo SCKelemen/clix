@@ -1,23 +1,14 @@
-package main
+package gh
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"clix"
 )
 
-func main() {
-	app := buildGitHubApp()
-	if err := app.Run(context.Background(), nil); err != nil {
-		fmt.Fprintln(app.Err, err)
-		os.Exit(1)
-	}
-}
-
-func buildGitHubApp() *clix.App {
+// NewApp constructs a GitHub-inspired CLI hierarchy showcasing nested commands.
+func NewApp() *clix.App {
 	app := clix.NewApp("gh")
 	app.Description = "Work seamlessly with GitHub from the command line."
 

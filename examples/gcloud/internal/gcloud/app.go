@@ -1,9 +1,7 @@
-package main
+package gcloud
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"clix"
@@ -14,15 +12,8 @@ type gcloudEntry struct {
 	Description string
 }
 
-func main() {
-	app := buildGCloudApp()
-	if err := app.Run(context.Background(), nil); err != nil {
-		fmt.Fprintln(app.Err, err)
-		os.Exit(1)
-	}
-}
-
-func buildGCloudApp() *clix.App {
+// NewApp constructs a Google Cloud-inspired CLI with nested command groups.
+func NewApp() *clix.App {
 	app := clix.NewApp("gcloud")
 	app.Description = "Interact with Google Cloud services from the command line."
 

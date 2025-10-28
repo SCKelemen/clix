@@ -1,23 +1,13 @@
-package main
+package demo
 
 import (
-	"context"
 	"fmt"
-	"os"
 
 	"clix"
 )
 
-func main() {
-	app := buildApp()
-
-	if err := app.Run(context.Background(), nil); err != nil {
-		fmt.Fprintln(app.Err, err)
-		os.Exit(1)
-	}
-}
-
-func buildApp() *clix.App {
+// NewApp constructs the demo CLI application with commands, flags, and configuration.
+func NewApp() *clix.App {
 	app := clix.NewApp("demo")
 	app.Description = "Demonstrates the clix CLI framework"
 
