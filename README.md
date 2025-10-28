@@ -128,6 +128,39 @@ before executing the command handler.
 The full runnable version of this example (including additional flags and
 configuration usage) can be found in [`examples/basic`](examples/basic).
 
+### Opting into feature packages
+
+Keeping the executable under `cmd/` lets you choose which internal feature
+packages to include when assembling your CLI. For instance, the
+[`examples/gcloud`](examples/gcloud) binary enables authentication,
+configuration, and project management by wiring those modules explicitly:
+
+```go
+var (
+        includeAuth     = true
+        includeConfig   = true
+        includeProjects = true
+)
+
+builders := map[string]commandBuilder{
+        "auth": {
+                Enabled: includeAuth,
+                Build:   authcmd.NewCommand,
+        },
+        "projects": {
+                Enabled: includeProjects,
+                Build:   func() *clix.Command { return projectscmd.NewCommand(&project) },
+        },
+        "config": {
+                Enabled: includeConfig,
+                Build:   func() *clix.Command { return configcmd.NewCommand(&project) },
+        },
+}
+```
+
+Setting one of the feature flags to `false` removes that command tree entirely
+without having to touch the implementation living under `internal/`.
+
 ### Static command trees
 
 If you prefer to describe your CLI hierarchy using Go struct literals, assign

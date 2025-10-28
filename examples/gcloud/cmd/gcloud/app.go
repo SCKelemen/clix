@@ -11,6 +11,20 @@ import (
 	simplecmd "clix/examples/gcloud/internal/simple"
 )
 
+// Toggle the feature packages you want to include in this build of gcloud. Because the
+// command wiring happens inside cmd/, you can choose to opt-in only to the internal
+// packages that your binary actually needs.
+var (
+	includeAuth     = true
+	includeConfig   = true
+	includeProjects = true
+)
+
+type commandBuilder struct {
+	Enabled bool
+	Build   func() *clix.Command
+}
+
 type gcloudEntry struct {
 	Name        string
 	Description string
@@ -34,7 +48,23 @@ func newApp() *clix.App {
 
 	groups := gcloudCommandGroups()
 	commands := gcloudStandaloneCommands()
-	root.Long = buildGCloudLongHelp(groups, commands)
+
+	builders := map[string]commandBuilder{
+		"auth": {
+			Enabled: includeAuth,
+			Build:   authcmd.NewCommand,
+		},
+		"projects": {
+			Enabled: includeProjects,
+			Build:   func() *clix.Command { return projectscmd.NewCommand(&project) },
+		},
+		"config": {
+			Enabled: includeConfig,
+			Build:   func() *clix.Command { return configcmd.NewCommand(&project) },
+		},
+	}
+
+	root.Long = buildGCloudLongHelp(groups, commands, builders)
 
 	root.Run = func(ctx *clix.Context) error {
 		fmt.Fprintln(ctx.App.Err, "ERROR: (gcloud) Command name argument expected.")
@@ -43,20 +73,17 @@ func newApp() *clix.App {
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
 
-	builders := map[string]func() *clix.Command{
-		"auth":     authcmd.NewCommand,
-		"projects": func() *clix.Command { return projectscmd.NewCommand(&project) },
-		"config":   func() *clix.Command { return configcmd.NewCommand(&project) },
-	}
-
 	added := map[string]struct{}{}
 	for _, group := range groups {
 		for _, entry := range group.Entries {
 			if _, exists := added[entry.Name]; exists {
 				continue
 			}
-			if build, ok := builders[entry.Name]; ok {
-				root.AddCommand(build())
+			if builder, ok := builders[entry.Name]; ok {
+				if !builder.Enabled {
+					continue
+				}
+				root.AddCommand(builder.Build())
 			} else {
 				root.AddCommand(simplecmd.NewCommand(entry.Name, entry.Description))
 			}
@@ -84,23 +111,41 @@ func buildGCloudLongHelp(groups []struct {
 }, commands []struct {
 	Category string
 	Entries  []gcloudEntry
-}) string {
+}, builders map[string]commandBuilder) string {
 	var b strings.Builder
 	b.WriteString("Available command groups for gcloud:\n\n")
 	for _, group := range groups {
-		b.WriteString("  " + group.Category + "\n")
+		var displayed int
 		for _, entry := range group.Entries {
+			if builder, ok := builders[entry.Name]; ok && !builder.Enabled {
+				continue
+			}
+			if displayed == 0 {
+				b.WriteString("  " + group.Category + "\n")
+			}
 			b.WriteString(fmt.Sprintf("      %-22s %s\n", entry.Name, entry.Description))
+			displayed++
 		}
-		b.WriteString("\n")
+		if displayed > 0 {
+			b.WriteString("\n")
+		}
 	}
 	b.WriteString("Available commands for gcloud:\n\n")
 	for _, cat := range commands {
-		b.WriteString("  " + cat.Category + "\n")
+		var displayed int
 		for _, entry := range cat.Entries {
+			if builder, ok := builders[entry.Name]; ok && !builder.Enabled {
+				continue
+			}
+			if displayed == 0 {
+				b.WriteString("  " + cat.Category + "\n")
+			}
 			b.WriteString(fmt.Sprintf("      %-22s %s\n", entry.Name, entry.Description))
+			displayed++
 		}
-		b.WriteString("\n")
+		if displayed > 0 {
+			b.WriteString("\n")
+		}
 	}
 	return strings.TrimSpace(b.String())
 }
