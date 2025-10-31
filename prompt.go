@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // Prompter encapsulates interactive prompting.
@@ -141,6 +144,95 @@ func (p TerminalPrompter) promptText(ctx context.Context, req PromptRequest) (st
 
 // promptSelect handles select-style prompts with navigable options.
 func (p TerminalPrompter) promptSelect(ctx context.Context, req PromptRequest) (string, error) {
+	// Check if input is a terminal - if not, use line-based fallback
+	inFile, isTerminal := p.In.(*os.File)
+	if !isTerminal {
+		return p.promptSelectLineBased(ctx, req)
+	}
+
+	// Check if it's actually a TTY
+	if !term.IsTerminal(int(inFile.Fd())) {
+		return p.promptSelectLineBased(ctx, req)
+	}
+
+	// Enable raw mode for arrow key navigation
+	state, err := EnableRawMode(inFile)
+	if err != nil {
+		// Fall back to line-based if raw mode fails
+		return p.promptSelectLineBased(ctx, req)
+	}
+	defer state.Restore()
+
+	// Find default option index
+	selectedIdx := 0
+	if req.Default != "" {
+		for i, opt := range req.Options {
+			if opt.Value == req.Default || opt.Label == req.Default {
+				selectedIdx = i
+				break
+			}
+		}
+	}
+
+	// Hide cursor during selection
+	HideCursor(p.Out)
+	defer ShowCursor(p.Out)
+
+	for {
+		// Render the prompt
+		p.renderSelectPrompt(req, selectedIdx)
+
+		// Read a single keypress
+		key, err := ReadKey(p.In)
+		if err != nil {
+			return "", err
+		}
+
+		// Handle navigation
+		switch key {
+		case KeyUp:
+			if selectedIdx > 0 {
+				selectedIdx--
+			} else {
+				selectedIdx = len(req.Options) - 1 // Wrap to bottom
+			}
+		case KeyDown:
+			if selectedIdx < len(req.Options)-1 {
+				selectedIdx++
+			} else {
+				selectedIdx = 0 // Wrap to top
+			}
+		case KeyEnter:
+			// Selection confirmed
+			fmt.Fprint(p.Out, "\n")
+			if len(req.Options) > 0 {
+				return req.Options[selectedIdx].Value, nil
+			}
+		case KeyCtrlC, KeyEscape:
+			fmt.Fprint(p.Out, "\n")
+			return "", errors.New("cancelled")
+		case KeyHome:
+			selectedIdx = 0
+		case KeyEnd:
+			selectedIdx = len(req.Options) - 1
+		default:
+			// Try to match by number (1-9) for quick selection
+			if key.IsPrintable() && key.Rune >= '1' && key.Rune <= '9' {
+				idx := int(key.Rune - '1')
+				if idx < len(req.Options) {
+					selectedIdx = idx
+					fmt.Fprint(p.Out, "\n")
+					return req.Options[selectedIdx].Value, nil
+				}
+			}
+			// For typing, we might want to switch to filtering mode
+			// For now, just ignore non-navigation keys
+		}
+	}
+}
+
+// promptSelectLineBased is the fallback line-based implementation for non-terminal input.
+func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Find default option index
@@ -236,6 +328,37 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req PromptRequest) (
 	}
 }
 
+// renderSelectPrompt renders the select prompt with the current selection.
+func (p TerminalPrompter) renderSelectPrompt(req PromptRequest, selectedIdx int) {
+	// Clear screen by moving cursor up and clearing lines
+	// We need to clear from the start of the prompt
+	// Use ANSI escape codes to move cursor to beginning and clear below
+	fmt.Fprint(p.Out, "\033[H\033[2J") // Clear entire screen (for simplicity)
+	
+	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
+	label := renderText(req.Theme.LabelStyle, req.Label)
+	fmt.Fprintf(p.Out, "%s%s", prefix, label)
+
+	if req.Theme.Hint != "" {
+		hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+		fmt.Fprintf(p.Out, " %s", hint)
+	}
+	fmt.Fprint(p.Out, "\n")
+
+	// Display options
+	for i, opt := range req.Options {
+		marker := " "
+		if i == selectedIdx {
+			marker = ">"
+		}
+		fmt.Fprintf(p.Out, "%s %s", marker, opt.Label)
+		if opt.Description != "" {
+			fmt.Fprintf(p.Out, " - %s", opt.Description)
+		}
+		fmt.Fprint(p.Out, "\n")
+	}
+}
+
 // promptConfirm handles yes/no confirmation prompts.
 func (p TerminalPrompter) promptConfirm(ctx context.Context, req PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
@@ -297,6 +420,132 @@ func (p TerminalPrompter) promptConfirm(ctx context.Context, req PromptRequest) 
 
 // promptMultiSelect handles multi-select prompts where users can choose multiple options.
 func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptRequest) (string, error) {
+	// Check if input is a terminal - if not, use line-based fallback
+	inFile, isTerminal := p.In.(*os.File)
+	if !isTerminal {
+		return p.promptMultiSelectLineBased(ctx, req)
+	}
+
+	// Check if it's actually a TTY
+	if !term.IsTerminal(int(inFile.Fd())) {
+		return p.promptMultiSelectLineBased(ctx, req)
+	}
+
+	// Enable raw mode for arrow key navigation
+	state, err := EnableRawMode(inFile)
+	if err != nil {
+		// Fall back to line-based if raw mode fails
+		return p.promptMultiSelectLineBased(ctx, req)
+	}
+	defer state.Restore()
+
+	// Parse default selections
+	selected := make(map[int]bool)
+	if req.Default != "" {
+		// Try parsing as indices first (e.g., "1,2,3")
+		indices := parseIndices(req.Default, len(req.Options))
+		if len(indices) > 0 {
+			for _, idx := range indices {
+				selected[idx] = true
+			}
+		} else {
+			// Try parsing as comma-separated values (e.g., "a,b,c")
+			values := strings.Split(req.Default, ",")
+			for _, val := range values {
+				val = strings.TrimSpace(val)
+				for i, opt := range req.Options {
+					if opt.Value == val || opt.Label == val {
+						selected[i] = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	currentIdx := 0
+	if len(req.Options) > 0 {
+		// Find first selected option or default to 0
+		for i := range req.Options {
+			if selected[i] {
+				currentIdx = i
+				break
+			}
+		}
+	}
+
+	// Hide cursor during selection
+	HideCursor(p.Out)
+	defer ShowCursor(p.Out)
+
+	for {
+		// Render the prompt
+		p.renderMultiSelectPrompt(req, selected, currentIdx)
+
+		// Read a single keypress
+		key, err := ReadKey(p.In)
+		if err != nil {
+			return "", err
+		}
+
+		// Handle navigation and selection
+		switch key {
+		case KeyUp:
+			if currentIdx > 0 {
+				currentIdx--
+			} else {
+				currentIdx = len(req.Options) - 1 // Wrap to bottom
+			}
+		case KeyDown:
+			if currentIdx < len(req.Options)-1 {
+				currentIdx++
+			} else {
+				currentIdx = 0 // Wrap to top
+			}
+		case KeySpace, KeyEnter:
+			// Toggle current selection (Enter also confirms if selections exist)
+			if len(req.Options) > 0 {
+				selected[currentIdx] = !selected[currentIdx]
+			}
+			// If Enter and we have selections, confirm
+			if key == KeyEnter {
+				if len(selected) > 0 {
+					// Check if any are selected
+					hasSelection := false
+					for _, sel := range selected {
+						if sel {
+							hasSelection = true
+							break
+						}
+					}
+					if hasSelection {
+						fmt.Fprint(p.Out, "\n")
+						return p.formatSelectedValues(req.Options, selected), nil
+					}
+				}
+			}
+		case KeyCtrlC, KeyEscape:
+			fmt.Fprint(p.Out, "\n")
+			return "", errors.New("cancelled")
+		case KeyHome:
+			currentIdx = 0
+		case KeyEnd:
+			currentIdx = len(req.Options) - 1
+		default:
+			// Try number keys for quick toggle (1-9)
+			if key.IsPrintable() && key.Rune >= '1' && key.Rune <= '9' {
+				idx := int(key.Rune - '1')
+				if idx < len(req.Options) {
+					currentIdx = idx
+					selected[idx] = !selected[idx]
+				}
+			}
+		}
+	}
+}
+
+// promptMultiSelectLineBased is the fallback line-based implementation for non-terminal input.
+func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Parse default selections
@@ -408,6 +657,40 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 		}
 
 		// After toggling, continue loop to show updated state
+	}
+}
+
+// renderMultiSelectPrompt renders the multi-select prompt with current selection state.
+func (p TerminalPrompter) renderMultiSelectPrompt(req PromptRequest, selected map[int]bool, currentIdx int) {
+	// Clear screen by moving cursor up and clearing lines
+	fmt.Fprint(p.Out, "\033[H\033[2J") // Clear entire screen (for simplicity)
+
+	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
+	label := renderText(req.Theme.LabelStyle, req.Label)
+	fmt.Fprintf(p.Out, "%s%s", prefix, label)
+
+	if req.Theme.Hint != "" {
+		hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+		fmt.Fprintf(p.Out, " %s", hint)
+	}
+	fmt.Fprint(p.Out, "\n")
+
+	// Display options with checkboxes
+	for i, opt := range req.Options {
+		marker := "[ ]"
+		if selected[i] {
+			marker = "[x]"
+		}
+		// Highlight current option
+		indicator := " "
+		if i == currentIdx {
+			indicator = ">"
+		}
+		fmt.Fprintf(p.Out, "%s %s %d. %s", indicator, marker, i+1, opt.Label)
+		if opt.Description != "" {
+			fmt.Fprintf(p.Out, " - %s", opt.Description)
+		}
+		fmt.Fprint(p.Out, "\n")
 	}
 }
 
