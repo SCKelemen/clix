@@ -1,5 +1,14 @@
 # clix
 
+```
+  ██████╗ ██╗      ██╗ ██╗  ██╗
+ ██╔════╝ ██║      ██║ ╚██╗██╔╝
+ ██║      ██║      ██║  ╚███╔╝
+ ██║      ██║      ██║  ██╔██╗
+ ╚██████╗ ███████╗ ██║ ██╔╝ ██╗
+  ╚═════╝ ╚══════╝ ╚═╝ ╚═╝  ╚═╝
+```
+
 `clix` is an opinionated, batteries-optional framework for building nested CLI
 applications using plain Go. It provides a declarative API for describing
 commands, flags, and arguments while handling configuration hydration,
