@@ -31,6 +31,10 @@ type App struct {
 	configLoaded  bool
 	configLoadErr error
 	rootPrepared  bool
+
+	// Extensions for optional batteries-included features
+	extensions        []Extension
+	extensionsApplied bool
 }
 
 // NewApp constructs an application with sensible defaults. Callers are still
@@ -69,24 +73,19 @@ func NewApp(name string) *App {
 	return app
 }
 
-// AddDefaultCommands attaches built-in helper commands to the application. It
-// is safe to call multiple times; duplicate commands will not be added.
+// AddDefaultCommands attaches built-in helper commands to the application.
+//
+// Note: All commands are now extensions:
+// - Help: clix/ext/help
+// - Config: clix/ext/config
+// - Autocomplete: clix/ext/autocomplete
+// - Version: clix/ext/version
+// No default commands are added automatically.
 func (a *App) AddDefaultCommands() {
 	if a.Root == nil {
 		return
 	}
-
-	if a.Root.findSubcommand("help") == nil {
-		a.Root.AddCommand(NewHelpCommand(a))
-	}
-
-	if a.Root.findSubcommand("config") == nil {
-		a.Root.AddCommand(NewConfigCommand(a))
-	}
-
-	if a.Root.findSubcommand("autocomplete") == nil {
-		a.Root.AddCommand(NewAutocompleteCommand(a))
-	}
+	// All commands are now extensions - no default commands added here
 }
 
 // Run executes the CLI using the provided arguments. If args is nil the
@@ -97,6 +96,12 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	a.ensureRootPrepared()
+
+	// Apply extensions before adding default commands (extensions might add commands)
+	if err := a.ApplyExtensions(); err != nil {
+		return err
+	}
+
 	a.AddDefaultCommands()
 
 	if args == nil {
@@ -119,17 +124,25 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		// If there are remaining args, they might be a command - match it first
 		// so we show help for that command instead of root
 		if len(remaining) > 0 {
-			if cmd, _ := a.Root.match(remaining); cmd != nil {
+			if cmd, _ := a.matchCommand(remaining); cmd != nil {
 				return a.printCommandHelp(cmd, nil)
 			}
 		}
 		return a.printCommandHelp(a.Root, remaining)
 	}
 
-	cmd, rest := a.Root.match(remaining)
+	cmd, rest := a.matchCommand(remaining)
 	if cmd == nil {
 		if len(remaining) == 0 {
 			return a.printCommandHelp(a.Root, remaining)
+		}
+		// Unknown command - show help for parent or error
+		// Try to find the parent command to show its help
+		if len(remaining) > 1 {
+			// Try to match parent command
+			if parentCmd, _ := a.matchCommand(remaining[:len(remaining)-1]); parentCmd != nil {
+				return a.printCommandHelp(parentCmd, nil)
+			}
 		}
 		return fmt.Errorf("unknown command: %s", strings.Join(remaining, " "))
 	}
@@ -137,6 +150,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// Ensure defaults and env/config values are applied prior to parsing.
 	a.applyConfig(cmd)
 
+	// Parse flags first - flags consume arguments starting with -
+	// This handles: --flag=value, --flag value, -f=value, -f value
 	resultArgs, err := cmd.Flags.Parse(rest)
 	if err != nil {
 		return err
@@ -152,13 +167,16 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// Count user-defined subcommands (excluding default commands like help, config, autocomplete)
 	userSubcommands := a.countUserSubcommands(cmd)
 
-	// If command has user-defined subcommands and no positional arguments provided, show help
-	if userSubcommands > 0 && len(resultArgs) == 0 {
+	// If command has user-defined subcommands, show help (don't execute Run handler)
+	// The only exception is if there are positional arguments, which means the user
+	// might want to execute the command with those args (though this is generally
+	// not recommended for commands with subcommands)
+	if userSubcommands > 0 {
 		return a.printCommandHelp(cmd, resultArgs)
 	}
 
 	// If command has no user-defined subcommands and required args are missing, prompt for them
-	if userSubcommands == 0 && len(resultArgs) < cmd.RequiredArgs() {
+	if len(resultArgs) < cmd.RequiredArgs() {
 		if err := a.promptForArguments(ctx, cmd, &resultArgs); err != nil {
 			return err
 		}
@@ -178,10 +196,6 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	if cmd.Run == nil {
-		// If command has user-defined subcommands but no Run handler, show help
-		if userSubcommands > 0 {
-			return a.printCommandHelp(cmd, resultArgs)
-		}
 		return fmt.Errorf("command %s has no run handler", cmd.Path())
 	}
 
@@ -196,6 +210,17 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	return nil
+}
+
+// matchCommand matches commands starting from the root, handling the case where
+// the root command name appears in the arguments.
+func (a *App) matchCommand(args []string) (*Command, []string) {
+	// If the first argument matches the root command name, skip it
+	// (this happens when the binary is invoked as "app-name root-command subcommand")
+	if len(args) > 0 && strings.EqualFold(args[0], a.Root.Name) {
+		return a.Root.match(args[1:])
+	}
+	return a.Root.match(args)
 }
 
 func (a *App) ensureRootPrepared() {
@@ -293,11 +318,12 @@ func (a *App) countUserSubcommands(cmd *Command) int {
 		return 0
 	}
 
-	// Default command names that are added by AddDefaultCommands
+	// Default command names that are added by extensions
 	defaultCommands := map[string]bool{
-		"help":         true,
-		"config":       true,
-		"autocomplete": true,
+		"help":         true, // Added by help extension if present
+		"config":       true, // Added by config extension if present
+		"autocomplete": true, // Added by autocomplete extension if present
+		"version":      true, // Added by version extension if present
 	}
 
 	count := 0

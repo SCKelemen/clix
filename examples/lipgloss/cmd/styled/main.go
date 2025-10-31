@@ -63,6 +63,8 @@ func newApp() *clix.App {
 	root.Example = strings.TrimSpace(`
 $ styled-demo style --mood excited
 $ styled-demo style --mood relaxed
+$ styled-demo style prompt select
+$ styled-demo style prompt multiselect
 `)
 	var mood string
 	root.Flags.StringVar(&clix.StringVarOptions{
@@ -111,6 +113,118 @@ $ styled-demo style --mood relaxed
 		fmt.Fprintln(ctx.App.Out, closing)
 		return nil
 	}
+
+	// Add subcommands to demonstrate different prompt types
+	promptCmd := clix.NewCommand("prompt")
+	promptCmd.Short = "Demonstrate styled prompts"
+	root.AddCommand(promptCmd)
+
+	// Select prompt demonstration
+	selectCmd := clix.NewCommand("select")
+	selectCmd.Short = "Demonstrate styled select prompt"
+	selectCmd.Run = func(ctx *clix.Context) error {
+		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Select Prompt Demo"))
+		fmt.Fprintln(ctx.App.Out, subtitleStyle.Render("Choose an option from the list"))
+
+		prompter := clix.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		promptTheme := ctx.App.DefaultTheme
+		promptTheme.Hint = "Use arrows to move, type to filter"
+
+		choice, err := prompter.Prompt(ctx, clix.PromptRequest{
+			Label: "What would you like to do?",
+			Theme: promptTheme,
+			Options: []clix.SelectOption{
+				{
+					Label:       "Create a new repository on github.com from scratch",
+					Value:       "create",
+					Description: "Initialize a new repository",
+				},
+				{
+					Label:       "Create a new repository on github.com from a template repository",
+					Value:       "template",
+					Description: "Use an existing template",
+				},
+				{
+					Label:       "Push an existing local repository to github.com",
+					Value:       "push",
+					Description: "Upload your local repo",
+				},
+			},
+		})
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintln(ctx.App.Out, "")
+		fmt.Fprintln(ctx.App.Out, accentStyle.Render("You selected:"), codeStyle.Render(choice))
+		return nil
+	}
+	promptCmd.AddCommand(selectCmd)
+
+	// Multi-select prompt demonstration
+	multiselectCmd := clix.NewCommand("multiselect")
+	multiselectCmd.Short = "Demonstrate styled multi-select prompt"
+	multiselectCmd.Run = func(ctx *clix.Context) error {
+		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Multi-Select Prompt Demo"))
+		fmt.Fprintln(ctx.App.Out, subtitleStyle.Render("Select multiple options, press Enter when done"))
+
+		prompter := clix.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		promptTheme := ctx.App.DefaultTheme
+		promptTheme.Hint = "Enter option numbers (e.g., 1,2,3), then press Enter"
+
+		selected, err := prompter.Prompt(ctx, clix.PromptRequest{
+			Label: "Select features to enable",
+			Theme: promptTheme,
+			Options: []clix.SelectOption{
+				{Label: "Auto-completion", Value: "autocomplete"},
+				{Label: "Syntax highlighting", Value: "highlighting"},
+				{Label: "Error checking", Value: "errors"},
+				{Label: "Format on save", Value: "format"},
+				{Label: "Linting", Value: "lint"},
+			},
+			MultiSelect: true,
+		})
+		if err != nil {
+			return err
+		}
+
+		features := strings.Split(selected, ",")
+		fmt.Fprintln(ctx.App.Out, "")
+		fmt.Fprintln(ctx.App.Out, accentStyle.Render("Selected features:"))
+		for _, feature := range features {
+			fmt.Fprintln(ctx.App.Out, "  •", codeStyle.Render(strings.TrimSpace(feature)))
+		}
+		return nil
+	}
+	promptCmd.AddCommand(multiselectCmd)
+
+	// Confirm prompt demonstration
+	confirmCmd := clix.NewCommand("confirm")
+	confirmCmd.Short = "Demonstrate styled confirm prompt"
+	confirmCmd.Run = func(ctx *clix.Context) error {
+		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Confirm Prompt Demo"))
+
+		prompter := clix.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		promptTheme := ctx.App.DefaultTheme
+
+		confirmed, err := prompter.Prompt(ctx, clix.PromptRequest{
+			Label:   "This will create \"my-repo\" as a public repository on github.com. Continue?",
+			Confirm: true,
+			Theme:   promptTheme,
+		})
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintln(ctx.App.Out, "")
+		if confirmed == "y" {
+			fmt.Fprintln(ctx.App.Out, accentStyle.Render("✓"), subtitleStyle.Render("Proceeding with repository creation"))
+		} else {
+			fmt.Fprintln(ctx.App.Out, subtitleStyle.Render("Cancelled"))
+		}
+		return nil
+	}
+	promptCmd.AddCommand(confirmCmd)
 
 	app.Root = root
 	return app

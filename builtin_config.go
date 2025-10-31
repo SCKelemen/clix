@@ -9,6 +9,9 @@ import (
 )
 
 // NewConfigCommand builds the configuration management command hierarchy.
+//
+// Deprecated: Use clix/ext/config.Extension instead for optional config commands.
+// This function is kept for backward compatibility but will be removed in a future version.
 func NewConfigCommand(app *App) *Command {
 	cmd := NewCommand("config")
 	cmd.Short = "Manage CLI configuration"
