@@ -235,29 +235,64 @@ cmd.Arguments = []*clix.Argument{{
 
 `clix` provides several prompt types:
 - **Text input**: Standard text prompts with validation
-- **Select**: Single-choice from a list (navigable with arrow keys)
-- **Multi-select**: Multiple choices from a list
+- **Select**: Navigable single-selection lists (requires prompt extension)
+- **Multi-select**: Multiple selection lists (requires prompt extension)
 - **Confirm**: Yes/no confirmation prompts
 
 Prompts automatically use raw terminal mode when available (for arrow key navigation) and fall back to line-based input otherwise.
 
+The prompt API supports both struct-based and functional options patterns. The struct-based API (using `PromptRequest`) is the primary API and is consistent with the rest of the codebase.
+
+**Struct-based API (recommended):**
 ```go
+// Basic text prompt
+result, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
+        Label:   "Enter name",
+        Default: "unknown",
+})
+
 // Select prompt
 result, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
         Label: "Choose an option",
         Options: []clix.SelectOption{
-                {Label: "Option 1", Value: "1"},
-                {Label: "Option 2", Value: "2"},
+                {Label: "Option A", Value: "a"},
+                {Label: "Option B", Value: "b"},
         },
 })
 
 // Confirm prompt
 result, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
-        Label:   "Proceed?",
+        Label:   "Continue?",
         Confirm: true,
-        Default: "y",
 })
 ```
+
+**Functional options API:**
+```go
+// Basic text prompt
+result, err := ctx.App.Prompter.Prompt(ctx,
+        clix.WithLabel("Enter name"),
+        clix.WithDefault("unknown"),
+)
+
+// Select prompt (requires prompt extension)
+import "clix/ext/prompt"
+result, err := ctx.App.Prompter.Prompt(ctx,
+        clix.WithLabel("Choose an option"),
+        prompt.Select([]clix.SelectOption{
+                {Label: "Option A", Value: "a"},
+                {Label: "Option B", Value: "b"},
+        }),
+)
+
+// Confirm prompt
+result, err := ctx.App.Prompter.Prompt(ctx,
+        clix.WithLabel("Continue?"),
+        clix.WithConfirm(),
+)
+```
+
+Both APIs can be mixed - functional options can be combined with `PromptRequest` structs, with later options overriding earlier values.
 
 ### Structured Output
 
