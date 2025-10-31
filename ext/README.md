@@ -147,7 +147,10 @@ Extensions are applied lazily when `Run()` is called, or can be applied early wi
 ## Future Extensions
 
 Planned optional extensions:
-- **Version checking & auto-update** - Check for updates and upgrade CLI tools
+- **Telemetry** - Optional usage analytics and performance metrics
+- **Feedback** - Collect user feedback and bug reports
+- **Upgrade** - Version checking & auto-update for CLI tools
+- **Debug** - Debug logging, verbose output, and troubleshooting tools
 - **Markdown rendering** - Rich text output with markdown support
 - **Progress bars** - Visual progress indicators for long operations
 - **Interactive table selection** - UI for selecting from tables
