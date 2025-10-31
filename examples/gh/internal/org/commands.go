@@ -9,6 +9,9 @@ import (
 func NewCommand() *clix.Command {
 	cmd := clix.NewCommand("org")
 	cmd.Short = "Manage organizations"
+	cmd.Run = func(ctx *clix.Context) error {
+		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+	}
 
 	list := clix.NewCommand("list")
 	list.Short = "List accessible organizations"

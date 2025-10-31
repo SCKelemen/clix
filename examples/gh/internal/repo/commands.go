@@ -9,6 +9,9 @@ import (
 func NewCommand() *clix.Command {
 	cmd := clix.NewCommand("repo")
 	cmd.Short = "Manage repositories"
+	cmd.Run = func(ctx *clix.Context) error {
+		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+	}
 
 	clone := clix.NewCommand("clone")
 	clone.Short = "Clone a repository"

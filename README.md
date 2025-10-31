@@ -75,11 +75,14 @@ func newApp() *clix.App {
                 Default: "sample-project",
         })
 
-       root := clix.NewCommand("demo")
-       root.Short = "Root of the demo application"
-       root.Subcommands = []*clix.Command{
-               greet.NewCommand(&project),
-       }
+        root := clix.NewCommand("demo")
+        root.Short = "Root of the demo application"
+        root.Run = func(ctx *clix.Context) error {
+                return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+        }
+        root.Subcommands = []*clix.Command{
+                greet.NewCommand(&project),
+        }
 
         app.Root = root
         return app
@@ -125,7 +128,11 @@ func NewCommand(project *string) *clix.Command {
 
 When no positional arguments are provided, `clix` will prompt the user for any
 required values. For example `demo greet` will prompt for the `name` argument
-before executing the command handler.
+before executing the command handler. Because the root command's `Run` handler
+renders the help surface, invoking `demo` on its own prints the full set of
+available commands. Category commands can follow the same pattern to display
+their scoped help (`clix.HelpRenderer{App: ctx.App, Command: ctx.Command}`)
+whenever they're executed without a subcommand, mirroring tools like `gh auth`.
 
 The full runnable version of this example (including additional flags and
 configuration usage) can be found in [`examples/basic`](examples/basic).

@@ -10,6 +10,9 @@ import (
 func NewCommand(project *string) *clix.Command {
 	cmd := clix.NewCommand("config")
 	cmd.Short = "View and edit Google Cloud CLI properties"
+	cmd.Run = func(ctx *clix.Context) error {
+		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+	}
 
 	set := clix.NewCommand("set")
 	set.Short = "Set a property"

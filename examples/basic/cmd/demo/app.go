@@ -20,6 +20,9 @@ func newApp() *clix.App {
 
 	root := clix.NewCommand("demo")
 	root.Short = "Root of the demo application"
+	root.Run = func(ctx *clix.Context) error {
+		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+	}
 	root.Subcommands = []*clix.Command{
 		greet.NewCommand(&project),
 	}

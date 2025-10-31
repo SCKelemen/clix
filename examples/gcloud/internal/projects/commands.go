@@ -9,6 +9,9 @@ import (
 func NewCommand(project *string) *clix.Command {
 	cmd := clix.NewCommand("projects")
 	cmd.Short = "Create and manage project access policies"
+	cmd.Run = func(ctx *clix.Context) error {
+		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+	}
 
 	list := clix.NewCommand("list")
 	list.Short = "List projects"

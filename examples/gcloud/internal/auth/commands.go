@@ -9,6 +9,9 @@ import (
 func NewCommand() *clix.Command {
 	cmd := clix.NewCommand("auth")
 	cmd.Short = "Manage oauth2 credentials for the Google Cloud CLI"
+	cmd.Run = func(ctx *clix.Context) error {
+		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+	}
 
 	login := clix.NewCommand("login")
 	login.Short = "Authorize access to Google Cloud"

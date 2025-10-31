@@ -9,6 +9,9 @@ import (
 func NewCommand() *clix.Command {
 	cmd := clix.NewCommand("pr")
 	cmd.Short = "Manage pull requests"
+	cmd.Run = func(ctx *clix.Context) error {
+		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+	}
 
 	checkout := clix.NewCommand("checkout")
 	checkout.Short = "Check out a pull request"

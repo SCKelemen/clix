@@ -67,9 +67,6 @@ func newApp() *clix.App {
 	root.Long = buildGCloudLongHelp(groups, commands, builders)
 
 	root.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Err, "ERROR: (gcloud) Command name argument expected.")
-		fmt.Fprintln(ctx.App.Err, "Command name argument expected.")
-		fmt.Fprintln(ctx.App.Err)
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
 
