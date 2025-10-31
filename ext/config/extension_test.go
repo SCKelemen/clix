@@ -42,7 +42,7 @@ func TestConfigExtension(t *testing.T) {
 		app.Root = root
 
 		// Don't add config extension
-		app.AddDefaultCommands()
+		// No default commands needed - extensions are opt-in
 
 		// Check that config command was NOT added
 		configCmd := findSubcommand(root, "config")

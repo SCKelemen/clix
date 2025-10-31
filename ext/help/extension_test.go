@@ -40,7 +40,7 @@ func TestHelpExtension(t *testing.T) {
 		app.Root = root
 
 		// Don't add help extension
-		app.AddDefaultCommands()
+		// No default commands needed - extensions are opt-in
 
 		// Check that help command was NOT added
 		helpCmd := findSubcommand(root, "help")

@@ -19,7 +19,7 @@ func TestExtensionsIntegration(t *testing.T) {
 		app.Root = root
 
 		// Don't add any extensions
-		app.AddDefaultCommands()
+		// No default commands needed - extensions are opt-in
 
 		// Flag-based help should work
 		var output bytes.Buffer

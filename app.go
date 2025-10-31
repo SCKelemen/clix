@@ -97,12 +97,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	a.ensureRootPrepared()
 
-	// Apply extensions before adding default commands (extensions might add commands)
+	// Apply extensions (extensions add optional commands)
 	if err := a.ApplyExtensions(); err != nil {
 		return err
 	}
-
-	a.AddDefaultCommands()
 
 	if args == nil {
 		args = os.Args[1:]
