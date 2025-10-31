@@ -70,6 +70,36 @@ type DurationVarOptions struct {
 	Value   *time.Duration
 }
 
+// IntVarOptions describes the configuration for adding an int flag.
+type IntVarOptions struct {
+	Name    string
+	Short   string
+	Usage   string
+	EnvVar  string
+	Default string
+	Value   *int
+}
+
+// Int64VarOptions describes the configuration for adding an int64 flag.
+type Int64VarOptions struct {
+	Name    string
+	Short   string
+	Usage   string
+	EnvVar  string
+	Default string
+	Value   *int64
+}
+
+// Float64VarOptions describes the configuration for adding a float64 flag.
+type Float64VarOptions struct {
+	Name    string
+	Short   string
+	Usage   string
+	EnvVar  string
+	Default string
+	Value   *float64
+}
+
 // StringVar registers a string flag.
 func (fs *FlagSet) StringVar(opts *StringVarOptions) {
 	value := &StringValue{target: opts.Value}
@@ -103,6 +133,57 @@ func (fs *FlagSet) BoolVar(opts *BoolVarOptions) {
 // DurationVar registers a duration flag.
 func (fs *FlagSet) DurationVar(opts *DurationVarOptions) {
 	value := &DurationValue{target: opts.Value}
+	flag := &Flag{
+		Name:    opts.Name,
+		Short:   opts.Short,
+		Usage:   opts.Usage,
+		EnvVar:  opts.EnvVar,
+		Default: opts.Default,
+		Value:   value,
+	}
+	fs.addFlag(flag)
+	if opts.Default != "" {
+		_ = value.Set(opts.Default)
+	}
+}
+
+// IntVar registers an int flag.
+func (fs *FlagSet) IntVar(opts *IntVarOptions) {
+	value := &IntValue{target: opts.Value}
+	flag := &Flag{
+		Name:    opts.Name,
+		Short:   opts.Short,
+		Usage:   opts.Usage,
+		EnvVar:  opts.EnvVar,
+		Default: opts.Default,
+		Value:   value,
+	}
+	fs.addFlag(flag)
+	if opts.Default != "" {
+		_ = value.Set(opts.Default)
+	}
+}
+
+// Int64Var registers an int64 flag.
+func (fs *FlagSet) Int64Var(opts *Int64VarOptions) {
+	value := &Int64Value{target: opts.Value}
+	flag := &Flag{
+		Name:    opts.Name,
+		Short:   opts.Short,
+		Usage:   opts.Usage,
+		EnvVar:  opts.EnvVar,
+		Default: opts.Default,
+		Value:   value,
+	}
+	fs.addFlag(flag)
+	if opts.Default != "" {
+		_ = value.Set(opts.Default)
+	}
+}
+
+// Float64Var registers a float64 flag.
+func (fs *FlagSet) Float64Var(opts *Float64VarOptions) {
+	value := &Float64Value{target: opts.Value}
 	flag := &Flag{
 		Name:    opts.Name,
 		Short:   opts.Short,
@@ -219,6 +300,51 @@ func (fs *FlagSet) GetBool(name string) (bool, bool) {
 	return false, false
 }
 
+// GetInt fetches an int flag value.
+func (fs *FlagSet) GetInt(name string) (int, bool) {
+	flag := fs.lookup(name)
+	if flag == nil {
+		return 0, false
+	}
+	if value, ok := flag.Value.(*IntValue); ok {
+		if value.target == nil {
+			return 0, false
+		}
+		return *value.target, true
+	}
+	return 0, false
+}
+
+// GetInt64 fetches an int64 flag value.
+func (fs *FlagSet) GetInt64(name string) (int64, bool) {
+	flag := fs.lookup(name)
+	if flag == nil {
+		return 0, false
+	}
+	if value, ok := flag.Value.(*Int64Value); ok {
+		if value.target == nil {
+			return 0, false
+		}
+		return *value.target, true
+	}
+	return 0, false
+}
+
+// GetFloat64 fetches a float64 flag value.
+func (fs *FlagSet) GetFloat64(name string) (float64, bool) {
+	flag := fs.lookup(name)
+	if flag == nil {
+		return 0, false
+	}
+	if value, ok := flag.Value.(*Float64Value); ok {
+		if value.target == nil {
+			return 0, false
+		}
+		return *value.target, true
+	}
+	return 0, false
+}
+
 func (fs *FlagSet) lookup(name string) *Flag {
 	for _, flag := range fs.flags {
 		if flag.Name == name {
@@ -310,4 +436,73 @@ func (d *DurationValue) String() string {
 		return "0s"
 	}
 	return d.target.String()
+}
+
+// IntValue implements Value for int flags.
+type IntValue struct {
+	target *int
+}
+
+func (i *IntValue) Set(value string) error {
+	parsed, err := strconv.ParseInt(value, 10, 0)
+	if err != nil {
+		return err
+	}
+	if i.target != nil {
+		*i.target = int(parsed)
+	}
+	return nil
+}
+
+func (i *IntValue) String() string {
+	if i.target == nil {
+		return "0"
+	}
+	return strconv.Itoa(*i.target)
+}
+
+// Int64Value implements Value for int64 flags.
+type Int64Value struct {
+	target *int64
+}
+
+func (i *Int64Value) Set(value string) error {
+	parsed, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return err
+	}
+	if i.target != nil {
+		*i.target = parsed
+	}
+	return nil
+}
+
+func (i *Int64Value) String() string {
+	if i.target == nil {
+		return "0"
+	}
+	return strconv.FormatInt(*i.target, 10)
+}
+
+// Float64Value implements Value for float64 flags.
+type Float64Value struct {
+	target *float64
+}
+
+func (f *Float64Value) Set(value string) error {
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return err
+	}
+	if f.target != nil {
+		*f.target = parsed
+	}
+	return nil
+}
+
+func (f *Float64Value) String() string {
+	if f.target == nil {
+		return "0"
+	}
+	return strconv.FormatFloat(*f.target, 'g', -1, 64)
 }
