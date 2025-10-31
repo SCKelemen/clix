@@ -50,7 +50,7 @@ func NewApp(name string) *App {
 
 	app.EnvPrefix = strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
 	app.Config = NewConfigManager(name)
-	app.Prompter = TerminalPrompter{In: app.In, Out: app.Out}
+	app.Prompter = SimpleTextPrompter{In: app.In, Out: app.Out}
 	app.DefaultTheme = DefaultPromptTheme
 	app.Styles = DefaultStyles
 

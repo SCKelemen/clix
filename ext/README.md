@@ -77,12 +77,44 @@ Adds shell completion script generation:
 
 Adds version information:
 - `cli version` - Show version information, including Go version and build info
+- Global `--version` / `-v` flag - Show version info inline
 
 ```go
 app.AddExtension(version.Extension{
 	Version: "1.0.0",
 	Commit:  "abc123",  // optional
 	Date:    "2024-01-01", // optional
+})
+```
+
+### Prompt Extension (`clix/ext/prompt`)
+
+Replaces the default `SimpleTextPrompter` with `EnhancedTerminalPrompter`, enabling:
+- Select prompts (navigable lists with arrow keys)
+- Multi-select prompts (select multiple options)
+- Confirm prompts (yes/no with defaults)
+- Raw terminal mode for interactive navigation
+
+Without this extension, advanced prompt types return errors directing users to add the extension.
+
+### Validation Extension (`clix/ext/validation`)
+
+Provides common validators for prompts and flags:
+- `Email` - RFC 5322 email validation
+- `URL` - URL validation
+- `CIDR` - CIDR notation validation
+- `IPv4`, `IPv6`, `IP` - IP address validation
+- `E164` - E.164 phone number validation
+- `NotEmpty`, `MinLength`, `MaxLength`, `Length` - String constraints
+- `Regex` - Regular expression validation
+- `All`, `Any` - Combine validators
+
+```go
+import "clix/ext/validation"
+
+prompter.Prompt(ctx, clix.PromptRequest{
+    Label: "Email",
+    Validate: validation.Email,
 })
 ```
 

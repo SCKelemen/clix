@@ -8,11 +8,11 @@ import (
 	"testing"
 )
 
-func TestTerminalPrompterReadsInput(t *testing.T) {
+func TestSimpleTextPrompterReadsInput(t *testing.T) {
 	in := bytes.NewBufferString("custom\n")
 	out := &bytes.Buffer{}
 
-	prompter := TerminalPrompter{In: in, Out: out}
+	prompter := SimpleTextPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label: "Enter value",
 		Theme: DefaultPromptTheme,
@@ -30,11 +30,11 @@ func TestTerminalPrompterReadsInput(t *testing.T) {
 	}
 }
 
-func TestTerminalPrompterUsesDefault(t *testing.T) {
+func TestSimpleTextPrompterUsesDefault(t *testing.T) {
 	in := bytes.NewBufferString("\n")
 	out := &bytes.Buffer{}
 
-	prompter := TerminalPrompter{In: in, Out: out}
+	prompter := SimpleTextPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:   "Colour",
 		Default: "blue",
@@ -53,11 +53,11 @@ func TestTerminalPrompterUsesDefault(t *testing.T) {
 	}
 }
 
-func TestTerminalPrompterValidatesInput(t *testing.T) {
+func TestSimpleTextPrompterValidatesInput(t *testing.T) {
 	in := bytes.NewBufferString("bad\nvalid\n")
 	out := &bytes.Buffer{}
 
-	prompter := TerminalPrompter{In: in, Out: out}
+	prompter := SimpleTextPrompter{In: in, Out: out}
 	attempts := 0
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label: "Code",
@@ -86,7 +86,7 @@ func TestTerminalPrompterValidatesInput(t *testing.T) {
 	}
 }
 
-func TestTerminalPrompterAppliesStyles(t *testing.T) {
+func TestSimpleTextPrompterAppliesStyles(t *testing.T) {
 	in := bytes.NewBufferString("bad\nvalid\n")
 	out := &bytes.Buffer{}
 
@@ -111,7 +111,7 @@ func TestTerminalPrompterAppliesStyles(t *testing.T) {
 		}),
 	}
 
-	prompter := TerminalPrompter{In: in, Out: out}
+	prompter := SimpleTextPrompter{In: in, Out: out}
 	_, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:   "value",
 		Default: "fallback",
@@ -133,9 +133,59 @@ func TestTerminalPrompterAppliesStyles(t *testing.T) {
 	}
 }
 
-func TestTerminalPrompterRequiresIO(t *testing.T) {
-	_, err := TerminalPrompter{In: nil, Out: nil}.Prompt(context.Background(), PromptRequest{})
+func TestSimpleTextPrompterRequiresIO(t *testing.T) {
+	_, err := SimpleTextPrompter{In: nil, Out: nil}.Prompt(context.Background(), PromptRequest{})
 	if err == nil {
 		t.Fatal("expected error when IO is missing")
+	}
+}
+
+func TestSimpleTextPrompterRejectsConfirmPrompts(t *testing.T) {
+	prompter := SimpleTextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
+	_, err := prompter.Prompt(context.Background(), PromptRequest{
+		Label:   "Continue?",
+		Confirm: true,
+		Theme:   DefaultPromptTheme,
+	})
+	if err == nil {
+		t.Fatal("expected error for confirm prompt")
+	}
+	if !strings.Contains(err.Error(), "confirm prompts require the prompt extension") {
+		t.Fatalf("expected error about extension, got: %v", err)
+	}
+}
+
+func TestSimpleTextPrompterRejectsSelectPrompts(t *testing.T) {
+	prompter := SimpleTextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
+	_, err := prompter.Prompt(context.Background(), PromptRequest{
+		Label: "Choose",
+		Theme: DefaultPromptTheme,
+		Options: []SelectOption{
+			{Label: "Option A", Value: "a"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for select prompt")
+	}
+	if !strings.Contains(err.Error(), "select prompts require the prompt extension") {
+		t.Fatalf("expected error about extension, got: %v", err)
+	}
+}
+
+func TestSimpleTextPrompterRejectsMultiSelectPrompts(t *testing.T) {
+	prompter := SimpleTextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
+	_, err := prompter.Prompt(context.Background(), PromptRequest{
+		Label:       "Select",
+		Theme:       DefaultPromptTheme,
+		MultiSelect: true,
+		Options: []SelectOption{
+			{Label: "Option A", Value: "a"},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for multi-select prompt")
+	}
+	if !strings.Contains(err.Error(), "multi-select prompts require the prompt extension") {
+		t.Fatalf("expected error about extension, got: %v", err)
 	}
 }

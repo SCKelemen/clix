@@ -17,7 +17,7 @@ func TestGitHubAuthLogin(t *testing.T) {
 	app.Out = out
 	app.Err = &bytes.Buffer{}
 	app.In = strings.NewReader("")
-	app.Prompter = clix.TerminalPrompter{In: app.In, Out: app.Out}
+	app.Prompter = clix.SimpleTextPrompter{In: app.In, Out: app.Out}
 
 	if err := app.Run(context.Background(), []string{"auth", "login", "github.com", "monalisa"}); err != nil {
 		t.Fatalf("app.Run returned error: %v", err)
