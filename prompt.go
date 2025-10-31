@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // Prompter encapsulates interactive prompting.
@@ -32,6 +35,10 @@ type PromptRequest struct {
 	// Confirm is for yes/no confirmation prompts
 	// If true, prompts with Y/n default (true) or y/N default (false if Default is "n")
 	Confirm bool
+
+	// ContinueText is the text shown for the continue/next/done action in multi-select prompts
+	// Defaults to "Continue" if not set
+	ContinueText string
 }
 
 // SelectOption represents a single option in a select prompt.
@@ -141,6 +148,112 @@ func (p TerminalPrompter) promptText(ctx context.Context, req PromptRequest) (st
 
 // promptSelect handles select-style prompts with navigable options.
 func (p TerminalPrompter) promptSelect(ctx context.Context, req PromptRequest) (string, error) {
+	// Check if input is a terminal - if not, use line-based fallback
+	inFile, isTerminal := p.In.(*os.File)
+	if !isTerminal {
+		return p.promptSelectLineBased(ctx, req)
+	}
+
+	// Check if it's actually a TTY
+	if !term.IsTerminal(int(inFile.Fd())) {
+		return p.promptSelectLineBased(ctx, req)
+	}
+
+	// Enable raw mode for arrow key navigation
+	state, err := EnableRawMode(inFile)
+	if err != nil {
+		// Fall back to line-based if raw mode fails
+		return p.promptSelectLineBased(ctx, req)
+	}
+	defer state.Restore()
+
+	// Find default option index
+	selectedIdx := 0
+	if req.Default != "" {
+		for i, opt := range req.Options {
+			if opt.Value == req.Default || opt.Label == req.Default {
+				selectedIdx = i
+				break
+			}
+		}
+	}
+
+	// Hide cursor during selection
+	HideCursor(p.Out)
+	defer ShowCursor(p.Out)
+
+	// Calculate number of lines we'll render
+	linesToRender := 1 + len(req.Options) // label line + options
+
+	// Initial render
+	p.renderSelectPrompt(req, selectedIdx)
+
+	for {
+		// Read a single keypress
+		key, err := ReadKey(p.In)
+		if err != nil {
+			return "", err
+		}
+
+		// Handle navigation
+		switch key {
+		case KeyUp:
+			if selectedIdx > 0 {
+				selectedIdx--
+			} else {
+				selectedIdx = len(req.Options) - 1 // Wrap to bottom
+			}
+			// Move cursor up to start of prompt, then redraw
+			MoveCursorUp(p.Out, linesToRender)
+			p.renderSelectPrompt(req, selectedIdx)
+		case KeyDown:
+			if selectedIdx < len(req.Options)-1 {
+				selectedIdx++
+			} else {
+				selectedIdx = 0 // Wrap to top
+			}
+			// Move cursor up to start of prompt, then redraw
+			MoveCursorUp(p.Out, linesToRender)
+			p.renderSelectPrompt(req, selectedIdx)
+		case KeyEnter:
+			// Selection confirmed - show cursor and return
+			ShowCursor(p.Out)
+			fmt.Fprint(p.Out, "\n")
+			if len(req.Options) > 0 {
+				return req.Options[selectedIdx].Value, nil
+			}
+		case KeyCtrlC, KeyEscape:
+			// Cancelled - show cursor and return
+			ShowCursor(p.Out)
+			fmt.Fprint(p.Out, "\n")
+			return "", errors.New("cancelled")
+		case KeyHome:
+			selectedIdx = 0
+			MoveCursorUp(p.Out, linesToRender)
+			p.renderSelectPrompt(req, selectedIdx)
+		case KeyEnd:
+			selectedIdx = len(req.Options) - 1
+			MoveCursorUp(p.Out, linesToRender)
+			p.renderSelectPrompt(req, selectedIdx)
+		default:
+			// Try to match by number (1-9) for quick selection
+			if key.IsPrintable() && key.Rune >= '1' && key.Rune <= '9' {
+				idx := int(key.Rune - '1')
+				if idx < len(req.Options) {
+					selectedIdx = idx
+					ShowCursor(p.Out)
+					fmt.Fprint(p.Out, "\n")
+					return req.Options[selectedIdx].Value, nil
+				}
+			}
+			// For typing, we might want to switch to filtering mode
+			// For now, just ignore non-navigation keys
+		}
+	}
+}
+
+// promptSelectLineBased is the fallback line-based implementation for non-terminal input.
+func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Find default option index
@@ -236,6 +349,40 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req PromptRequest) (
 	}
 }
 
+// renderSelectPrompt renders the select prompt with the current selection.
+// This function assumes it will be called after moving cursor up,
+// and it will redraw all lines from the current position.
+func (p TerminalPrompter) renderSelectPrompt(req PromptRequest, selectedIdx int) {
+	// Move to start of line and clear it
+	fmt.Fprint(p.Out, "\r\033[K")
+	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
+	label := renderText(req.Theme.LabelStyle, req.Label)
+	fmt.Fprintf(p.Out, "%s%s", prefix, label)
+
+	if req.Theme.Hint != "" {
+		hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+		fmt.Fprintf(p.Out, " %s", hint)
+	}
+	// Clear rest of line and move to next
+	fmt.Fprint(p.Out, "\033[K\n")
+
+	// Display options
+	for i, opt := range req.Options {
+		// Move to start of line and clear it
+		fmt.Fprint(p.Out, "\r\033[K")
+		marker := " "
+		if i == selectedIdx {
+			marker = ">"
+		}
+		fmt.Fprintf(p.Out, "%s %s", marker, opt.Label)
+		if opt.Description != "" {
+			fmt.Fprintf(p.Out, " - %s", opt.Description)
+		}
+		// Clear rest of line and move to next
+		fmt.Fprint(p.Out, "\033[K\n")
+	}
+}
+
 // promptConfirm handles yes/no confirmation prompts.
 func (p TerminalPrompter) promptConfirm(ctx context.Context, req PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
@@ -297,6 +444,169 @@ func (p TerminalPrompter) promptConfirm(ctx context.Context, req PromptRequest) 
 
 // promptMultiSelect handles multi-select prompts where users can choose multiple options.
 func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptRequest) (string, error) {
+	// Check if input is a terminal - if not, use line-based fallback
+	inFile, isTerminal := p.In.(*os.File)
+	if !isTerminal {
+		return p.promptMultiSelectLineBased(ctx, req)
+	}
+
+	// Check if it's actually a TTY
+	if !term.IsTerminal(int(inFile.Fd())) {
+		return p.promptMultiSelectLineBased(ctx, req)
+	}
+
+	// Enable raw mode for arrow key navigation
+	state, err := EnableRawMode(inFile)
+	if err != nil {
+		// Fall back to line-based if raw mode fails
+		return p.promptMultiSelectLineBased(ctx, req)
+	}
+	defer state.Restore()
+
+	// Parse default selections
+	selected := make(map[int]bool)
+	if req.Default != "" {
+		// Try parsing as indices first (e.g., "1,2,3")
+		indices := parseIndices(req.Default, len(req.Options))
+		if len(indices) > 0 {
+			for _, idx := range indices {
+				selected[idx] = true
+			}
+		} else {
+			// Try parsing as comma-separated values (e.g., "a,b,c")
+			values := strings.Split(req.Default, ",")
+			for _, val := range values {
+				val = strings.TrimSpace(val)
+				for i, opt := range req.Options {
+					if opt.Value == val || opt.Label == val {
+						selected[i] = true
+						break
+					}
+				}
+			}
+		}
+	}
+
+	currentIdx := 0
+	if len(req.Options) > 0 {
+		// Find first selected option or default to 0
+		for i := range req.Options {
+			if selected[i] {
+				currentIdx = i
+				break
+			}
+		}
+	}
+
+	// Hide cursor during selection
+	HideCursor(p.Out)
+	defer ShowCursor(p.Out)
+
+	// Calculate number of lines we'll render (label + options + continue line)
+	linesToRender := 2 + len(req.Options) // label line + options + continue line
+
+	// Track if we're on the continue button (-1 means continue button, >= 0 means option index)
+	onContinueButton := false
+
+	// Initial render
+	p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+
+	for {
+		// Read a single keypress
+		key, err := ReadKey(p.In)
+		if err != nil {
+			return "", err
+		}
+
+		// Handle navigation and selection
+		switch key {
+		case KeyUp:
+			if onContinueButton {
+				// Move from continue button to last option
+				onContinueButton = false
+				currentIdx = len(req.Options) - 1
+			} else if currentIdx > 0 {
+				currentIdx--
+			} else {
+				// Wrap to continue button
+				onContinueButton = true
+			}
+			// Move cursor up to start of prompt, then redraw
+			MoveCursorUp(p.Out, linesToRender)
+			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+		case KeyDown:
+			if onContinueButton {
+				// Move from continue button to first option
+				onContinueButton = false
+				currentIdx = 0
+			} else if currentIdx < len(req.Options)-1 {
+				currentIdx++
+			} else {
+				// Wrap to continue button
+				onContinueButton = true
+			}
+			// Move cursor up to start of prompt, then redraw
+			MoveCursorUp(p.Out, linesToRender)
+			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+		case KeySpace, KeyEnter:
+			if onContinueButton {
+				// On continue button - confirm if we have selections
+				hasSelection := false
+				for _, sel := range selected {
+					if sel {
+						hasSelection = true
+						break
+					}
+				}
+				if hasSelection {
+					ShowCursor(p.Out)
+					fmt.Fprint(p.Out, "\n")
+					return p.formatSelectedValues(req.Options, selected), nil
+				}
+				// No selections - stay on continue button (can't continue without selections)
+			} else {
+				// Toggle current selection (Enter or Space both toggle)
+				if len(req.Options) > 0 {
+					selected[currentIdx] = !selected[currentIdx]
+					// Move cursor up to start of prompt, then redraw
+					MoveCursorUp(p.Out, linesToRender)
+					p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+				}
+			}
+		case KeyCtrlC, KeyEscape:
+			// Cancelled - show cursor and return
+			ShowCursor(p.Out)
+			fmt.Fprint(p.Out, "\n")
+			return "", errors.New("cancelled")
+		case KeyHome:
+			onContinueButton = false
+			currentIdx = 0
+			MoveCursorUp(p.Out, linesToRender)
+			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+		case KeyEnd:
+			onContinueButton = true
+			currentIdx = len(req.Options) - 1
+			MoveCursorUp(p.Out, linesToRender)
+			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+		default:
+			// Try number keys for quick toggle (1-9)
+			if key.IsPrintable() && key.Rune >= '1' && key.Rune <= '9' {
+				idx := int(key.Rune - '1')
+				if idx < len(req.Options) {
+					onContinueButton = false
+					currentIdx = idx
+					selected[idx] = !selected[idx]
+					// Move cursor up to start of prompt, then redraw
+					MoveCursorUp(p.Out, linesToRender)
+					p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+				}
+			}
+		}
+	}
+}
+
+// promptMultiSelectLineBased is the fallback line-based implementation for non-terminal input.
+func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Parse default selections
@@ -409,6 +719,60 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 
 		// After toggling, continue loop to show updated state
 	}
+}
+
+// renderMultiSelectPrompt renders the multi-select prompt with current selection state.
+// This function assumes it will be called after moving cursor up,
+// and it will redraw all lines from the current position.
+func (p TerminalPrompter) renderMultiSelectPrompt(req PromptRequest, selected map[int]bool, currentIdx int, onContinueButton bool) {
+	// Move to start of line and clear it
+	fmt.Fprint(p.Out, "\r\033[K")
+	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
+	label := renderText(req.Theme.LabelStyle, req.Label)
+	fmt.Fprintf(p.Out, "%s%s", prefix, label)
+
+	if req.Theme.Hint != "" {
+		hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+		fmt.Fprintf(p.Out, " %s", hint)
+	}
+	// Clear rest of line and move to next
+	fmt.Fprint(p.Out, "\033[K\n")
+
+	// Display options with checkboxes
+	for i, opt := range req.Options {
+		// Move to start of line and clear it
+		fmt.Fprint(p.Out, "\r\033[K")
+		marker := "[ ]"
+		if selected[i] {
+			marker = "[x]"
+		}
+		// Highlight current option
+		indicator := " "
+		if !onContinueButton && i == currentIdx {
+			indicator = ">"
+		}
+		fmt.Fprintf(p.Out, "%s %s %d. %s", indicator, marker, i+1, opt.Label)
+		if opt.Description != "" {
+			fmt.Fprintf(p.Out, " - %s", opt.Description)
+		}
+		// Clear rest of line and move to next
+		fmt.Fprint(p.Out, "\033[K\n")
+	}
+
+	// Display continue button
+	continueText := req.ContinueText
+	if continueText == "" {
+		continueText = "Continue"
+	}
+	// Move to start of line and clear it
+	fmt.Fprint(p.Out, "\r\033[K")
+	indicator := " "
+	if onContinueButton {
+		indicator = ">"
+	}
+	fmt.Fprintf(p.Out, "%s %s", indicator, continueText)
+	// Clear rest of line
+	fmt.Fprint(p.Out, "\033[K\n")
 }
 
 // formatSelectedValues formats selected options into a comma-separated string.
