@@ -138,12 +138,22 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		if len(remaining) == 0 {
 			return a.printCommandHelp(a.Root, remaining)
 		}
+		// Unknown command - show help for parent or error
+		// Try to find the parent command to show its help
+		if len(remaining) > 1 {
+			// Try to match parent command
+			if parentCmd, _ := a.Root.match(remaining[:len(remaining)-1]); parentCmd != nil {
+				return a.printCommandHelp(parentCmd, nil)
+			}
+		}
 		return fmt.Errorf("unknown command: %s", strings.Join(remaining, " "))
 	}
 
 	// Ensure defaults and env/config values are applied prior to parsing.
 	a.applyConfig(cmd)
 
+	// Parse flags first - flags consume arguments starting with -
+	// This handles: --flag=value, --flag value, -f=value, -f value
 	resultArgs, err := cmd.Flags.Parse(rest)
 	if err != nil {
 		return err
