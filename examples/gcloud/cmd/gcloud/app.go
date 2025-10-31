@@ -1,28 +1,36 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"clix"
+	authcmd "clix/examples/gcloud/internal/auth"
+	configcmd "clix/examples/gcloud/internal/config"
+	projectscmd "clix/examples/gcloud/internal/projects"
+	simplecmd "clix/examples/gcloud/internal/simple"
 )
+
+// Toggle the feature packages you want to include in this build of gcloud. Because the
+// command wiring happens inside cmd/, you can choose to opt-in only to the internal
+// packages that your binary actually needs.
+var (
+	includeAuth     = true
+	includeConfig   = true
+	includeProjects = true
+)
+
+type commandBuilder struct {
+	Enabled bool
+	Build   func() *clix.Command
+}
 
 type gcloudEntry struct {
 	Name        string
 	Description string
 }
 
-func main() {
-	app := buildGCloudApp()
-	if err := app.Run(context.Background(), nil); err != nil {
-		fmt.Fprintln(app.Err, err)
-		os.Exit(1)
-	}
-}
-
-func buildGCloudApp() *clix.App {
+func newApp() *clix.App {
 	app := clix.NewApp("gcloud")
 	app.Description = "Interact with Google Cloud services from the command line."
 
@@ -40,31 +48,42 @@ func buildGCloudApp() *clix.App {
 
 	groups := gcloudCommandGroups()
 	commands := gcloudStandaloneCommands()
-	root.Long = buildGCloudLongHelp(groups, commands)
+
+	builders := map[string]commandBuilder{
+		"auth": {
+			Enabled: includeAuth,
+			Build:   authcmd.NewCommand,
+		},
+		"projects": {
+			Enabled: includeProjects,
+			Build:   func() *clix.Command { return projectscmd.NewCommand(&project) },
+		},
+		"config": {
+			Enabled: includeConfig,
+			Build:   func() *clix.Command { return configcmd.NewCommand(&project) },
+		},
+	}
+
+	root.Long = buildGCloudLongHelp(groups, commands, builders)
 
 	root.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Err, "ERROR: (gcloud) Command name argument expected.")
-		fmt.Fprintln(ctx.App.Err, "Command name argument expected.")
-		fmt.Fprintln(ctx.App.Err)
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
 
-	builders := map[string]func(*string) *clix.Command{
-		"auth":     newGCloudAuthCommand,
-		"projects": newGCloudProjectsCommand,
-		"config":   newGCloudConfigCommand,
-	}
-
 	added := map[string]struct{}{}
+	var subcommands []*clix.Command
 	for _, group := range groups {
 		for _, entry := range group.Entries {
 			if _, exists := added[entry.Name]; exists {
 				continue
 			}
-			if build, ok := builders[entry.Name]; ok {
-				root.AddCommand(build(&project))
+			if builder, ok := builders[entry.Name]; ok {
+				if !builder.Enabled {
+					continue
+				}
+				subcommands = append(subcommands, builder.Build())
 			} else {
-				root.AddCommand(newGCloudSimpleCommand(entry.Name, entry.Description))
+				subcommands = append(subcommands, simplecmd.NewCommand(entry.Name, entry.Description))
 			}
 			added[entry.Name] = struct{}{}
 		}
@@ -75,10 +94,12 @@ func buildGCloudApp() *clix.App {
 			if _, exists := added[entry.Name]; exists {
 				continue
 			}
-			root.AddCommand(newGCloudSimpleCommand(entry.Name, entry.Description))
+			subcommands = append(subcommands, simplecmd.NewCommand(entry.Name, entry.Description))
 			added[entry.Name] = struct{}{}
 		}
 	}
+
+	root.Subcommands = subcommands
 
 	app.Root = root
 	return app
@@ -90,147 +111,43 @@ func buildGCloudLongHelp(groups []struct {
 }, commands []struct {
 	Category string
 	Entries  []gcloudEntry
-}) string {
+}, builders map[string]commandBuilder) string {
 	var b strings.Builder
 	b.WriteString("Available command groups for gcloud:\n\n")
 	for _, group := range groups {
-		b.WriteString("  " + group.Category + "\n")
+		var displayed int
 		for _, entry := range group.Entries {
+			if builder, ok := builders[entry.Name]; ok && !builder.Enabled {
+				continue
+			}
+			if displayed == 0 {
+				b.WriteString("  " + group.Category + "\n")
+			}
 			b.WriteString(fmt.Sprintf("      %-22s %s\n", entry.Name, entry.Description))
+			displayed++
 		}
-		b.WriteString("\n")
+		if displayed > 0 {
+			b.WriteString("\n")
+		}
 	}
 	b.WriteString("Available commands for gcloud:\n\n")
 	for _, cat := range commands {
-		b.WriteString("  " + cat.Category + "\n")
+		var displayed int
 		for _, entry := range cat.Entries {
+			if builder, ok := builders[entry.Name]; ok && !builder.Enabled {
+				continue
+			}
+			if displayed == 0 {
+				b.WriteString("  " + cat.Category + "\n")
+			}
 			b.WriteString(fmt.Sprintf("      %-22s %s\n", entry.Name, entry.Description))
+			displayed++
 		}
-		b.WriteString("\n")
+		if displayed > 0 {
+			b.WriteString("\n")
+		}
 	}
 	return strings.TrimSpace(b.String())
-}
-
-func newGCloudSimpleCommand(name, desc string) *clix.Command {
-	cmd := clix.NewCommand(name)
-	cmd.Short = desc
-	cmd.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "%s: %s\n", strings.ToUpper(name), desc)
-		return nil
-	}
-	return cmd
-}
-
-func newGCloudAuthCommand(project *string) *clix.Command {
-	cmd := clix.NewCommand("auth")
-	cmd.Short = "Manage oauth2 credentials for the Google Cloud CLI"
-
-	login := clix.NewCommand("login")
-	login.Short = "Authorize access to Google Cloud"
-	login.Arguments = []*clix.Argument{
-		{Name: "account", Prompt: "Google account", Required: true},
-	}
-	var brief bool
-	login.Flags.BoolVar(&clix.BoolVarOptions{
-		Name:  "brief",
-		Usage: "Display minimal output",
-		Value: &brief,
-	})
-	login.Run = func(ctx *clix.Context) error {
-		summary := "detailed"
-		if brief {
-			summary = "brief"
-		}
-		fmt.Fprintf(ctx.App.Out, "Logged in as %s with %s output.\n", ctx.Args[0], summary)
-		return nil
-	}
-
-	activate := clix.NewCommand("activate-service-account")
-	activate.Short = "Activate service account credentials"
-	activate.Arguments = []*clix.Argument{
-		{Name: "account", Prompt: "Service account email", Required: true},
-	}
-	var keyFile string
-	activate.Flags.StringVar(&clix.StringVarOptions{
-		Name:  "key-file",
-		Usage: "Path to service account key file",
-		Value: &keyFile,
-	})
-	activate.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Activated %s using key %s\n", ctx.Args[0], keyFile)
-		return nil
-	}
-
-	cmd.AddCommand(login)
-	cmd.AddCommand(activate)
-	return cmd
-}
-
-func newGCloudProjectsCommand(project *string) *clix.Command {
-	cmd := clix.NewCommand("projects")
-	cmd.Short = "Create and manage project access policies"
-
-	list := clix.NewCommand("list")
-	list.Short = "List projects"
-	list.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "PROJECT_ID            NAME")
-		fmt.Fprintf(ctx.App.Out, "%s            Sample Project\n", valueOrDefault(project, "demo-project"))
-		return nil
-	}
-
-	create := clix.NewCommand("create")
-	create.Short = "Create a project"
-	create.Arguments = []*clix.Argument{{Name: "project-id", Prompt: "New project ID", Required: true}}
-	create.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Creating project %s\n", ctx.Args[0])
-		return nil
-	}
-
-	cmd.AddCommand(list)
-	cmd.AddCommand(create)
-	return cmd
-}
-
-func newGCloudConfigCommand(project *string) *clix.Command {
-	cmd := clix.NewCommand("config")
-	cmd.Short = "View and edit Google Cloud CLI properties"
-
-	set := clix.NewCommand("set")
-	set.Short = "Set a property"
-	set.Arguments = []*clix.Argument{
-		{Name: "property", Prompt: "Property name", Required: true},
-		{Name: "value", Prompt: "Value", Required: true},
-	}
-	set.Run = func(ctx *clix.Context) error {
-		if strings.EqualFold(ctx.Args[0], "project") {
-			*project = ctx.Args[1]
-		}
-		fmt.Fprintf(ctx.App.Out, "Set %s to %s\n", ctx.Args[0], ctx.Args[1])
-		return nil
-	}
-
-	get := clix.NewCommand("get")
-	get.Short = "Get a property"
-	get.Arguments = []*clix.Argument{{Name: "property", Prompt: "Property name", Required: true}}
-	get.Run = func(ctx *clix.Context) error {
-		if strings.EqualFold(ctx.Args[0], "project") {
-			fmt.Fprintf(ctx.App.Out, "project = %s\n", valueOrDefault(project, ""))
-			return nil
-		}
-		fmt.Fprintf(ctx.App.Out, "%s is not set\n", ctx.Args[0])
-		return nil
-	}
-
-	cmd.AddCommand(set)
-	cmd.AddCommand(get)
-	return cmd
-}
-
-func valueOrDefault(value *string, fallback string) string {
-	if value != nil && *value != "" {
-		return *value
-	}
-	return fallback
 }
 
 func gcloudCommandGroups() []struct {
@@ -407,57 +324,29 @@ func gcloudCommandGroups() []struct {
 				{Name: "model-armor", Description: "Model Armor is a service offering LLM-agnostic security and AI safety measures to mitigate risks associated with large language models (LLMs)."},
 				{Name: "oracle-database", Description: "Manage Oracle Database resources."},
 				{Name: "parametermanager", Description: "Parameter Manager is a single source of truth to store, access and manage the lifecycle of your application parameters."},
-				{Name: "workspace-add-ons", Description: "Manage Google Workspace Add-ons resources."},
+				{Name: "remote-build-execution", Description: "Remote execution of builds."},
+				{Name: "sap", Description: "Manage SAP resources."},
+				{Name: "scheduler", Description: "Manage Cloud Scheduler jobs and schedules."},
 			},
 		},
 		{
-			Category: "SDK Tools",
-			Entries: []gcloudEntry{
-				{Name: "beta", Description: "Beta versions of gcloud commands."},
-				{Name: "components", Description: "List, install, update, or remove Google Cloud CLI components."},
-				{Name: "config", Description: "View and edit Google Cloud CLI properties."},
-				{Name: "emulators", Description: "Set up your local development environment using emulators."},
-				{Name: "source", Description: "Cloud git repository commands."},
-				{Name: "topic", Description: "gcloud supplementary help."},
-			},
-		},
-		{
-			Category: "Security",
-			Entries: []gcloudEntry{
-				{Name: "asset", Description: "Manage the Cloud Asset Inventory."},
-				{Name: "assured", Description: "Read and manipulate Assured Workloads data controls."},
-				{Name: "audit-manager", Description: "Enroll resources, audit workloads and generate reports."},
-				{Name: "scc", Description: "Manage Cloud SCC resources."},
-			},
+			Category: "Security Operations",
+			Entries:  []gcloudEntry{{Name: "scc", Description: "Manage Security Command Center resources."}},
 		},
 		{
 			Category: "Serverless",
-			Entries:  []gcloudEntry{{Name: "eventarc", Description: "Manage Eventarc resources."}},
-		},
-		{
-			Category: "Solutions",
 			Entries: []gcloudEntry{
-				{Name: "healthcare", Description: "Manage Cloud Healthcare resources."},
-				{Name: "migration", Description: "The root group for various Cloud Migration teams."},
-				{Name: "transcoder", Description: "Manage Transcoder resources."},
+				{Name: "beta", Description: "Beta versions of gcloud commands."},
+				{Name: "preview", Description: "Preview versions of gcloud commands."},
+				{Name: "survey", Description: "Command group for the gcloud CLI survey."},
 			},
 		},
 		{
 			Category: "Storage",
 			Entries: []gcloudEntry{
-				{Name: "backup-dr", Description: "Manage Backup and DR resources."},
-				{Name: "filestore", Description: "Create and manipulate Filestore resources."},
-				{Name: "netapp", Description: "Create and manipulate Cloud NetApp Files resources."},
-				{Name: "storage", Description: "Create and manage Cloud Storage buckets and objects."},
+				{Name: "filestore", Description: "Manage filestore resources."},
+				{Name: "storage", Description: "Command group for Cloud Storage."},
 			},
-		},
-		{
-			Category: "Tools",
-			Entries:  []gcloudEntry{{Name: "workflows", Description: "Manage your Cloud Workflows resources."}, {Name: "workstations", Description: "Manage Cloud Workstations resources."}},
-		},
-		{
-			Category: "Transfer",
-			Entries:  []gcloudEntry{{Name: "transfer", Description: "Manage Transfer Service jobs, operations, and agents."}},
 		},
 	}
 }
@@ -471,21 +360,32 @@ func gcloudStandaloneCommands() []struct {
 		Entries  []gcloudEntry
 	}{
 		{
-			Category: "Other",
+			Category: "Help and Feedback",
 			Entries: []gcloudEntry{
-				{Name: "cheat-sheet", Description: "Display gcloud cheat sheet."},
-				{Name: "docker", Description: "(DEPRECATED) Enable Docker CLI access to Google Container Registry."},
-				{Name: "survey", Description: "Invoke a customer satisfaction survey for Google Cloud CLI."},
+				{Name: "help", Description: "Describe available gcloud commands."},
+				{Name: "feedback", Description: "Provide feedback on Cloud SDK command experience."},
+				{Name: "info", Description: "Display information about the current gcloud environment."},
+				{Name: "components", Description: "List, install, update, or remove Google Cloud CLI components."},
 			},
 		},
 		{
-			Category: "SDK Tools",
+			Category: "IAM and Admin",
 			Entries: []gcloudEntry{
-				{Name: "feedback", Description: "Provide feedback to the Google Cloud CLI team."},
-				{Name: "help", Description: "Search gcloud help text."},
-				{Name: "info", Description: "Display information about the current gcloud environment."},
-				{Name: "init", Description: "Initialize or reinitialize gcloud."},
-				{Name: "version", Description: "Print version information for Google Cloud CLI components."},
+				{Name: "auth", Description: "Manage oauth2 credentials for the Google Cloud CLI."},
+				{Name: "config", Description: "View and edit Google Cloud CLI properties."},
+				{Name: "iam", Description: "Manage IAM service accounts and keys."},
+				{Name: "organizations", Description: "Create and manage Google Cloud Platform Organizations."},
+				{Name: "projects", Description: "Create and manage project access policies."},
+				{Name: "services", Description: "List, enable and disable APIs and services."},
+			},
+		},
+		{
+			Category: "Networking",
+			Entries: []gcloudEntry{
+				{Name: "dns", Description: "Manage your Cloud DNS managed-zones and record-sets."},
+				{Name: "compute", Description: "Create and manipulate Compute Engine resources."},
+				{Name: "run", Description: "Manage your Cloud Run applications."},
+				{Name: "container", Description: "Deploy and manage clusters of machines for running containers."},
 			},
 		},
 	}

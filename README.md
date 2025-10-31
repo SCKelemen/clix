@@ -1,61 +1,52 @@
 # clix
 
-`clix` is a batteries-included framework for building nested CLI applications
-using plain Go. It provides a declarative API for describing commands, flags,
-and arguments while handling configuration hydration, interactive prompting,
-and contextual execution hooks for you.
+`clix` is an opinionated, batteries-optional framework for building nested CLI
+applications using plain Go. It provides a declarative API for describing
+commands, flags, and arguments while handling configuration hydration,
+interactive prompting, and contextual execution hooks for you. The project
+strives for minimal dependencies and simplicity while delivering a cohesive CLI
+experience similar in spirit to Cobra, ff, and Prompt UI.
 
 ## Features
 
-- Hierarchical commands with aliases, usage metadata, and visibility controls
+- Hierarchical commands with aliases, usage metadata, and visibility controls to
+  reinforce consistent command hierarchies
 - Global and command-level flags with environment variable and config defaults
 - Required and optional positional arguments with automatic prompting
 - Pre- and post-run hooks for cross-cutting concerns
 - YAML configuration backed by `~/.config/<app>/config.yaml`
 - Built-in `help`, `config`, and `autocomplete` commands
 - Structured output helpers via a global `--format` flag (json/yaml/text)
+- Intuitive prompting that stays consistent across category and leaf commands
+- First-class JSON and YAML rendering utilities for structured workflows
 
 ## Quick start
 
+Applications built with `clix` work best when the executable wiring and the
+command implementations live in separate packages. A minimal layout looks like:
+
+```
+demo/
+  cmd/demo/main.go
+  cmd/demo/app.go
+  internal/greet/command.go
+```
+
+`cmd/demo/main.go` bootstraps cancellation, logging, and error handling for the
+process:
+
 ```go
+// cmd/demo/main.go
 package main
 
 import (
         "context"
         "fmt"
         "os"
-
-        "clix"
 )
 
 func main() {
-        app := clix.NewApp("demo")
-
-        root := clix.NewCommand("demo")
-        root.Short = "Demo application"
-
-        greet := clix.NewCommand("greet")
-        greet.Short = "Print a friendly greeting"
-        greet.Arguments = []*clix.Argument{{
-                Name:     "name",
-                Required: true,
-                Prompt:   "Name of the person to greet",
-        }}
-        greet.PreRun = func(ctx *clix.Context) error {
-                fmt.Fprintln(ctx.App.Out, "Preparing to greet...")
-                return nil
-        }
-        greet.Run = func(ctx *clix.Context) error {
-                fmt.Fprintf(ctx.App.Out, "Hello %s!\n", ctx.Args[0])
-                return nil
-        }
-        greet.PostRun = func(ctx *clix.Context) error {
-                fmt.Fprintln(ctx.App.Out, "Done!")
-                return nil
-        }
-
-        root.AddCommand(greet)
-        app.Root = root
+        app := newApp()
 
         if err := app.Run(context.Background(), nil); err != nil {
                 fmt.Fprintln(app.Err, err)
@@ -64,12 +55,220 @@ func main() {
 }
 ```
 
+`cmd/demo/app.go` owns the `clix.App` and root command definition while
+delegating subcommands to the `internal/` tree:
+
+```go
+// cmd/demo/app.go
+package main
+
+import (
+        "clix"
+        "example.com/demo/internal/greet"
+)
+
+func newApp() *clix.App {
+        app := clix.NewApp("demo")
+        app.Description = "Demonstrates the clix CLI framework"
+
+        var project string
+        app.GlobalFlags.StringVar(&clix.StringVarOptions{
+                Name:    "project",
+                Usage:   "Project to operate on",
+                EnvVar:  "DEMO_PROJECT",
+                Value:   &project,
+                Default: "sample-project",
+        })
+
+        root := clix.NewCommand("demo")
+        root.Short = "Root of the demo application"
+        root.Run = func(ctx *clix.Context) error {
+                return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+        }
+        root.Subcommands = []*clix.Command{
+                greet.NewCommand(&project),
+        }
+
+        app.Root = root
+        return app
+}
+```
+
+The implementation of the `greet` command (including flags, arguments, and
+handlers) lives in `internal/greet`:
+
+```go
+// internal/greet/command.go
+package greet
+
+import (
+        "fmt"
+
+        "clix"
+)
+
+func NewCommand(project *string) *clix.Command {
+        cmd := clix.NewCommand("greet")
+        cmd.Short = "Print a friendly greeting"
+        cmd.Arguments = []*clix.Argument{{
+                Name:     "name",
+                Required: true,
+                Prompt:   "Name of the person to greet",
+        }}
+        cmd.PreRun = func(ctx *clix.Context) error {
+                fmt.Fprintf(ctx.App.Out, "Using project %s\n", *project)
+                return nil
+        }
+        cmd.Run = func(ctx *clix.Context) error {
+                fmt.Fprintf(ctx.App.Out, "Hello %s!\n", ctx.Args[0])
+                return nil
+        }
+        cmd.PostRun = func(ctx *clix.Context) error {
+                fmt.Fprintln(ctx.App.Out, "Done!")
+                return nil
+        }
+        return cmd
+}
+```
+
 When no positional arguments are provided, `clix` will prompt the user for any
 required values. For example `demo greet` will prompt for the `name` argument
-before executing the command handler.
+before executing the command handler. Because the root command's `Run` handler
+renders the help surface, invoking `demo` on its own prints the full set of
+available commands. Category commands can follow the same pattern to display
+their scoped help (`clix.HelpRenderer{App: ctx.App, Command: ctx.Command}`)
+whenever they're executed without a subcommand, mirroring tools like `gh auth`.
 
-The full runnable version of this example (including flag parsing and
+The full runnable version of this example (including additional flags and
 configuration usage) can be found in [`examples/basic`](examples/basic).
+
+### Defining commands and subcommands
+
+Every command in a `clix` application is represented by a [`*clix.Command`](command.go).
+`clix.NewCommand` initializes a command with a scoped flag set and a default
+`--help` flag, letting you focus on wiring behavior:
+
+```go
+import "fmt"
+
+users := clix.NewCommand("users")
+users.Short = "Manage user accounts"
+users.Long = "Create, list, and delete users in the current project"
+users.Run = func(ctx *clix.Context) error {
+        return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+}
+```
+
+Commands can expose execution hooks (`PreRun`, `Run`, `PostRun`), aliases, usage
+strings, and examples. Nested command trees are described declaratively via the
+`Subcommands` field or built programmatically with `AddCommand` to reinforce
+your command hierarchy:
+
+```go
+create := clix.NewCommand("create")
+create.Short = "Create a user"
+create.Run = func(ctx *clix.Context) error {
+        fmt.Fprintf(ctx.App.Out, "creating %s\n", ctx.Args[0])
+        return nil
+}
+
+delete := clix.NewCommand("delete")
+delete.Short = "Delete a user"
+
+users.Subcommands = []*clix.Command{create, delete}
+```
+
+When the app starts, `clix` prepares the tree so that `users create` resolves to
+the `create` command. Invoking `users` on its own executes the `users.Run`
+handler, which is a good place to render scoped help for that category. Because
+each package exports a fully configured command (including its children), the
+same module can power standalone binaries and larger shared CLIs by importing it
+under multiple roots.
+
+### Working with positional arguments
+
+Commands declare positional inputs with [`*clix.Argument`](argument.go)
+definitions. Each argument describes its `Name`, whether it is `Required`, an
+optional prompt label, a default value, and validation logic:
+
+```go
+import (
+        "fmt"
+        "strings"
+)
+
+create.Arguments = []*clix.Argument{{
+        Name:     "email",
+        Prompt:   "Email address",
+        Required: true,
+        Validate: func(value string) error {
+                if !strings.Contains(value, "@") {
+                        return fmt.Errorf("invalid email")
+                }
+                return nil
+        },
+}}
+```
+
+At runtime `clix` ensures required arguments are provided, prompting the user
+interactively when a value is missing. Prompt labels default to a title-cased
+version of the argument name (for example `project-id` becomes `Project Id`).
+Validation errors surface immediately, letting you guide users toward acceptable
+input before the handler executes.
+
+### Opting into feature packages
+
+Keeping the executable under `cmd/` lets you choose which internal feature
+packages to include when assembling your CLI. For instance, the
+[`examples/gcloud`](examples/gcloud) binary enables authentication,
+configuration, and project management by wiring those modules explicitly:
+
+```go
+var (
+        includeAuth     = true
+        includeConfig   = true
+        includeProjects = true
+)
+
+builders := map[string]commandBuilder{
+        "auth": {
+                Enabled: includeAuth,
+                Build:   authcmd.NewCommand,
+        },
+        "projects": {
+                Enabled: includeProjects,
+                Build:   func() *clix.Command { return projectscmd.NewCommand(&project) },
+        },
+        "config": {
+                Enabled: includeConfig,
+                Build:   func() *clix.Command { return configcmd.NewCommand(&project) },
+        },
+}
+```
+
+Setting one of the feature flags to `false` removes that command tree entirely
+without having to touch the implementation living under `internal/`.
+
+Because each internal package describes its own child commands declaratively,
+those modules can run as standalone CLIs and slot into a larger binary without
+rewiring. A team can prototype a `database` tool under
+`internal/database/commands.go`, ship a dedicated `cmd/database/main.go` for
+their day-to-day workflows, and later publish that same package to the broader
+`dev` CLI simply by importing it:
+
+```go
+// cmd/dev/app.go
+root := clix.NewCommand("dev")
+root.Subcommands = []*clix.Command{
+        authcmd.NewCommand(),         // shared authentication helpers
+        databasecmd.NewCommand(),     // promoted from the database team's CLI
+        vulnerabilitycmd.NewCommand() // opt-in tooling from the security team
+}
+```
+
+Feature-specific binaries can keep additional subcommands private (for example,
+advanced vulnerability auditing routines) while the shared packages expose only
+the commands intended for the wider engineering org.
 
 ### Static command trees
 
@@ -151,7 +350,7 @@ cmd.Run = func(ctx *clix.Context) error {
 
 Because `clix.Context` embeds `context.Context`, it plays nicely with other Go
 APIs that accept a `context.Context`. If you prefer not to use context
-propagation you can ignore the embedded behaviour and treat it purely as a
+propagation you can ignore the embedded behavior and treat it purely as a
 container for CLI state.
 
 ## Configuration and environment defaults
@@ -187,5 +386,5 @@ will be added over time.
 ## Contributing
 
 Issues and pull requests are welcome. Please include tests when adding new
-behaviour and run `go test ./...` before submitting changes.
+behavior and run `go test ./...` before submitting changes.
 
