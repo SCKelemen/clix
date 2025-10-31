@@ -76,8 +76,12 @@ func ReadKey(in io.Reader) (key Key, err error) {
 				var extra [1]byte
 				if _, err := in.Read(extra[:]); err == nil {
 					buf[2] = extra[0]
+				} else {
+					// If we can't read the third byte, treat as escape
+					return KeyEscape, nil
 				}
 			}
+			// Handle the third byte
 			switch buf[2] {
 			case 'A':
 				return KeyUp, nil
@@ -92,6 +96,9 @@ func ReadKey(in io.Reader) (key Key, err error) {
 			case 'F':
 				return KeyEnd, nil
 			}
+			// If we got [ but didn't match, might be a longer sequence
+			// For now, just return escape
+			return KeyEscape, nil
 		}
 
 		// Could be other escape sequences, but for now just return escape
