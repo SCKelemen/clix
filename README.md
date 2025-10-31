@@ -1,19 +1,24 @@
 # clix
 
-`clix` is a batteries-included framework for building nested CLI applications
-using plain Go. It provides a declarative API for describing commands, flags,
-and arguments while handling configuration hydration, interactive prompting,
-and contextual execution hooks for you.
+`clix` is an opinionated, batteries-optional framework for building nested CLI
+applications using plain Go. It provides a declarative API for describing
+commands, flags, and arguments while handling configuration hydration,
+interactive prompting, and contextual execution hooks for you. The project
+strives for minimal dependencies and simplicity while delivering a cohesive CLI
+experience similar in spirit to Cobra, ff, and Prompt UI.
 
 ## Features
 
-- Hierarchical commands with aliases, usage metadata, and visibility controls
+- Hierarchical commands with aliases, usage metadata, and visibility controls to
+  reinforce consistent command hierarchies
 - Global and command-level flags with environment variable and config defaults
 - Required and optional positional arguments with automatic prompting
 - Pre- and post-run hooks for cross-cutting concerns
 - YAML configuration backed by `~/.config/<app>/config.yaml`
 - Built-in `help`, `config`, and `autocomplete` commands
 - Structured output helpers via a global `--format` flag (json/yaml/text)
+- Intuitive prompting that stays consistent across category and leaf commands
+- First-class JSON and YAML rendering utilities for structured workflows
 
 ## Quick start
 
@@ -140,8 +145,8 @@ configuration usage) can be found in [`examples/basic`](examples/basic).
 ### Defining commands and subcommands
 
 Every command in a `clix` application is represented by a [`*clix.Command`](command.go).
-`clix.NewCommand` initialises a command with a scoped flag set and a default
-`--help` flag, letting you focus on wiring behaviour:
+`clix.NewCommand` initializes a command with a scoped flag set and a default
+`--help` flag, letting you focus on wiring behavior:
 
 ```go
 import "fmt"
@@ -156,7 +161,8 @@ users.Run = func(ctx *clix.Context) error {
 
 Commands can expose execution hooks (`PreRun`, `Run`, `PostRun`), aliases, usage
 strings, and examples. Nested command trees are described declaratively via the
-`Subcommands` field or built programmatically with `AddCommand`:
+`Subcommands` field or built programmatically with `AddCommand` to reinforce
+your command hierarchy:
 
 ```go
 create := clix.NewCommand("create")
@@ -344,7 +350,7 @@ cmd.Run = func(ctx *clix.Context) error {
 
 Because `clix.Context` embeds `context.Context`, it plays nicely with other Go
 APIs that accept a `context.Context`. If you prefer not to use context
-propagation you can ignore the embedded behaviour and treat it purely as a
+propagation you can ignore the embedded behavior and treat it purely as a
 container for CLI state.
 
 ## Configuration and environment defaults
@@ -380,5 +386,5 @@ will be added over time.
 ## Contributing
 
 Issues and pull requests are welcome. Please include tests when adding new
-behaviour and run `go test ./...` before submitting changes.
+behavior and run `go test ./...` before submitting changes.
 
