@@ -66,6 +66,7 @@ $ styled-demo style --mood excited
 $ styled-demo style --mood relaxed
 $ styled-demo style prompt select
 $ styled-demo style prompt multiselect
+$ styled-demo style prompt confirm
 `)
 	var mood string
 	root.Flags.StringVar(&clix.StringVarOptions{
