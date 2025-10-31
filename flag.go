@@ -207,6 +207,12 @@ func (fs *FlagSet) GetBool(name string) (bool, bool) {
 	if flag == nil {
 		return false, false
 	}
+	// If flag was explicitly set via command line, return true
+	// This handles help flags that don't have a target pointer
+	if flag.set {
+		return true, true
+	}
+	// Flag not set, check if BoolValue has a default value
 	if value, ok := flag.Value.(*BoolValue); ok {
 		return value.Bool(), true
 	}

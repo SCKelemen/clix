@@ -114,7 +114,15 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// Check if global --help flag was set (when --help appears before any command)
 	if help, _ := a.GlobalFlags.GetBool("help"); help {
+		// If there are remaining args, they might be a command - match it first
+		// so we show help for that command instead of root
+		if len(remaining) > 0 {
+			if cmd, _ := a.Root.match(remaining); cmd != nil {
+				return a.printCommandHelp(cmd, nil)
+			}
+		}
 		return a.printCommandHelp(a.Root, remaining)
 	}
 
@@ -134,11 +142,23 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// Check for --help/-h flag at command level (automatic for all commands)
+	// Help flags are automatically added to every command in NewCommand/prepare
+	// This takes precedence over everything else - no need to implement per command
 	if help, _ := cmd.Flags.GetBool("help"); help {
 		return a.printCommandHelp(cmd, resultArgs)
 	}
 
-	if len(resultArgs) < cmd.RequiredArgs() {
+	// Count user-defined subcommands (excluding default commands like help, config, autocomplete)
+	userSubcommands := a.countUserSubcommands(cmd)
+
+	// If command has user-defined subcommands and no positional arguments provided, show help
+	if userSubcommands > 0 && len(resultArgs) == 0 {
+		return a.printCommandHelp(cmd, resultArgs)
+	}
+
+	// If command has no user-defined subcommands and required args are missing, prompt for them
+	if userSubcommands == 0 && len(resultArgs) < cmd.RequiredArgs() {
 		if err := a.promptForArguments(ctx, cmd, &resultArgs); err != nil {
 			return err
 		}
@@ -158,6 +178,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	if cmd.Run == nil {
+		// If command has user-defined subcommands but no Run handler, show help
+		if userSubcommands > 0 {
+			return a.printCommandHelp(cmd, resultArgs)
+		}
 		return fmt.Errorf("command %s has no run handler", cmd.Path())
 	}
 
@@ -263,6 +287,28 @@ func (a *App) printCommandHelp(cmd *Command, args []string) error {
 	return helper.Render(a.Out)
 }
 
+// countUserSubcommands returns the count of subcommands that are not default built-in commands.
+func (a *App) countUserSubcommands(cmd *Command) int {
+	if cmd == nil || len(cmd.Subcommands) == 0 {
+		return 0
+	}
+
+	// Default command names that are added by AddDefaultCommands
+	defaultCommands := map[string]bool{
+		"help":         true,
+		"config":       true,
+		"autocomplete": true,
+	}
+
+	count := 0
+	for _, sub := range cmd.Subcommands {
+		if !defaultCommands[sub.Name] {
+			count++
+		}
+	}
+	return count
+}
+
 // Context is passed to command handlers and provides convenient access to the
 // resolved command, arguments, configuration and flags.
 type Context struct {
@@ -316,12 +362,21 @@ func (a *App) OutputFormat() string {
 }
 
 // GetString retrieves a configuration value with the given key, looking at
-// flag values, environment variables, config file, then defaults.
+// command flags, global flags, environment variables, config file, then defaults.
 func (ctx *Context) GetString(key string) (string, bool) {
+	// First check command-level flags
 	if v, ok := ctx.Command.Flags.GetString(key); ok {
 		return v, true
 	}
 
+	// Then check global flags (for flags like --project that are global)
+	if ctx.App != nil && ctx.App.GlobalFlags != nil {
+		if v, ok := ctx.App.GlobalFlags.GetString(key); ok {
+			return v, true
+		}
+	}
+
+	// Then check config
 	if ctx.App != nil && ctx.App.Config != nil {
 		if v, ok := ctx.App.Config.Get(key); ok {
 			return v, true
@@ -332,12 +387,21 @@ func (ctx *Context) GetString(key string) (string, bool) {
 }
 
 // GetBool retrieves a boolean configuration value using the same precedence as
-// GetString.
+// GetString (command flags, global flags, config).
 func (ctx *Context) GetBool(key string) (bool, bool) {
+	// First check command-level flags
 	if v, ok := ctx.Command.Flags.GetBool(key); ok {
 		return v, true
 	}
 
+	// Then check global flags
+	if ctx.App != nil && ctx.App.GlobalFlags != nil {
+		if v, ok := ctx.App.GlobalFlags.GetBool(key); ok {
+			return v, true
+		}
+	}
+
+	// Then check config
 	if ctx.App != nil && ctx.App.Config != nil {
 		if v, ok := ctx.App.Config.Get(key); ok {
 			return strings.EqualFold(v, "true"), true
