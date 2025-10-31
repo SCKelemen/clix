@@ -41,7 +41,19 @@ func (e Extension) Extend(app *clix.App) error {
 		return nil
 	}
 
-	// Only add if not already present
+	// Add global --version flag that shows version info
+	app.GlobalFlags.BoolVar(&clix.BoolVarOptions{
+		Name:  "version",
+		Short: "v",
+		Usage: "Show version information",
+	})
+
+	// Store version info in app so Run can access it for --version flag
+	app.Version = e.Version
+	// Note: Commit and Date are only shown in the "version" command, not --version flag
+	// This keeps --version simple and consistent with common CLI patterns
+
+	// Only add command if not already present
 	if findSubcommand(app.Root, "version") == nil {
 		app.Root.AddCommand(NewVersionCommand(app, e.Version, e.Commit, e.Date))
 	}
@@ -77,18 +89,27 @@ func renderVersion(app *clix.App, version, commit, date string) error {
 		version = "dev"
 	}
 
-	fmt.Fprintf(app.Out, "%s version %s", app.Name, version)
+	format := app.OutputFormat()
+
+	// Build version data structure
+	versionData := map[string]interface{}{
+		"name":    app.Name,
+		"version": version,
+		"go": map[string]string{
+			"version": runtime.Version(),
+			"os":      runtime.GOOS,
+			"arch":    runtime.GOARCH,
+		},
+	}
 
 	if commit != "" {
-		fmt.Fprintf(app.Out, " (commit: %s)", commit)
+		versionData["commit"] = commit
 	}
 
 	if date != "" {
-		fmt.Fprintf(app.Out, " (built: %s)", date)
+		versionData["date"] = date
 	}
 
-	fmt.Fprintf(app.Out, "\n")
-	fmt.Fprintf(app.Out, "go version %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
-
-	return nil
+	// Format according to --format flag
+	return clix.FormatData(app.Out, versionData, format)
 }

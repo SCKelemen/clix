@@ -119,6 +119,18 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// Check if global --version flag was set
+	if version, _ := a.GlobalFlags.GetBool("version"); version {
+		// Show version info - same format as "version" command but simpler (no commit/date)
+		// The version extension sets app.Version, so if it's enabled, we show it
+		if a.Version != "" {
+			fmt.Fprintf(a.Out, "%s version %s\n", a.Name, a.Version)
+		} else {
+			fmt.Fprintf(a.Out, "%s\n", a.Name)
+		}
+		return nil
+	}
+
 	// Check if global --help flag was set (when --help appears before any command)
 	if help, _ := a.GlobalFlags.GetBool("help"); help {
 		// If there are remaining args, they might be a command - match it first
@@ -377,12 +389,21 @@ func (a *App) SaveConfig() error {
 }
 
 // OutputFormat returns the currently selected output format.
+// Valid values are "json", "yaml", or "text" (default).
 func (a *App) OutputFormat() string {
 	if a.GlobalFlags == nil {
 		return "text"
 	}
 	if v, ok := a.GlobalFlags.GetString("format"); ok && v != "" {
-		return strings.ToLower(v)
+		format := strings.ToLower(v)
+		// Validate format
+		switch format {
+		case "json", "yaml", "text":
+			return format
+		default:
+			// Invalid format, default to text
+			return "text"
+		}
 	}
 	return "text"
 }

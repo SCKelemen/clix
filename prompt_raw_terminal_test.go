@@ -128,8 +128,8 @@ func TestPromptMultiSelectRawTerminal(t *testing.T) {
 
 		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label:       "Select",
-			Theme:       DefaultPromptTheme,
+			Label:        "Select",
+			Theme:        DefaultPromptTheme,
 			ContinueText: "Done",
 			Options: []SelectOption{
 				{Label: "Option A", Value: "a"},
@@ -366,4 +366,3 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		}
 	})
 }
-
