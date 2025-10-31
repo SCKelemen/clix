@@ -3,6 +3,10 @@ package clix
 import "fmt"
 
 // NewHelpCommand constructs the built-in help command.
+//
+// Deprecated: Use clix/ext/help.Extension instead for optional help command.
+// Flag-based help (-h, --help) remains in core and works without this.
+// This function is kept for backward compatibility but will be removed in a future version.
 func NewHelpCommand(app *App) *Command {
 	cmd := NewCommand("help")
 	cmd.Short = "Show help for commands"

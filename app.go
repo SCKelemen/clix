@@ -74,18 +74,15 @@ func NewApp(name string) *App {
 }
 
 // AddDefaultCommands attaches built-in helper commands to the application.
-// Currently only includes "help" (minimal overhead). Use extensions for
-// optional features like config management.
+// Currently only includes "autocomplete". Use extensions for optional features
+// like help and config management.
 // It is safe to call multiple times; duplicate commands will not be added.
 func (a *App) AddDefaultCommands() {
 	if a.Root == nil {
 		return
 	}
 
-	if a.Root.findSubcommand("help") == nil {
-		a.Root.AddCommand(NewHelpCommand(a))
-	}
-
+	// Help command is now an extension - add via clix/ext/help
 	// Config is now an extension - add via clix/ext/config
 	// Autocomplete is still built-in for now but can be moved to extension later
 	if a.Root.findSubcommand("autocomplete") == nil {
@@ -305,7 +302,7 @@ func (a *App) countUserSubcommands(cmd *Command) int {
 
 	// Default command names that are added by AddDefaultCommands or extensions
 	defaultCommands := map[string]bool{
-		"help":         true,
+		"help":         true, // Added by help extension if present
 		"config":       true, // Added by config extension if present
 		"autocomplete": true,
 	}
