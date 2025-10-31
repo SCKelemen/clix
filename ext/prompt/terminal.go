@@ -1,4 +1,4 @@
-package clix
+package prompt
 
 import (
 	"fmt"
@@ -212,3 +212,4 @@ func RestoreCursorPosition(out io.Writer) {
 func ClearToEndOfScreen(out io.Writer) {
 	fmt.Fprint(out, "\033[J")
 }
+

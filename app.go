@@ -50,7 +50,7 @@ func NewApp(name string) *App {
 
 	app.EnvPrefix = strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
 	app.Config = NewConfigManager(name)
-	app.Prompter = TerminalPrompter{In: app.In, Out: app.Out}
+	app.Prompter = TextPrompter{In: app.In, Out: app.Out}
 	app.DefaultTheme = DefaultPromptTheme
 	app.Styles = DefaultStyles
 
@@ -97,12 +97,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	a.ensureRootPrepared()
 
-	// Apply extensions before adding default commands (extensions might add commands)
+	// Apply extensions (extensions add optional commands)
 	if err := a.ApplyExtensions(); err != nil {
 		return err
 	}
-
-	a.AddDefaultCommands()
 
 	if args == nil {
 		args = os.Args[1:]
@@ -304,6 +302,7 @@ func (a *App) promptForArguments(ctx context.Context, cmd *Command, args *[]stri
 			break
 		}
 
+		// Use struct-based API for consistency with rest of codebase
 		value, err := a.Prompter.Prompt(ctx, PromptRequest{
 			Label:    arg.PromptLabel(),
 			Default:  arg.Default,

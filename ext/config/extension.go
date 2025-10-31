@@ -150,7 +150,10 @@ func configResetCommand(app *clix.App) *clix.Command {
 	})
 	cmd.Run = func(ctx *clix.Context) error {
 		if !force {
-			answer, err := app.Prompter.Prompt(ctx.Context, clix.PromptRequest{Label: "Reset configuration? (y/N)", Theme: app.DefaultTheme})
+			answer, err := app.Prompter.Prompt(ctx.Context, clix.PromptRequest{
+				Label: "Reset configuration? (y/N)",
+				Theme: app.DefaultTheme,
+			})
 			if err != nil {
 				return err
 			}

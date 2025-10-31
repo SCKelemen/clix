@@ -8,11 +8,11 @@ import (
 	"testing"
 )
 
-func TestTerminalPrompterReadsInput(t *testing.T) {
+func TestTextPrompterReadsInput(t *testing.T) {
 	in := bytes.NewBufferString("custom\n")
 	out := &bytes.Buffer{}
 
-	prompter := TerminalPrompter{In: in, Out: out}
+	prompter := TextPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label: "Enter value",
 		Theme: DefaultPromptTheme,
@@ -30,11 +30,11 @@ func TestTerminalPrompterReadsInput(t *testing.T) {
 	}
 }
 
-func TestTerminalPrompterUsesDefault(t *testing.T) {
+func TestTextPrompterUsesDefault(t *testing.T) {
 	in := bytes.NewBufferString("\n")
 	out := &bytes.Buffer{}
 
-	prompter := TerminalPrompter{In: in, Out: out}
+	prompter := TextPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:   "Colour",
 		Default: "blue",
@@ -53,11 +53,11 @@ func TestTerminalPrompterUsesDefault(t *testing.T) {
 	}
 }
 
-func TestTerminalPrompterValidatesInput(t *testing.T) {
+func TestTextPrompterValidatesInput(t *testing.T) {
 	in := bytes.NewBufferString("bad\nvalid\n")
 	out := &bytes.Buffer{}
 
-	prompter := TerminalPrompter{In: in, Out: out}
+	prompter := TextPrompter{In: in, Out: out}
 	attempts := 0
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label: "Code",
@@ -86,7 +86,7 @@ func TestTerminalPrompterValidatesInput(t *testing.T) {
 	}
 }
 
-func TestTerminalPrompterAppliesStyles(t *testing.T) {
+func TestTextPrompterAppliesStyles(t *testing.T) {
 	in := bytes.NewBufferString("bad\nvalid\n")
 	out := &bytes.Buffer{}
 
@@ -111,7 +111,7 @@ func TestTerminalPrompterAppliesStyles(t *testing.T) {
 		}),
 	}
 
-	prompter := TerminalPrompter{In: in, Out: out}
+	prompter := TextPrompter{In: in, Out: out}
 	_, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:   "value",
 		Default: "fallback",
@@ -133,9 +133,31 @@ func TestTerminalPrompterAppliesStyles(t *testing.T) {
 	}
 }
 
-func TestTerminalPrompterRequiresIO(t *testing.T) {
-	_, err := TerminalPrompter{In: nil, Out: nil}.Prompt(context.Background(), PromptRequest{})
+func TestTextPrompterRequiresIO(t *testing.T) {
+	_, err := TextPrompter{In: nil, Out: nil}.Prompt(context.Background(), PromptRequest{})
 	if err == nil {
 		t.Fatal("expected error when IO is missing")
+	}
+}
+
+func TestTextPrompterSupportsConfirm(t *testing.T) {
+	in := bytes.NewBufferString("y\n")
+	out := &bytes.Buffer{}
+
+	prompter := TextPrompter{In: in, Out: out}
+	value, err := prompter.Prompt(context.Background(), PromptRequest{
+		Label:   "Continue?",
+		Confirm: true,
+	})
+	if err != nil {
+		t.Fatalf("Prompt returned error: %v", err)
+	}
+	if value != "y" {
+		t.Fatalf("expected 'y', got %q", value)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "(Y/n)") {
+		t.Errorf("output should show default, got: %s", output)
 	}
 }

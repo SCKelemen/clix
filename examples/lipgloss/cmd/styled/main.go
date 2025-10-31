@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"clix"
+	"clix/ext/prompt"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -65,6 +66,7 @@ $ styled-demo style --mood excited
 $ styled-demo style --mood relaxed
 $ styled-demo style prompt select
 $ styled-demo style prompt multiselect
+$ styled-demo style prompt confirm
 `)
 	var mood string
 	root.Flags.StringVar(&clix.StringVarOptions{
@@ -85,7 +87,7 @@ $ styled-demo style prompt multiselect
 		)
 		fmt.Fprintln(ctx.App.Out, banner)
 
-		prompter := clix.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		prompter := prompt.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
 		promptTheme := ctx.App.DefaultTheme
 		promptTheme.Hint = "Provide a name for your personalized greeting"
 		name, err := prompter.Prompt(ctx, clix.PromptRequest{
@@ -126,7 +128,7 @@ $ styled-demo style prompt multiselect
 		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Select Prompt Demo"))
 		fmt.Fprintln(ctx.App.Out, subtitleStyle.Render("Choose an option from the list"))
 
-		prompter := clix.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		prompter := prompt.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
 		promptTheme := ctx.App.DefaultTheme
 		promptTheme.Hint = "Use arrows to move, type to filter"
 
@@ -168,13 +170,13 @@ $ styled-demo style prompt multiselect
 		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Multi-Select Prompt Demo"))
 		fmt.Fprintln(ctx.App.Out, subtitleStyle.Render("Select multiple options, press Enter when done"))
 
-		prompter := clix.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		prompter := prompt.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
 		promptTheme := ctx.App.DefaultTheme
 		promptTheme.Hint = "Enter option numbers (e.g., 1,2,3), then press Enter"
 
 		selected, err := prompter.Prompt(ctx, clix.PromptRequest{
-			Label:       "Select features to enable",
-			Theme:       promptTheme,
+			Label:        "Select features to enable",
+			Theme:        promptTheme,
 			ContinueText: "Done",
 			Options: []clix.SelectOption{
 				{Label: "Auto-completion", Value: "autocomplete"},
@@ -205,7 +207,7 @@ $ styled-demo style prompt multiselect
 	confirmCmd.Run = func(ctx *clix.Context) error {
 		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Confirm Prompt Demo"))
 
-		prompter := clix.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		prompter := prompt.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
 		promptTheme := ctx.App.DefaultTheme
 
 		confirmed, err := prompter.Prompt(ctx, clix.PromptRequest{
@@ -228,5 +230,9 @@ $ styled-demo style prompt multiselect
 	promptCmd.AddCommand(confirmCmd)
 
 	app.Root = root
+
+	// Add prompt extension for advanced prompts (select, multi-select, confirm)
+	app.AddExtension(prompt.Extension{})
+
 	return app
 }

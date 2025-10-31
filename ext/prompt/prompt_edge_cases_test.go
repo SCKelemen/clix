@@ -1,7 +1,8 @@
-package clix
+package prompt
 
 import (
 	"bytes"
+	"clix"
 	"context"
 	"errors"
 	"strings"
@@ -15,10 +16,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:   "Choose",
-			Theme:   DefaultPromptTheme,
-			Options: []SelectOption{}, // Empty list
+			Theme:   clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{}, // Empty list
 		})
 		if err != nil {
 			t.Fatalf("Prompt should handle empty options, got error: %v", err)
@@ -33,10 +34,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:       "Select",
-			Theme:       DefaultPromptTheme,
-			Options:     []SelectOption{}, // Empty list
+			Theme:       clix.DefaultPromptTheme,
+			Options:     []clix.SelectOption{}, // Empty list
 			MultiSelect: true,
 		})
 		if err != nil {
@@ -52,10 +53,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -74,10 +75,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -96,10 +97,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 			},
 			Validate: func(v string) error {
@@ -123,10 +124,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "A", Value: "a"},
 				{Label: "B", Value: "b"},
 			},
@@ -146,10 +147,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "A", Value: "a"},
 			},
 			MultiSelect: true,
@@ -171,10 +172,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "Only Option", Value: "only"},
 			},
 		})
@@ -191,11 +192,11 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:   "Select",
 			Default: "1,2,3",
-			Theme:   DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme:   clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "A", Value: "a"},
 				{Label: "B", Value: "b"},
 				{Label: "C", Value: "c"},
@@ -216,11 +217,11 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:        "Select",
-			Theme:        DefaultPromptTheme,
+			Theme:        clix.DefaultPromptTheme,
 			ContinueText: "Finish",
-			Options: []SelectOption{
+			Options: []clix.SelectOption{
 				{Label: "A", Value: "a"},
 			},
 			MultiSelect: true,
@@ -239,10 +240,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "First", Value: "1"},
 				{Label: "Second", Value: "2"},
 				{Label: "Third", Value: "3"},
@@ -261,10 +262,10 @@ func TestPromptEdgeCases(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "A", Value: "a"},
 			},
 			MultiSelect: true,

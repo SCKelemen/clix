@@ -12,11 +12,11 @@ func TestPrincipleParentCommandsShowHelp(t *testing.T) {
 	t.Run("parent command with subcommands shows help when no subcommand", func(t *testing.T) {
 		app := NewApp("test")
 		root := NewCommand("test")
-		
+
 		subCmd := NewCommand("sub")
 		subCmd.Short = "A subcommand"
 		root.AddCommand(subCmd)
-		
+
 		app.Root = root
 
 		var output bytes.Buffer
@@ -39,11 +39,11 @@ func TestPrincipleParentCommandsShowHelp(t *testing.T) {
 	t.Run("invalid subcommand shows parent help", func(t *testing.T) {
 		app := NewApp("test")
 		root := NewCommand("test")
-		
+
 		subCmd := NewCommand("valid")
 		subCmd.Short = "A valid subcommand"
 		root.AddCommand(subCmd)
-		
+
 		app.Root = root
 
 		var output bytes.Buffer
@@ -70,7 +70,7 @@ func TestPrincipleActionableCommandsPrompt(t *testing.T) {
 	t.Run("actionable command without args prompts", func(t *testing.T) {
 		app := NewApp("test")
 		root := NewCommand("test")
-		
+
 		actionCmd := NewCommand("action")
 		actionCmd.Short = "An actionable command"
 		actionCmd.Arguments = []*Argument{
@@ -82,14 +82,19 @@ func TestPrincipleActionableCommandsPrompt(t *testing.T) {
 			}
 			return nil
 		}
-		
+
 		root.AddCommand(actionCmd)
 		app.Root = root
 
 		// Mock prompter that returns a value
 		var prompted bool
-		app.Prompter = prompterFunc(func(ctx context.Context, req PromptRequest) (string, error) {
+		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
 			prompted = true
+			// Convert options to see what was requested
+			cfg := &PromptConfig{}
+			for _, opt := range opts {
+				opt.Apply(cfg)
+			}
 			return "test-value", nil
 		})
 
@@ -105,7 +110,7 @@ func TestPrincipleActionableCommandsPrompt(t *testing.T) {
 	t.Run("actionable command with positional args doesn't prompt", func(t *testing.T) {
 		app := NewApp("test")
 		root := NewCommand("test")
-		
+
 		actionCmd := NewCommand("action")
 		actionCmd.Short = "An actionable command"
 		actionCmd.Arguments = []*Argument{
@@ -117,12 +122,12 @@ func TestPrincipleActionableCommandsPrompt(t *testing.T) {
 			}
 			return nil
 		}
-		
+
 		root.AddCommand(actionCmd)
 		app.Root = root
 
 		var prompted bool
-		app.Prompter = prompterFunc(func(ctx context.Context, req PromptRequest) (string, error) {
+		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
 			prompted = true
 			return "unexpected", nil
 		})
@@ -139,9 +144,8 @@ func TestPrincipleActionableCommandsPrompt(t *testing.T) {
 }
 
 // prompterFunc is a helper for testing
-type prompterFunc func(context.Context, PromptRequest) (string, error)
+type prompterFunc func(context.Context, ...PromptOption) (string, error)
 
-func (f prompterFunc) Prompt(ctx context.Context, req PromptRequest) (string, error) {
-	return f(ctx, req)
+func (f prompterFunc) Prompt(ctx context.Context, opts ...PromptOption) (string, error) {
+	return f(ctx, opts...)
 }
-

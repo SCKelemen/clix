@@ -1,10 +1,12 @@
-package clix
+package prompt
 
 import (
 	"bytes"
 	"context"
 	"strings"
 	"testing"
+
+	"clix"
 )
 
 func TestPromptSelect(t *testing.T) {
@@ -13,10 +15,10 @@ func TestPromptSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "What would you like to do?",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 				{Label: "Option C", Value: "c"},
@@ -46,10 +48,10 @@ func TestPromptSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -67,10 +69,10 @@ func TestPromptSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme: clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "Create a new repository", Value: "create"},
 				{Label: "Option C", Value: "c"},
 			},
@@ -88,11 +90,11 @@ func TestPromptSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label: "Choose",
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
+			Label:   "Choose",
 			Default: "b",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
+			Theme:   clix.DefaultPromptTheme,
+			Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -110,16 +112,13 @@ func TestPromptSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		_, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label: "What would you like to do?",
-			Theme: DefaultPromptTheme,
-			Options: []SelectOption{
-				{
-					Label:       "Create a new repository on github.com from scratch",
-					Value:       "create",
-					Description: "Create a new repository",
-				},
+		_, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "What would you like to do?", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
+			{
+				Label:       "Create a new repository on github.com from scratch",
+				Value:       "create",
+				Description: "Create a new repository",
 			},
+		},
 		})
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
@@ -141,11 +140,12 @@ func TestPromptConfirm(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label:   "Continue?",
-			Confirm: true,
-			Theme:   DefaultPromptTheme,
-		})
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
+				Label:   "Continue?",
+				Confirm: true,
+				Theme:   clix.DefaultPromptTheme,
+			})
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -167,12 +167,13 @@ func TestPromptConfirm(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label:   "Continue?",
-			Default: "n",
-			Confirm: true,
-			Theme:   DefaultPromptTheme,
-		})
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
+				Label:   "Continue?",
+				Default: "n",
+				Confirm: true,
+				Theme:   clix.DefaultPromptTheme,
+			})
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -191,11 +192,12 @@ func TestPromptConfirm(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label:   "Continue?",
-			Confirm: true,
-			Theme:   DefaultPromptTheme,
-		})
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
+				Label:   "Continue?",
+				Confirm: true,
+				Theme:   clix.DefaultPromptTheme,
+			})
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -209,11 +211,12 @@ func TestPromptConfirm(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label:   "Continue?",
-			Confirm: true,
-			Theme:   DefaultPromptTheme,
-		})
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
+				Label:   "Continue?",
+				Confirm: true,
+				Theme:   clix.DefaultPromptTheme,
+			})
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -227,11 +230,12 @@ func TestPromptConfirm(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label:   "Continue?",
-			Confirm: true,
-			Theme:   DefaultPromptTheme,
-		})
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
+				Label:   "Continue?",
+				Confirm: true,
+				Theme:   clix.DefaultPromptTheme,
+			})
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -245,11 +249,12 @@ func TestPromptConfirm(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), PromptRequest{
-			Label:   "Continue?",
-			Confirm: true,
-			Theme:   DefaultPromptTheme,
-		})
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
+				Label:   "Continue?",
+				Confirm: true,
+				Theme:   clix.DefaultPromptTheme,
+			})
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -263,4 +268,3 @@ func TestPromptConfirm(t *testing.T) {
 		}
 	})
 }
-
