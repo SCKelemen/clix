@@ -12,9 +12,9 @@ import (
 
 // TerminalState manages raw terminal mode for interactive prompts.
 type TerminalState struct {
-	fd        int
-	oldState  *term.State
-	restored  bool
+	fd       int
+	oldState *term.State
+	restored bool
 }
 
 // EnableRawMode enables raw terminal mode for reading individual keystrokes.
