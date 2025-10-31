@@ -507,7 +507,7 @@ Methods:
 
 ### `clix.PromptRequest`
 
-A `PromptRequest` carries the information necessary to display a prompt.
+A `PromptRequest` carries the information necessary to display a prompt. This is the primary, struct-based API for prompts, consistent with the rest of the codebase (similar to `StringVarOptions`, `BoolVarOptions`, etc.). `PromptRequest` implements `PromptOption`, so it can be used alongside functional options.
 
 ```go
 type PromptRequest struct {
@@ -528,6 +528,31 @@ type PromptRequest struct {
         // ContinueText for multi-select prompts
         ContinueText string
 }
+```
+
+**Functional Options API:**
+
+For convenience, `clix` also provides functional options that can be used instead of or alongside `PromptRequest`:
+
+**Core options (available in `clix` package):**
+- `WithLabel(label string)` - Set the prompt label
+- `WithDefault(def string)` - Set the default value
+- `WithValidate(validate func(string) error)` - Set validation function
+- `WithTheme(theme PromptTheme)` - Set the prompt theme
+- `WithConfirm()` - Enable yes/no confirmation prompt
+
+**Advanced options (require `clix/ext/prompt` extension):**
+- `prompt.Select(options []SelectOption)` - Create a select prompt
+- `prompt.MultiSelect(options []SelectOption)` - Create a multi-select prompt
+- `prompt.WithContinueText(text string)` - Set continue button text for multi-select
+
+Both APIs can be mixed. For example:
+```go
+// Mix struct with functional options
+result, err := prompter.Prompt(ctx,
+        clix.PromptRequest{Label: "Name"},
+        clix.WithDefault("unknown"),
+)
 ```
 
 ### `clix.Extension`
