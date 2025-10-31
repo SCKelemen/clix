@@ -94,18 +94,20 @@ func TestTerminalPrompterAppliesStyles(t *testing.T) {
 		Prefix: "?> ",
 		Hint:   "(hint)",
 		Error:  "x ",
-		PrefixStyle: StyleFunc(func(s string) string {
-			return "P:" + s
+		PrefixStyle: StyleFunc(func(strs ...string) string {
+			return "P:" + strs[0]
 		}),
-		LabelStyle: StyleFunc(strings.ToUpper),
-		DefaultStyle: StyleFunc(func(s string) string {
-			return "D:" + s
+		LabelStyle: StyleFunc(func(strs ...string) string {
+			return strings.ToUpper(strs[0])
 		}),
-		HintStyle: StyleFunc(func(s string) string {
-			return "H:" + s
+		DefaultStyle: StyleFunc(func(strs ...string) string {
+			return "D:" + strs[0]
 		}),
-		ErrorStyle: StyleFunc(func(s string) string {
-			return "E:" + s
+		HintStyle: StyleFunc(func(strs ...string) string {
+			return "H:" + strs[0]
+		}),
+		ErrorStyle: StyleFunc(func(strs ...string) string {
+			return "E:" + strs[0]
 		}),
 	}
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"clix"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -30,17 +31,18 @@ func newApp() *clix.App {
 	app := clix.NewApp("styled-demo")
 	app.Description = "Demonstrates styling prompts and output with lipgloss"
 
-	// Customize help and other textual output using lipgloss renderers.
+	// Customize help and other textual output using lipgloss styles directly.
+	// lipgloss.Style implements clix.TextStyle, so no wrapping is needed.
 	styles := clix.DefaultStyles
-	styles.AppTitle = clix.StyleFunc(titleStyle.Render)
-	styles.AppDescription = clix.StyleFunc(subtitleStyle.Render)
-	styles.SectionHeading = clix.StyleFunc(accentStyle.Render)
-	styles.FlagName = clix.StyleFunc(codeStyle.Render)
-	styles.FlagUsage = clix.StyleFunc(subtitleStyle.Render)
-	styles.SubcommandName = clix.StyleFunc(accentStyle.Render)
-	styles.SubcommandDesc = clix.StyleFunc(subtitleStyle.Render)
-	styles.Example = clix.StyleFunc(func(s string) string {
-		return codeStyle.Render(strings.TrimSpace(s))
+	styles.AppTitle = titleStyle
+	styles.AppDescription = subtitleStyle
+	styles.SectionHeading = accentStyle
+	styles.FlagName = codeStyle
+	styles.FlagUsage = subtitleStyle
+	styles.SubcommandName = accentStyle
+	styles.SubcommandDesc = subtitleStyle
+	styles.Example = clix.StyleFunc(func(strs ...string) string {
+		return codeStyle.Render(strings.TrimSpace(strs[0]))
 	})
 	app.Styles = styles
 
@@ -49,11 +51,11 @@ func newApp() *clix.App {
 	theme.Prefix = "➤ "
 	theme.Hint = "Press Enter to accept the default"
 	theme.Error = "⚠ "
-	theme.PrefixStyle = clix.StyleFunc(accentStyle.Render)
-	theme.LabelStyle = clix.StyleFunc(titleStyle.Render)
-	theme.HintStyle = clix.StyleFunc(subtitleStyle.Render)
-	theme.DefaultStyle = clix.StyleFunc(codeStyle.Render)
-	theme.ErrorStyle = clix.StyleFunc(lipgloss.NewStyle().Foreground(lipgloss.Color("203")).Render)
+	theme.PrefixStyle = accentStyle
+	theme.LabelStyle = titleStyle
+	theme.HintStyle = subtitleStyle
+	theme.DefaultStyle = codeStyle
+	theme.ErrorStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	app.DefaultTheme = theme
 
 	root := clix.NewCommand("style")
