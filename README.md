@@ -425,6 +425,8 @@ applications that prefer minimal output.
   subcommands, aliases, and interactive prompts.
 - [`examples/gcloud`](examples/gcloud): a Google Cloud CLI-inspired tree with
   large command groups, global flags, and configuration interactions.
+- [`examples/lipgloss`](examples/lipgloss): demonstrates prompt and help styling
+  using [`lipgloss`](https://github.com/charmbracelet/lipgloss).
 
 More scenarios (including prompting workflows and advanced flag composition)
 will be added over time.
