@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"clix"
+	demoapp "clix/examples/basic/internal/app"
 )
 
 func TestDemoGreetCommand(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
-	app := newApp()
+	app := demoapp.New()
 	out := &bytes.Buffer{}
 	app.Out = out
 	app.Err = &bytes.Buffer{}

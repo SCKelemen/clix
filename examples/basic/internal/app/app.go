@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -17,7 +17,8 @@ const demoBanner = `
   ╚═════╝ ╚══════╝ ╚═╝ ╚═╝  ╚═╝
 `
 
-func newApp() *clix.App {
+// New returns a configured application that demonstrates the clix framework.
+func New() *clix.App {
 	app := clix.NewApp("demo")
 	app.Description = "Demonstrates the clix CLI framework"
 
