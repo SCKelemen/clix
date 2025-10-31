@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -80,6 +81,51 @@ func TestTerminalPrompterValidatesInput(t *testing.T) {
 	}
 
 	expected := "? Code: ! value must be 'valid'\n? Code: "
+	if out.String() != expected {
+		t.Fatalf("expected output %q, got %q", expected, out.String())
+	}
+}
+
+func TestTerminalPrompterAppliesStyles(t *testing.T) {
+	in := bytes.NewBufferString("bad\nvalid\n")
+	out := &bytes.Buffer{}
+
+	theme := PromptTheme{
+		Prefix: "?> ",
+		Hint:   "(hint)",
+		Error:  "x ",
+		PrefixStyle: StyleFunc(func(s string) string {
+			return "P:" + s
+		}),
+		LabelStyle: StyleFunc(strings.ToUpper),
+		DefaultStyle: StyleFunc(func(s string) string {
+			return "D:" + s
+		}),
+		HintStyle: StyleFunc(func(s string) string {
+			return "H:" + s
+		}),
+		ErrorStyle: StyleFunc(func(s string) string {
+			return "E:" + s
+		}),
+	}
+
+	prompter := TerminalPrompter{In: in, Out: out}
+	_, err := prompter.Prompt(context.Background(), PromptRequest{
+		Label:   "value",
+		Default: "fallback",
+		Theme:   theme,
+		Validate: func(v string) error {
+			if v != "valid" {
+				return errors.New("value must be 'valid'")
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("Prompt returned error: %v", err)
+	}
+
+	expected := "P:?> VALUE [D:fallback] H:(hint): E:x E:value must be 'valid'\nP:?> VALUE [D:fallback] H:(hint): "
 	if out.String() != expected {
 		t.Fatalf("expected output %q, got %q", expected, out.String())
 	}

@@ -1,9 +1,21 @@
 package main
 
 import (
+	"fmt"
+	"strings"
+
 	"clix"
 	"clix/examples/basic/internal/greet"
 )
+
+const demoBanner = `
+  ██████╗ ██╗      ██╗ ██╗  ██╗
+ ██╔════╝ ██║      ██║ ╚██╗██╔╝
+ ██║      ██║      ██║  ╚███╔╝
+ ██║      ██║      ██║  ██╔██╗
+ ╚██████╗ ███████╗ ██║ ██╔╝ ██╗
+  ╚═════╝ ╚══════╝ ╚═╝ ╚═╝  ╚═╝
+`
 
 func newApp() *clix.App {
 	app := clix.NewApp("demo")
@@ -21,6 +33,7 @@ func newApp() *clix.App {
 	root := clix.NewCommand("demo")
 	root.Short = "Root of the demo application"
 	root.Run = func(ctx *clix.Context) error {
+		fmt.Fprintln(ctx.App.Out, strings.Trim(demoBanner, "\n"))
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
 	root.Subcommands = []*clix.Command{

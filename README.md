@@ -1,5 +1,14 @@
 # clix
 
+```
+  ██████╗ ██╗      ██╗ ██╗  ██╗
+ ██╔════╝ ██║      ██║ ╚██╗██╔╝
+ ██║      ██║      ██║  ╚███╔╝
+ ██║      ██║      ██║  ██╔██╗
+ ╚██████╗ ███████╗ ██║ ██╔╝ ██╗
+  ╚═════╝ ╚══════╝ ╚═╝ ╚═╝  ╚═╝
+```
+
 `clix` is an opinionated, batteries-optional framework for building nested CLI
 applications using plain Go. It provides a declarative API for describing
 commands, flags, and arguments while handling configuration hydration,
@@ -370,6 +379,43 @@ configuration file.
 The built-in `autocomplete` command outputs shell-specific completion scripts.
 Run `cli autocomplete bash` (or `fish`/`zsh`) and follow the instructions
 printed to integrate completion into your environment.
+
+## Styling prompts and help output
+
+`clix` exposes optional styling hooks that leave the default text-only output
+untouched while enabling integrations with packages like
+[`lipgloss`](https://github.com/charmbracelet/lipgloss). Styles are represented
+as simple render functions via the `TextStyle` interface, making it easy to plug
+in any formatter:
+
+```go
+import (
+        "clix"
+        "strings"
+
+        "github.com/charmbracelet/lipgloss"
+)
+
+theme := clix.DefaultPromptTheme
+theme.LabelStyle = clix.StyleFunc(strings.ToUpper)
+
+app := clix.NewApp("demo")
+app.DefaultTheme = theme
+
+help := clix.DefaultStyles
+help.SectionHeading = clix.StyleFunc(func(s string) string {
+        return "== " + strings.ToUpper(s) + " =="
+})
+app.Styles = help
+
+// lipgloss integration
+style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+app.DefaultTheme.PrefixStyle = clix.StyleFunc(style.Render)
+```
+
+Because the styling API only wraps render functions, you can freely mix and
+match plain strings, `lipgloss` styles, or your own formatters without affecting
+applications that prefer minimal output.
 
 ## Examples
 
