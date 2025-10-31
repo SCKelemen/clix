@@ -505,8 +505,11 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 	// Calculate number of lines we'll render (label + options + continue line)
 	linesToRender := 2 + len(req.Options) // label line + options + continue line
 
+	// Track if we're on the continue button (-1 means continue button, >= 0 means option index)
+	onContinueButton := false
+
 	// Initial render
-	p.renderMultiSelectPrompt(req, selected, currentIdx)
+	p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
 
 	for {
 		// Read a single keypress
@@ -518,33 +521,36 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 		// Handle navigation and selection
 		switch key {
 		case KeyUp:
-			if currentIdx > 0 {
+			if onContinueButton {
+				// Move from continue button to last option
+				onContinueButton = false
+				currentIdx = len(req.Options) - 1
+			} else if currentIdx > 0 {
 				currentIdx--
 			} else {
-				currentIdx = len(req.Options) - 1 // Wrap to bottom
+				// Wrap to continue button
+				onContinueButton = true
 			}
 			// Move cursor up to start of prompt, then redraw
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderMultiSelectPrompt(req, selected, currentIdx)
+			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
 		case KeyDown:
-			if currentIdx < len(req.Options)-1 {
+			if onContinueButton {
+				// Move from continue button to first option
+				onContinueButton = false
+				currentIdx = 0
+			} else if currentIdx < len(req.Options)-1 {
 				currentIdx++
 			} else {
-				currentIdx = 0 // Wrap to top
+				// Wrap to continue button
+				onContinueButton = true
 			}
 			// Move cursor up to start of prompt, then redraw
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderMultiSelectPrompt(req, selected, currentIdx)
+			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
 		case KeySpace, KeyEnter:
-			// Toggle current selection (Enter or Space both toggle)
-			if len(req.Options) > 0 {
-				selected[currentIdx] = !selected[currentIdx]
-				// Move cursor up to start of prompt, then redraw
-				MoveCursorUp(p.Out, linesToRender)
-				p.renderMultiSelectPrompt(req, selected, currentIdx)
-			}
-			// If Enter was pressed and we have at least one selection, also confirm
-			if key == KeyEnter {
+			if onContinueButton {
+				// On continue button - confirm if we have selections
 				hasSelection := false
 				for _, sel := range selected {
 					if sel {
@@ -557,6 +563,15 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 					fmt.Fprint(p.Out, "\n")
 					return p.formatSelectedValues(req.Options, selected), nil
 				}
+				// No selections - stay on continue button (can't continue without selections)
+			} else {
+				// Toggle current selection (Enter or Space both toggle)
+				if len(req.Options) > 0 {
+					selected[currentIdx] = !selected[currentIdx]
+					// Move cursor up to start of prompt, then redraw
+					MoveCursorUp(p.Out, linesToRender)
+					p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+				}
 			}
 		case KeyCtrlC, KeyEscape:
 			// Cancelled - show cursor and return
@@ -564,23 +579,26 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 			fmt.Fprint(p.Out, "\n")
 			return "", errors.New("cancelled")
 		case KeyHome:
+			onContinueButton = false
 			currentIdx = 0
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderMultiSelectPrompt(req, selected, currentIdx)
+			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
 		case KeyEnd:
+			onContinueButton = true
 			currentIdx = len(req.Options) - 1
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderMultiSelectPrompt(req, selected, currentIdx)
+			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
 		default:
 			// Try number keys for quick toggle (1-9)
 			if key.IsPrintable() && key.Rune >= '1' && key.Rune <= '9' {
 				idx := int(key.Rune - '1')
 				if idx < len(req.Options) {
+					onContinueButton = false
 					currentIdx = idx
 					selected[idx] = !selected[idx]
 					// Move cursor up to start of prompt, then redraw
 					MoveCursorUp(p.Out, linesToRender)
-					p.renderMultiSelectPrompt(req, selected, currentIdx)
+					p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
 				}
 			}
 		}
@@ -706,7 +724,7 @@ func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req Pr
 // renderMultiSelectPrompt renders the multi-select prompt with current selection state.
 // This function assumes it will be called after moving cursor up,
 // and it will redraw all lines from the current position.
-func (p TerminalPrompter) renderMultiSelectPrompt(req PromptRequest, selected map[int]bool, currentIdx int) {
+func (p TerminalPrompter) renderMultiSelectPrompt(req PromptRequest, selected map[int]bool, currentIdx int, onContinueButton bool) {
 	// Move to start of line and clear it
 	fmt.Fprint(p.Out, "\r\033[K")
 	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
@@ -730,7 +748,7 @@ func (p TerminalPrompter) renderMultiSelectPrompt(req PromptRequest, selected ma
 		}
 		// Highlight current option
 		indicator := " "
-		if i == currentIdx {
+		if !onContinueButton && i == currentIdx {
 			indicator = ">"
 		}
 		fmt.Fprintf(p.Out, "%s %s %d. %s", indicator, marker, i+1, opt.Label)
@@ -748,7 +766,11 @@ func (p TerminalPrompter) renderMultiSelectPrompt(req PromptRequest, selected ma
 	}
 	// Move to start of line and clear it
 	fmt.Fprint(p.Out, "\r\033[K")
-	fmt.Fprintf(p.Out, "  Press Enter to %s", continueText)
+	indicator := " "
+	if onContinueButton {
+		indicator = ">"
+	}
+	fmt.Fprintf(p.Out, "%s %s", indicator, continueText)
 	// Clear rest of line
 	fmt.Fprint(p.Out, "\033[K\n")
 }

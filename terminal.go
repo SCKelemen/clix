@@ -131,16 +131,16 @@ type Key struct {
 // KeyUnknown represents an unknown key.
 var KeyUnknown = Key{0, 0}
 
-// Special keys
+// Special keys - using unique Code values so == comparison works
 var (
 	KeyEnter     = Key{'\n', '\n'}
 	KeyEscape    = Key{0, 0x1b}
-	KeyUp        = Key{0, 0}
-	KeyDown      = Key{0, 0}
-	KeyLeft      = Key{0, 0}
-	KeyRight     = Key{0, 0}
-	KeyHome      = Key{0, 0}
-	KeyEnd       = Key{0, 0}
+	KeyUp        = Key{0, 0xF1} // Unique code for up arrow
+	KeyDown      = Key{0, 0xF2} // Unique code for down arrow
+	KeyLeft      = Key{0, 0xF3} // Unique code for left arrow
+	KeyRight     = Key{0, 0xF4} // Unique code for right arrow
+	KeyHome      = Key{0, 0xF5} // Unique code for home
+	KeyEnd       = Key{0, 0xF6} // Unique code for end
 	KeyTab       = Key{'\t', '\t'}
 	KeyBackspace = Key{0x7f, 0x7f}
 	KeyCtrlC     = Key{0, 0x03}
