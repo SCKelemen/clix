@@ -13,7 +13,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("1\n\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select options",
 			Theme: clix.DefaultPromptTheme,
@@ -44,7 +44,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("1,2\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select options",
 			Theme: clix.DefaultPromptTheme,
@@ -68,7 +68,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("1 3\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select options",
 			Theme: clix.DefaultPromptTheme,
@@ -92,7 +92,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("1\n1\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select options",
 			Theme: clix.DefaultPromptTheme,
@@ -115,7 +115,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:   "Select options",
 			Default: "a,b",
@@ -140,7 +140,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:   "Select options",
 			Default: "1,2",
@@ -165,7 +165,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("\n1\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select options",
 			Theme: clix.DefaultPromptTheme,
@@ -192,7 +192,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("1,2\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select options",
 			Theme: clix.DefaultPromptTheme,
@@ -214,7 +214,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		in := bytes.NewBufferString("1\nfinish\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select options",
 			Theme: clix.DefaultPromptTheme,

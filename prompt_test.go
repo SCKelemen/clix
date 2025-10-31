@@ -8,11 +8,11 @@ import (
 	"testing"
 )
 
-func TestSimpleTextPrompterReadsInput(t *testing.T) {
+func TestTextPrompterReadsInput(t *testing.T) {
 	in := bytes.NewBufferString("custom\n")
 	out := &bytes.Buffer{}
 
-	prompter := SimpleTextPrompter{In: in, Out: out}
+	prompter := TextPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label: "Enter value",
 		Theme: DefaultPromptTheme,
@@ -30,11 +30,11 @@ func TestSimpleTextPrompterReadsInput(t *testing.T) {
 	}
 }
 
-func TestSimpleTextPrompterUsesDefault(t *testing.T) {
+func TestTextPrompterUsesDefault(t *testing.T) {
 	in := bytes.NewBufferString("\n")
 	out := &bytes.Buffer{}
 
-	prompter := SimpleTextPrompter{In: in, Out: out}
+	prompter := TextPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:   "Colour",
 		Default: "blue",
@@ -53,11 +53,11 @@ func TestSimpleTextPrompterUsesDefault(t *testing.T) {
 	}
 }
 
-func TestSimpleTextPrompterValidatesInput(t *testing.T) {
+func TestTextPrompterValidatesInput(t *testing.T) {
 	in := bytes.NewBufferString("bad\nvalid\n")
 	out := &bytes.Buffer{}
 
-	prompter := SimpleTextPrompter{In: in, Out: out}
+	prompter := TextPrompter{In: in, Out: out}
 	attempts := 0
 	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label: "Code",
@@ -86,7 +86,7 @@ func TestSimpleTextPrompterValidatesInput(t *testing.T) {
 	}
 }
 
-func TestSimpleTextPrompterAppliesStyles(t *testing.T) {
+func TestTextPrompterAppliesStyles(t *testing.T) {
 	in := bytes.NewBufferString("bad\nvalid\n")
 	out := &bytes.Buffer{}
 
@@ -111,7 +111,7 @@ func TestSimpleTextPrompterAppliesStyles(t *testing.T) {
 		}),
 	}
 
-	prompter := SimpleTextPrompter{In: in, Out: out}
+	prompter := TextPrompter{In: in, Out: out}
 	_, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:   "value",
 		Default: "fallback",
@@ -133,15 +133,15 @@ func TestSimpleTextPrompterAppliesStyles(t *testing.T) {
 	}
 }
 
-func TestSimpleTextPrompterRequiresIO(t *testing.T) {
-	_, err := SimpleTextPrompter{In: nil, Out: nil}.Prompt(context.Background(), PromptRequest{})
+func TestTextPrompterRequiresIO(t *testing.T) {
+	_, err := TextPrompter{In: nil, Out: nil}.Prompt(context.Background(), PromptRequest{})
 	if err == nil {
 		t.Fatal("expected error when IO is missing")
 	}
 }
 
-func TestSimpleTextPrompterRejectsConfirmPrompts(t *testing.T) {
-	prompter := SimpleTextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
+func TestTextPrompterRejectsConfirmPrompts(t *testing.T) {
+	prompter := TextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
 	_, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:   "Continue?",
 		Confirm: true,
@@ -155,8 +155,8 @@ func TestSimpleTextPrompterRejectsConfirmPrompts(t *testing.T) {
 	}
 }
 
-func TestSimpleTextPrompterRejectsSelectPrompts(t *testing.T) {
-	prompter := SimpleTextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
+func TestTextPrompterRejectsSelectPrompts(t *testing.T) {
+	prompter := TextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
 	_, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label: "Choose",
 		Theme: DefaultPromptTheme,
@@ -172,8 +172,8 @@ func TestSimpleTextPrompterRejectsSelectPrompts(t *testing.T) {
 	}
 }
 
-func TestSimpleTextPrompterRejectsMultiSelectPrompts(t *testing.T) {
-	prompter := SimpleTextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
+func TestTextPrompterRejectsMultiSelectPrompts(t *testing.T) {
+	prompter := TextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
 	_, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:       "Select",
 		Theme:       DefaultPromptTheme,

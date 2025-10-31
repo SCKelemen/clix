@@ -10,15 +10,15 @@ import (
 )
 
 func TestPromptExtension(t *testing.T) {
-	t.Run("extension replaces SimpleTextPrompter with EnhancedTerminalPrompter", func(t *testing.T) {
+	t.Run("extension replaces TextPrompter with TerminalPrompter", func(t *testing.T) {
 		app := clix.NewApp("test")
 		app.In = bytes.NewBufferString("")
 		app.Out = &bytes.Buffer{}
 
-		// Initially has SimpleTextPrompter
-		_, ok := app.Prompter.(clix.SimpleTextPrompter)
+		// Initially has TextPrompter
+		_, ok := app.Prompter.(clix.TextPrompter)
 		if !ok {
-			t.Fatal("expected SimpleTextPrompter initially")
+			t.Fatal("expected TextPrompter initially")
 		}
 
 		// Apply extension
@@ -27,10 +27,10 @@ func TestPromptExtension(t *testing.T) {
 			t.Fatalf("extension failed: %v", err)
 		}
 
-		// Should now have EnhancedTerminalPrompter
-		_, ok = app.Prompter.(EnhancedTerminalPrompter)
+		// Should now have TerminalPrompter
+		_, ok = app.Prompter.(TerminalPrompter)
 		if !ok {
-			t.Fatal("expected EnhancedTerminalPrompter after extension")
+			t.Fatal("expected TerminalPrompter after extension")
 		}
 	})
 

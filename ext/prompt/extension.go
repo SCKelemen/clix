@@ -2,7 +2,7 @@ package prompt
 
 import "clix"
 
-// Extension replaces the default SimpleTextPrompter with EnhancedTerminalPrompter,
+// Extension replaces the default TextPrompter with TerminalPrompter,
 // enabling advanced prompt features: select, multi-select, confirm, and raw terminal mode.
 //
 // Usage:
@@ -19,9 +19,9 @@ type Extension struct{}
 
 // Extend implements clix.Extension.
 func (Extension) Extend(app *clix.App) error {
-	// Replace SimpleTextPrompter with EnhancedTerminalPrompter
+	// Replace TextPrompter with TerminalPrompter
 	if app.In != nil && app.Out != nil {
-		app.Prompter = EnhancedTerminalPrompter{
+		app.Prompter = TerminalPrompter{
 			In:  app.In,
 			Out: app.Out,
 		}

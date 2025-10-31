@@ -67,23 +67,23 @@ var DefaultPromptTheme = PromptTheme{
 	Error:  "! ",
 }
 
-// SimpleTextPrompter implements Prompter for basic text input only.
+// TextPrompter implements Prompter for basic text input only.
 // This is the default prompter in core - it only handles text prompts.
 // For advanced prompts (select, multi-select, confirm), use the prompt extension.
-type SimpleTextPrompter struct {
+type TextPrompter struct {
 	In  io.Reader
 	Out io.Writer
 }
 
 // Prompt displays a text prompt and reads the user's response.
-// Advanced prompt types (Options, MultiSelect, Confirm) are ignored by SimpleTextPrompter.
+// Advanced prompt types (Options, MultiSelect, Confirm) are ignored by TextPrompter.
 // Use the prompt extension for advanced prompt types.
-func (p SimpleTextPrompter) Prompt(ctx context.Context, req PromptRequest) (string, error) {
+func (p TextPrompter) Prompt(ctx context.Context, req PromptRequest) (string, error) {
 	if p.In == nil || p.Out == nil {
 		return "", errors.New("prompter missing IO")
 	}
 
-	// SimpleTextPrompter only handles text prompts
+	// TextPrompter only handles text prompts
 	// Advanced prompt types should use the prompt extension
 	if req.Confirm {
 		return "", errors.New("confirm prompts require the prompt extension (clix/ext/prompt)")
@@ -99,7 +99,7 @@ func (p SimpleTextPrompter) Prompt(ctx context.Context, req PromptRequest) (stri
 }
 
 // promptText handles regular text input prompts.
-func (p SimpleTextPrompter) promptText(ctx context.Context, req PromptRequest) (string, error) {
+func (p TextPrompter) promptText(ctx context.Context, req PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	for {

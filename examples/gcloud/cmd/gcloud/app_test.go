@@ -17,7 +17,7 @@ func TestGcloudProjectsList(t *testing.T) {
 	app.Out = out
 	app.Err = &bytes.Buffer{}
 	app.In = strings.NewReader("")
-	app.Prompter = clix.SimpleTextPrompter{In: app.In, Out: app.Out}
+	app.Prompter = clix.TextPrompter{In: app.In, Out: app.Out}
 
 	if err := app.Run(context.Background(), []string{"projects", "list"}); err != nil {
 		t.Fatalf("app.Run returned error: %v", err)

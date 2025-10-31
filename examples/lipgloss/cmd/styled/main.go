@@ -87,7 +87,7 @@ $ styled-demo style prompt confirm
 		)
 		fmt.Fprintln(ctx.App.Out, banner)
 
-		prompter := prompt.EnhancedTerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		prompter := prompt.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
 		promptTheme := ctx.App.DefaultTheme
 		promptTheme.Hint = "Provide a name for your personalized greeting"
 		name, err := prompter.Prompt(ctx, clix.PromptRequest{
@@ -128,7 +128,7 @@ $ styled-demo style prompt confirm
 		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Select Prompt Demo"))
 		fmt.Fprintln(ctx.App.Out, subtitleStyle.Render("Choose an option from the list"))
 
-		prompter := prompt.EnhancedTerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		prompter := prompt.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
 		promptTheme := ctx.App.DefaultTheme
 		promptTheme.Hint = "Use arrows to move, type to filter"
 
@@ -170,7 +170,7 @@ $ styled-demo style prompt confirm
 		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Multi-Select Prompt Demo"))
 		fmt.Fprintln(ctx.App.Out, subtitleStyle.Render("Select multiple options, press Enter when done"))
 
-		prompter := prompt.EnhancedTerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		prompter := prompt.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
 		promptTheme := ctx.App.DefaultTheme
 		promptTheme.Hint = "Enter option numbers (e.g., 1,2,3), then press Enter"
 
@@ -207,7 +207,7 @@ $ styled-demo style prompt confirm
 	confirmCmd.Run = func(ctx *clix.Context) error {
 		fmt.Fprintln(ctx.App.Out, titleStyle.Render("Confirm Prompt Demo"))
 
-		prompter := prompt.EnhancedTerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
+		prompter := prompt.TerminalPrompter{In: ctx.App.In, Out: ctx.App.Out}
 		promptTheme := ctx.App.DefaultTheme
 
 		confirmed, err := prompter.Prompt(ctx, clix.PromptRequest{

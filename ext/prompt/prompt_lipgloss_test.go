@@ -30,7 +30,7 @@ func TestPromptSupportsLipglossStyles(t *testing.T) {
 	in := bytes.NewBufferString("test\n")
 	out := &bytes.Buffer{}
 
-	prompter := EnhancedTerminalPrompter{In: in, Out: out}
+	prompter := TerminalPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 		Label: "Enter name",
 		Theme: theme,
@@ -65,7 +65,7 @@ func TestPromptSelectSupportsLipglossStyles(t *testing.T) {
 	in := bytes.NewBufferString("1\n")
 	out := &bytes.Buffer{}
 
-	prompter := EnhancedTerminalPrompter{In: in, Out: out}
+	prompter := TerminalPrompter{In: in, Out: out}
 	_, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 		Label: "Choose option",
 		Theme: theme,
@@ -98,7 +98,7 @@ func TestPromptConfirmSupportsLipglossStyles(t *testing.T) {
 	in := bytes.NewBufferString("invalid\ny\n")
 	out := &bytes.Buffer{}
 
-	prompter := EnhancedTerminalPrompter{In: in, Out: out}
+	prompter := TerminalPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 		Label:   "Continue?",
 		Confirm: true,
@@ -130,7 +130,7 @@ func TestPromptMultiSelectSupportsLipglossStyles(t *testing.T) {
 	in := bytes.NewBufferString("1,2\ndone\n")
 	out := &bytes.Buffer{}
 
-	prompter := EnhancedTerminalPrompter{In: in, Out: out}
+	prompter := TerminalPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 		Label: "Select features",
 		Theme: theme,

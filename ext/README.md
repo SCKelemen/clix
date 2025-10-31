@@ -89,7 +89,7 @@ app.AddExtension(version.Extension{
 
 ### Prompt Extension (`clix/ext/prompt`)
 
-Replaces the default `SimpleTextPrompter` with `EnhancedTerminalPrompter`, enabling:
+Replaces the default `TextPrompter` with `TerminalPrompter`, enabling:
 - Select prompts (navigable lists with arrow keys)
 - Multi-select prompts (select multiple options)
 - Confirm prompts (yes/no with defaults)

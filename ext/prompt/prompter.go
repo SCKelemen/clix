@@ -14,16 +14,16 @@ import (
 	"golang.org/x/term"
 )
 
-// EnhancedTerminalPrompter implements Prompter with full support for text, select,
+// TerminalPrompter implements Prompter with full support for text, select,
 // multi-select, and confirm prompts, including raw terminal mode for interactive navigation.
-type EnhancedTerminalPrompter struct {
+type TerminalPrompter struct {
 	In  io.Reader
 	Out io.Writer
 }
 
 // Prompt displays a prompt and reads the user's response.
 // Supports text, select, multi-select, and confirm prompts with automatic fallback.
-func (p EnhancedTerminalPrompter) Prompt(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) Prompt(ctx context.Context, req clix.PromptRequest) (string, error) {
 	if p.In == nil || p.Out == nil {
 		return "", errors.New("prompter missing IO")
 	}
@@ -48,7 +48,7 @@ func (p EnhancedTerminalPrompter) Prompt(ctx context.Context, req clix.PromptReq
 }
 
 // promptText handles regular text input prompts.
-func (p EnhancedTerminalPrompter) promptText(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptText(ctx context.Context, req clix.PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	for {
@@ -103,7 +103,7 @@ func renderText(style clix.TextStyle, value string) string {
 }
 
 // promptSelect handles select-style prompts with navigable options.
-func (p EnhancedTerminalPrompter) promptSelect(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptSelect(ctx context.Context, req clix.PromptRequest) (string, error) {
 	// Check if input is a terminal - if not, use line-based fallback
 	inFile, isTerminal := p.In.(*os.File)
 	if !isTerminal {
@@ -209,7 +209,7 @@ func (p EnhancedTerminalPrompter) promptSelect(ctx context.Context, req clix.Pro
 }
 
 // renderSelectPrompt renders the select prompt with the current selection.
-func (p EnhancedTerminalPrompter) renderSelectPrompt(req clix.PromptRequest, selectedIdx int) {
+func (p TerminalPrompter) renderSelectPrompt(req clix.PromptRequest, selectedIdx int) {
 	// Move to start of line and clear it
 	fmt.Fprint(p.Out, "\r\033[K")
 	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
@@ -241,7 +241,7 @@ func (p EnhancedTerminalPrompter) renderSelectPrompt(req clix.PromptRequest, sel
 }
 
 // promptSelectLineBased is the fallback line-based implementation for non-terminal input.
-func (p EnhancedTerminalPrompter) promptSelectLineBased(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req clix.PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Find default option index
@@ -353,7 +353,7 @@ func parseIndex(input string, max int) int {
 }
 
 // promptConfirm handles yes/no confirmation prompts.
-func (p EnhancedTerminalPrompter) promptConfirm(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptConfirm(ctx context.Context, req clix.PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Determine default (Y/n or y/N)
@@ -412,7 +412,7 @@ func (p EnhancedTerminalPrompter) promptConfirm(ctx context.Context, req clix.Pr
 }
 
 // promptMultiSelect handles multi-select prompts where users can choose multiple options.
-func (p EnhancedTerminalPrompter) promptMultiSelect(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.PromptRequest) (string, error) {
 	// Check if input is a terminal - if not, use line-based fallback
 	inFile, isTerminal := p.In.(*os.File)
 	if !isTerminal {
@@ -575,7 +575,7 @@ func (p EnhancedTerminalPrompter) promptMultiSelect(ctx context.Context, req cli
 }
 
 // renderMultiSelectPrompt renders the multi-select prompt with current selection state.
-func (p EnhancedTerminalPrompter) renderMultiSelectPrompt(req clix.PromptRequest, selected map[int]bool, currentIdx int, onContinueButton bool) {
+func (p TerminalPrompter) renderMultiSelectPrompt(req clix.PromptRequest, selected map[int]bool, currentIdx int, onContinueButton bool) {
 	// Move to start of line and clear it
 	fmt.Fprint(p.Out, "\r\033[K")
 	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
@@ -627,7 +627,7 @@ func (p EnhancedTerminalPrompter) renderMultiSelectPrompt(req clix.PromptRequest
 }
 
 // formatSelectedValues formats selected options into a comma-separated string.
-func (p EnhancedTerminalPrompter) formatSelectedValues(options []clix.SelectOption, selected map[int]bool) string {
+func (p TerminalPrompter) formatSelectedValues(options []clix.SelectOption, selected map[int]bool) string {
 	var values []string
 	for i, opt := range options {
 		if selected[i] {
@@ -659,7 +659,7 @@ func parseIndices(input string, max int) []int {
 }
 
 // promptMultiSelectLineBased is the fallback line-based implementation for non-terminal input.
-func (p EnhancedTerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req clix.PromptRequest) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Parse default selections

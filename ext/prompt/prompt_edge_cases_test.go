@@ -15,7 +15,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:   "Choose",
 			Theme:   clix.DefaultPromptTheme,
@@ -33,7 +33,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("done\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:       "Select",
 			Theme:       clix.DefaultPromptTheme,
@@ -52,7 +52,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("999\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -74,7 +74,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("nonexistent\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -96,7 +96,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("nonexistent\nOption A\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -123,7 +123,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("9\n1\ndone\n") // 9 is invalid, then 1, then done
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
 			Theme: clix.DefaultPromptTheme,
@@ -146,7 +146,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("done\n1\ndone\n") // Try continue without selection, then select, then continue
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
 			Theme: clix.DefaultPromptTheme,
@@ -171,7 +171,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -191,7 +191,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:   "Select",
 			Default: "1,2,3",
@@ -216,7 +216,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("1\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:        "Select",
 			Theme:        clix.DefaultPromptTheme,
@@ -239,7 +239,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("3\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -261,7 +261,7 @@ func TestPromptEdgeCases(t *testing.T) {
 		in := bytes.NewBufferString("1\n1\n1\ndone\n") // Toggle on (1), toggle off (1 again), toggle on (1 again), continue
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
 			Theme: clix.DefaultPromptTheme,

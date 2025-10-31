@@ -45,7 +45,7 @@ func TestPromptSelectRawTerminal(t *testing.T) {
 		in := bytes.NewBufferString("1\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -74,7 +74,7 @@ func TestPromptSelectRawTerminal(t *testing.T) {
 		in := bytes.NewBufferString("2\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -100,7 +100,7 @@ func TestPromptMultiSelectRawTerminal(t *testing.T) {
 		in := bytes.NewBufferString("1,2\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
 			Theme: clix.DefaultPromptTheme,
@@ -127,7 +127,7 @@ func TestPromptMultiSelectRawTerminal(t *testing.T) {
 		in := bytes.NewBufferString("1\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label:        "Select",
 			Theme:        clix.DefaultPromptTheme,
@@ -225,7 +225,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		in := bytes.NewBufferString("Option B\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose option",
 			Theme: clix.DefaultPromptTheme,
@@ -252,7 +252,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		in := bytes.NewBufferString("1,3\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select items",
 			Theme: clix.DefaultPromptTheme,
@@ -280,7 +280,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		in := bytes.NewBufferString("2\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -302,7 +302,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		in := bytes.NewBufferString("Sec\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Choose",
 			Theme: clix.DefaultPromptTheme,
@@ -324,7 +324,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		in := bytes.NewBufferString("1,2\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
 			Theme: clix.DefaultPromptTheme,
@@ -346,7 +346,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		in := bytes.NewBufferString("\n1\ndone\n")
 		out := &bytes.Buffer{}
 
-		prompter := EnhancedTerminalPrompter{In: in, Out: out}
+		prompter := TerminalPrompter{In: in, Out: out}
 		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 			Label: "Select",
 			Theme: clix.DefaultPromptTheme,
