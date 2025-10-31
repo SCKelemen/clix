@@ -190,3 +190,18 @@ func HideCursor(out io.Writer) {
 func ShowCursor(out io.Writer) {
 	fmt.Fprint(out, "\033[?25h")
 }
+
+// SaveCursorPosition saves the current cursor position.
+func SaveCursorPosition(out io.Writer) {
+	fmt.Fprint(out, "\033[s")
+}
+
+// RestoreCursorPosition restores the cursor to a previously saved position.
+func RestoreCursorPosition(out io.Writer) {
+	fmt.Fprint(out, "\033[u")
+}
+
+// ClearToEndOfScreen clears from cursor to end of screen.
+func ClearToEndOfScreen(out io.Writer) {
+	fmt.Fprint(out, "\033[J")
+}

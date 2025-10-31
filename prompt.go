@@ -178,8 +178,9 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req PromptRequest) (
 	HideCursor(p.Out)
 	defer ShowCursor(p.Out)
 
-	// Track number of lines to move back
-	linesToRender := 1 + len(req.Options) // label line + options
+	// Save cursor position before first render (so we can restore to this point)
+	fmt.Fprint(p.Out, "\n") // Ensure we're on a new line
+	SaveCursorPosition(p.Out)
 
 	// Initial render
 	p.renderSelectPrompt(req, selectedIdx)
@@ -199,9 +200,9 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req PromptRequest) (
 			} else {
 				selectedIdx = len(req.Options) - 1 // Wrap to bottom
 			}
-			// Move cursor up and to beginning of line, then redraw
-			MoveCursorUp(p.Out, linesToRender)
-			fmt.Fprint(p.Out, "\r") // Move to beginning of line
+			// Restore to saved position and clear everything below, then redraw
+			RestoreCursorPosition(p.Out)
+			ClearToEndOfScreen(p.Out)
 			p.renderSelectPrompt(req, selectedIdx)
 		case KeyDown:
 			if selectedIdx < len(req.Options)-1 {
@@ -209,9 +210,9 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req PromptRequest) (
 			} else {
 				selectedIdx = 0 // Wrap to top
 			}
-			// Move cursor up and to beginning of line, then redraw
-			MoveCursorUp(p.Out, linesToRender)
-			fmt.Fprint(p.Out, "\r") // Move to beginning of line
+			// Restore to saved position and clear everything below, then redraw
+			RestoreCursorPosition(p.Out)
+			ClearToEndOfScreen(p.Out)
 			p.renderSelectPrompt(req, selectedIdx)
 		case KeyEnter:
 			// Selection confirmed - show cursor and return
@@ -227,13 +228,13 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req PromptRequest) (
 			return "", errors.New("cancelled")
 		case KeyHome:
 			selectedIdx = 0
-			MoveCursorUp(p.Out, linesToRender)
-			fmt.Fprint(p.Out, "\r") // Move to beginning of line
+			RestoreCursorPosition(p.Out)
+			ClearToEndOfScreen(p.Out)
 			p.renderSelectPrompt(req, selectedIdx)
 		case KeyEnd:
 			selectedIdx = len(req.Options) - 1
-			MoveCursorUp(p.Out, linesToRender)
-			fmt.Fprint(p.Out, "\r") // Move to beginning of line
+			RestoreCursorPosition(p.Out)
+			ClearToEndOfScreen(p.Out)
 			p.renderSelectPrompt(req, selectedIdx)
 		default:
 			// Try to match by number (1-9) for quick selection
@@ -350,9 +351,11 @@ func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req PromptR
 }
 
 // renderSelectPrompt renders the select prompt with the current selection.
-// This function assumes it will be called after moving the cursor up,
+// This function assumes it will be called after restoring cursor position,
 // and it will redraw all lines from the current position.
 func (p TerminalPrompter) renderSelectPrompt(req PromptRequest, selectedIdx int) {
+	// Move to start of line and clear it
+	fmt.Fprint(p.Out, "\r\033[K")
 	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
 	label := renderText(req.Theme.LabelStyle, req.Label)
 	fmt.Fprintf(p.Out, "%s%s", prefix, label)
@@ -366,6 +369,8 @@ func (p TerminalPrompter) renderSelectPrompt(req PromptRequest, selectedIdx int)
 
 	// Display options
 	for i, opt := range req.Options {
+		// Move to start of line and clear it
+		fmt.Fprint(p.Out, "\r\033[K")
 		marker := " "
 		if i == selectedIdx {
 			marker = ">"
@@ -498,8 +503,9 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 	HideCursor(p.Out)
 	defer ShowCursor(p.Out)
 
-	// Track number of lines to move back
-	linesToRender := 1 + len(req.Options) // label line + options
+	// Save cursor position before first render (so we can restore to this point)
+	fmt.Fprint(p.Out, "\n") // Ensure we're on a new line
+	SaveCursorPosition(p.Out)
 
 	// Initial render
 	p.renderMultiSelectPrompt(req, selected, currentIdx)
@@ -519,9 +525,9 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 			} else {
 				currentIdx = len(req.Options) - 1 // Wrap to bottom
 			}
-			// Move cursor up and to beginning of line, then redraw
-			MoveCursorUp(p.Out, linesToRender)
-			fmt.Fprint(p.Out, "\r") // Move to beginning of line
+			// Restore to saved position and clear everything below, then redraw
+			RestoreCursorPosition(p.Out)
+			ClearToEndOfScreen(p.Out)
 			p.renderMultiSelectPrompt(req, selected, currentIdx)
 		case KeyDown:
 			if currentIdx < len(req.Options)-1 {
@@ -529,17 +535,17 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 			} else {
 				currentIdx = 0 // Wrap to top
 			}
-			// Move cursor up and to beginning of line, then redraw
-			MoveCursorUp(p.Out, linesToRender)
-			fmt.Fprint(p.Out, "\r") // Move to beginning of line
+			// Restore to saved position and clear everything below, then redraw
+			RestoreCursorPosition(p.Out)
+			ClearToEndOfScreen(p.Out)
 			p.renderMultiSelectPrompt(req, selected, currentIdx)
 		case KeySpace:
 			// Toggle current selection
 			if len(req.Options) > 0 {
 				selected[currentIdx] = !selected[currentIdx]
-				// Move cursor up and to beginning of line, then redraw
-				MoveCursorUp(p.Out, linesToRender)
-				fmt.Fprint(p.Out, "\r") // Move to beginning of line
+				// Restore to saved position and clear everything below, then redraw
+				RestoreCursorPosition(p.Out)
+				ClearToEndOfScreen(p.Out)
 				p.renderMultiSelectPrompt(req, selected, currentIdx)
 			}
 		case KeyEnter:
@@ -566,13 +572,13 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 			return "", errors.New("cancelled")
 		case KeyHome:
 			currentIdx = 0
-			MoveCursorUp(p.Out, linesToRender)
-			fmt.Fprint(p.Out, "\r") // Move to beginning of line
+			RestoreCursorPosition(p.Out)
+			ClearToEndOfScreen(p.Out)
 			p.renderMultiSelectPrompt(req, selected, currentIdx)
 		case KeyEnd:
 			currentIdx = len(req.Options) - 1
-			MoveCursorUp(p.Out, linesToRender)
-			fmt.Fprint(p.Out, "\r") // Move to beginning of line
+			RestoreCursorPosition(p.Out)
+			ClearToEndOfScreen(p.Out)
 			p.renderMultiSelectPrompt(req, selected, currentIdx)
 		default:
 			// Try number keys for quick toggle (1-9)
@@ -581,9 +587,9 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req PromptReque
 				if idx < len(req.Options) {
 					currentIdx = idx
 					selected[idx] = !selected[idx]
-					// Move cursor up and to beginning of line, then redraw
-					MoveCursorUp(p.Out, linesToRender)
-					fmt.Fprint(p.Out, "\r") // Move to beginning of line
+					// Restore to saved position and clear everything below, then redraw
+					RestoreCursorPosition(p.Out)
+					ClearToEndOfScreen(p.Out)
 					p.renderMultiSelectPrompt(req, selected, currentIdx)
 				}
 			}
@@ -708,9 +714,11 @@ func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req Pr
 }
 
 // renderMultiSelectPrompt renders the multi-select prompt with current selection state.
-// This function assumes it will be called after moving the cursor up,
+// This function assumes it will be called after restoring cursor position,
 // and it will redraw all lines from the current position.
 func (p TerminalPrompter) renderMultiSelectPrompt(req PromptRequest, selected map[int]bool, currentIdx int) {
+	// Move to start of line and clear it
+	fmt.Fprint(p.Out, "\r\033[K")
 	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
 	label := renderText(req.Theme.LabelStyle, req.Label)
 	fmt.Fprintf(p.Out, "%s%s", prefix, label)
@@ -724,6 +732,8 @@ func (p TerminalPrompter) renderMultiSelectPrompt(req PromptRequest, selected ma
 
 	// Display options with checkboxes
 	for i, opt := range req.Options {
+		// Move to start of line and clear it
+		fmt.Fprint(p.Out, "\r\033[K")
 		marker := "[ ]"
 		if selected[i] {
 			marker = "[x]"
