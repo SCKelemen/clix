@@ -22,47 +22,60 @@ type TerminalPrompter struct {
 }
 
 // Prompt displays a prompt and reads the user's response.
-// Supports text, select, multi-select, and confirm prompts with automatic fallback.
-func (p TerminalPrompter) Prompt(ctx context.Context, req clix.PromptRequest) (string, error) {
+// Supports all prompt types: text, select, multi-select, and confirm.
+func (p TerminalPrompter) Prompt(ctx context.Context, opts ...clix.PromptOption) (string, error) {
+	if p.In == nil || p.Out == nil {
+		return "", errors.New("prompter missing IO")
+	}
+
+	cfg := &clix.PromptConfig{Theme: clix.DefaultPromptTheme}
+	for _, opt := range opts {
+		opt.Apply(cfg)
+	}
+
+	return p.prompt(ctx, cfg)
+}
+
+func (p TerminalPrompter) prompt(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	if p.In == nil || p.Out == nil {
 		return "", errors.New("prompter missing IO")
 	}
 
 	// Handle confirmation prompt
-	if req.Confirm {
-		return p.promptConfirm(ctx, req)
+	if cfg.Confirm {
+		return p.promptConfirm(ctx, cfg)
 	}
 
 	// Handle multi-select prompt
-	if len(req.Options) > 0 && req.MultiSelect {
-		return p.promptMultiSelect(ctx, req)
+	if len(cfg.Options) > 0 && cfg.MultiSelect {
+		return p.promptMultiSelect(ctx, cfg)
 	}
 
 	// Handle select prompt (options list)
-	if len(req.Options) > 0 {
-		return p.promptSelect(ctx, req)
+	if len(cfg.Options) > 0 {
+		return p.promptSelect(ctx, cfg)
 	}
 
 	// Regular text prompt
-	return p.promptText(ctx, req)
+	return p.promptText(ctx, cfg)
 }
 
 // promptText handles regular text input prompts.
-func (p TerminalPrompter) promptText(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptText(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	for {
-		prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
-		label := renderText(req.Theme.LabelStyle, req.Label)
+		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
-		if req.Default != "" {
-			def := renderText(req.Theme.DefaultStyle, req.Default)
+		if cfg.Default != "" {
+			def := renderText(cfg.Theme.DefaultStyle, cfg.Default)
 			fmt.Fprintf(p.Out, " [%s]", def)
 		}
 
-		if req.Theme.Hint != "" {
-			hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+		if cfg.Theme.Hint != "" {
+			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
 			fmt.Fprintf(p.Out, " %s", hint)
 		}
 
@@ -75,15 +88,15 @@ func (p TerminalPrompter) promptText(ctx context.Context, req clix.PromptRequest
 
 		value := strings.TrimSpace(line)
 		if value == "" {
-			value = req.Default
+			value = cfg.Default
 		}
 
-		if req.Validate != nil {
-			if err := req.Validate(value); err != nil {
-				errPrefix := renderText(req.Theme.ErrorStyle, req.Theme.Error)
+		if cfg.Validate != nil {
+			if err := cfg.Validate(value); err != nil {
+				errPrefix := renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error)
 				errMsg := err.Error()
 				if errMsg != "" {
-					errMsg = renderText(req.Theme.ErrorStyle, errMsg)
+					errMsg = renderText(cfg.Theme.ErrorStyle, errMsg)
 				}
 				fmt.Fprintf(p.Out, "%s%s\n", errPrefix, errMsg)
 				continue
@@ -103,31 +116,31 @@ func renderText(style clix.TextStyle, value string) string {
 }
 
 // promptSelect handles select-style prompts with navigable options.
-func (p TerminalPrompter) promptSelect(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	// Check if input is a terminal - if not, use line-based fallback
 	inFile, isTerminal := p.In.(*os.File)
 	if !isTerminal {
-		return p.promptSelectLineBased(ctx, req)
+		return p.promptSelectLineBased(ctx, cfg)
 	}
 
 	// Check if it's actually a TTY
 	if !term.IsTerminal(int(inFile.Fd())) {
-		return p.promptSelectLineBased(ctx, req)
+		return p.promptSelectLineBased(ctx, cfg)
 	}
 
 	// Enable raw mode for arrow key navigation
 	state, err := EnableRawMode(inFile)
 	if err != nil {
 		// Fall back to line-based if raw mode fails
-		return p.promptSelectLineBased(ctx, req)
+		return p.promptSelectLineBased(ctx, cfg)
 	}
 	defer state.Restore()
 
 	// Find default option index
 	selectedIdx := 0
-	if req.Default != "" {
-		for i, opt := range req.Options {
-			if opt.Value == req.Default || opt.Label == req.Default {
+	if cfg.Default != "" {
+		for i, opt := range cfg.Options {
+			if opt.Value == cfg.Default || opt.Label == cfg.Default {
 				selectedIdx = i
 				break
 			}
@@ -139,10 +152,10 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req clix.PromptReque
 	defer ShowCursor(p.Out)
 
 	// Calculate number of lines we'll render
-	linesToRender := 1 + len(req.Options) // label line + options
+	linesToRender := 1 + len(cfg.Options) // label line + options
 
 	// Initial render
-	p.renderSelectPrompt(req, selectedIdx)
+	p.renderSelectPrompt(cfg, selectedIdx)
 
 	for {
 		// Read a single keypress
@@ -157,26 +170,26 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req clix.PromptReque
 			if selectedIdx > 0 {
 				selectedIdx--
 			} else {
-				selectedIdx = len(req.Options) - 1 // Wrap to bottom
+				selectedIdx = len(cfg.Options) - 1 // Wrap to bottom
 			}
 			// Move cursor up to start of prompt, then redraw
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderSelectPrompt(req, selectedIdx)
+			p.renderSelectPrompt(cfg, selectedIdx)
 		case KeyDown:
-			if selectedIdx < len(req.Options)-1 {
+			if selectedIdx < len(cfg.Options)-1 {
 				selectedIdx++
 			} else {
 				selectedIdx = 0 // Wrap to top
 			}
 			// Move cursor up to start of prompt, then redraw
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderSelectPrompt(req, selectedIdx)
+			p.renderSelectPrompt(cfg, selectedIdx)
 		case KeyEnter:
 			// Selection confirmed - show cursor and return
 			ShowCursor(p.Out)
 			fmt.Fprint(p.Out, "\n")
-			if len(req.Options) > 0 {
-				return req.Options[selectedIdx].Value, nil
+			if len(cfg.Options) > 0 {
+				return cfg.Options[selectedIdx].Value, nil
 			}
 		case KeyCtrlC, KeyEscape:
 			// Cancelled - show cursor and return
@@ -186,20 +199,20 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req clix.PromptReque
 		case KeyHome:
 			selectedIdx = 0
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderSelectPrompt(req, selectedIdx)
+			p.renderSelectPrompt(cfg, selectedIdx)
 		case KeyEnd:
-			selectedIdx = len(req.Options) - 1
+			selectedIdx = len(cfg.Options) - 1
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderSelectPrompt(req, selectedIdx)
+			p.renderSelectPrompt(cfg, selectedIdx)
 		default:
 			// Try to match by number (1-9) for quick selection
 			if key.IsPrintable() && key.Rune >= '1' && key.Rune <= '9' {
 				idx := int(key.Rune - '1')
-				if idx < len(req.Options) {
+				if idx < len(cfg.Options) {
 					selectedIdx = idx
 					ShowCursor(p.Out)
 					fmt.Fprint(p.Out, "\n")
-					return req.Options[selectedIdx].Value, nil
+					return cfg.Options[selectedIdx].Value, nil
 				}
 			}
 			// For typing, we might want to switch to filtering mode
@@ -209,22 +222,22 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, req clix.PromptReque
 }
 
 // renderSelectPrompt renders the select prompt with the current selection.
-func (p TerminalPrompter) renderSelectPrompt(req clix.PromptRequest, selectedIdx int) {
+func (p TerminalPrompter) renderSelectPrompt(cfg *clix.PromptConfig, selectedIdx int) {
 	// Move to start of line and clear it
 	fmt.Fprint(p.Out, "\r\033[K")
-	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
-	label := renderText(req.Theme.LabelStyle, req.Label)
+	prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+	label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 	fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
-	if req.Theme.Hint != "" {
-		hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+	if cfg.Theme.Hint != "" {
+		hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
 		fmt.Fprintf(p.Out, " %s", hint)
 	}
 	// Clear rest of line and move to next
 	fmt.Fprint(p.Out, "\033[K\n")
 
 	// Display options
-	for i, opt := range req.Options {
+	for i, opt := range cfg.Options {
 		// Move to start of line and clear it
 		fmt.Fprint(p.Out, "\r\033[K")
 		marker := " "
@@ -241,14 +254,14 @@ func (p TerminalPrompter) renderSelectPrompt(req clix.PromptRequest, selectedIdx
 }
 
 // promptSelectLineBased is the fallback line-based implementation for non-terminal input.
-func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Find default option index
 	defaultIdx := -1
-	if req.Default != "" {
-		for i, opt := range req.Options {
-			if opt.Value == req.Default || opt.Label == req.Default {
+	if cfg.Default != "" {
+		for i, opt := range cfg.Options {
+			if opt.Value == cfg.Default || opt.Label == cfg.Default {
 				defaultIdx = i
 				break
 			}
@@ -256,12 +269,12 @@ func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req clix.Pr
 	}
 
 	for {
-		prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
-		label := renderText(req.Theme.LabelStyle, req.Label)
+		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
-		if req.Theme.Hint != "" {
-			hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+		if cfg.Theme.Hint != "" {
+			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
 			fmt.Fprintf(p.Out, " %s", hint)
 		}
 		fmt.Fprint(p.Out, "\n")
@@ -272,7 +285,7 @@ func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req clix.Pr
 			selectedIdx = 0
 		}
 
-		for i, opt := range req.Options {
+		for i, opt := range cfg.Options {
 			marker := " "
 			if i == selectedIdx {
 				marker = ">"
@@ -296,20 +309,20 @@ func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req clix.Pr
 		// Empty input uses default or first option
 		if input == "" {
 			if defaultIdx >= 0 {
-				return req.Options[defaultIdx].Value, nil
+				return cfg.Options[defaultIdx].Value, nil
 			}
-			if len(req.Options) > 0 {
-				return req.Options[0].Value, nil
+			if len(cfg.Options) > 0 {
+				return cfg.Options[0].Value, nil
 			}
 		}
 
 		// Try to match by number (1-based index)
-		if idx := parseIndex(input, len(req.Options)); idx >= 0 {
-			return req.Options[idx].Value, nil
+		if idx := parseIndex(input, len(cfg.Options)); idx >= 0 {
+			return cfg.Options[idx].Value, nil
 		}
 
 		// Try to match by value or label
-		for _, opt := range req.Options {
+		for _, opt := range cfg.Options {
 			if strings.EqualFold(opt.Value, input) || strings.EqualFold(opt.Label, input) {
 				return opt.Value, nil
 			}
@@ -320,12 +333,12 @@ func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, req clix.Pr
 		}
 
 		// No match - validate if validator provided
-		if req.Validate != nil {
-			if err := req.Validate(input); err != nil {
-				errPrefix := renderText(req.Theme.ErrorStyle, req.Theme.Error)
+		if cfg.Validate != nil {
+			if err := cfg.Validate(input); err != nil {
+				errPrefix := renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error)
 				errMsg := err.Error()
 				if errMsg != "" {
-					errMsg = renderText(req.Theme.ErrorStyle, errMsg)
+					errMsg = renderText(cfg.Theme.ErrorStyle, errMsg)
 				}
 				fmt.Fprintf(p.Out, "%s%s\n", errPrefix, errMsg)
 				continue
@@ -353,20 +366,20 @@ func parseIndex(input string, max int) int {
 }
 
 // promptConfirm handles yes/no confirmation prompts.
-func (p TerminalPrompter) promptConfirm(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptConfirm(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Determine default (Y/n or y/N)
 	defaultYes := true
 	defaultText := "Y"
-	if req.Default == "n" || req.Default == "N" || strings.ToLower(req.Default) == "no" {
+	if cfg.Default == "n" || cfg.Default == "N" || strings.ToLower(cfg.Default) == "no" {
 		defaultYes = false
 		defaultText = "N"
 	}
 
 	for {
-		prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
-		label := renderText(req.Theme.LabelStyle, req.Label)
+		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
 		// Show default in prompt
@@ -402,51 +415,51 @@ func (p TerminalPrompter) promptConfirm(ctx context.Context, req clix.PromptRequ
 		}
 
 		// Invalid input
-		errPrefix := renderText(req.Theme.ErrorStyle, req.Theme.Error)
+		errPrefix := renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error)
 		errMsg := "please enter 'y' or 'n'"
-		if req.Theme.ErrorStyle != nil {
-			errMsg = renderText(req.Theme.ErrorStyle, errMsg)
+		if cfg.Theme.ErrorStyle != nil {
+			errMsg = renderText(cfg.Theme.ErrorStyle, errMsg)
 		}
 		fmt.Fprintf(p.Out, "%s%s\n", errPrefix, errMsg)
 	}
 }
 
 // promptMultiSelect handles multi-select prompts where users can choose multiple options.
-func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	// Check if input is a terminal - if not, use line-based fallback
 	inFile, isTerminal := p.In.(*os.File)
 	if !isTerminal {
-		return p.promptMultiSelectLineBased(ctx, req)
+		return p.promptMultiSelectLineBased(ctx, cfg)
 	}
 
 	// Check if it's actually a TTY
 	if !term.IsTerminal(int(inFile.Fd())) {
-		return p.promptMultiSelectLineBased(ctx, req)
+		return p.promptMultiSelectLineBased(ctx, cfg)
 	}
 
 	// Enable raw mode for arrow key navigation
 	state, err := EnableRawMode(inFile)
 	if err != nil {
 		// Fall back to line-based if raw mode fails
-		return p.promptMultiSelectLineBased(ctx, req)
+		return p.promptMultiSelectLineBased(ctx, cfg)
 	}
 	defer state.Restore()
 
 	// Parse default selections
 	selected := make(map[int]bool)
-	if req.Default != "" {
+	if cfg.Default != "" {
 		// Try parsing as indices first (e.g., "1,2,3")
-		indices := parseIndices(req.Default, len(req.Options))
+		indices := parseIndices(cfg.Default, len(cfg.Options))
 		if len(indices) > 0 {
 			for _, idx := range indices {
 				selected[idx] = true
 			}
 		} else {
 			// Try parsing as comma-separated values (e.g., "a,b,c")
-			values := strings.Split(req.Default, ",")
+			values := strings.Split(cfg.Default, ",")
 			for _, val := range values {
 				val = strings.TrimSpace(val)
-				for i, opt := range req.Options {
+				for i, opt := range cfg.Options {
 					if opt.Value == val || opt.Label == val {
 						selected[i] = true
 						break
@@ -457,9 +470,9 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.Prompt
 	}
 
 	currentIdx := 0
-	if len(req.Options) > 0 {
+	if len(cfg.Options) > 0 {
 		// Find first selected option or default to 0
-		for i := range req.Options {
+		for i := range cfg.Options {
 			if selected[i] {
 				currentIdx = i
 				break
@@ -472,13 +485,13 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.Prompt
 	defer ShowCursor(p.Out)
 
 	// Calculate number of lines we'll render (label + options + continue line)
-	linesToRender := 2 + len(req.Options) // label line + options + continue line
+	linesToRender := 2 + len(cfg.Options) // label line + options + continue line
 
 	// Track if we're on the continue button (-1 means continue button, >= 0 means option index)
 	onContinueButton := false
 
 	// Initial render
-	p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+	p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
 
 	for {
 		// Read a single keypress
@@ -493,7 +506,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.Prompt
 			if onContinueButton {
 				// Move from continue button to last option
 				onContinueButton = false
-				currentIdx = len(req.Options) - 1
+				currentIdx = len(cfg.Options) - 1
 			} else if currentIdx > 0 {
 				currentIdx--
 			} else {
@@ -502,13 +515,13 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.Prompt
 			}
 			// Move cursor up to start of prompt, then redraw
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+			p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
 		case KeyDown:
 			if onContinueButton {
 				// Move from continue button to first option
 				onContinueButton = false
 				currentIdx = 0
-			} else if currentIdx < len(req.Options)-1 {
+			} else if currentIdx < len(cfg.Options)-1 {
 				currentIdx++
 			} else {
 				// Wrap to continue button
@@ -516,7 +529,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.Prompt
 			}
 			// Move cursor up to start of prompt, then redraw
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+			p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
 		case KeySpace, KeyEnter:
 			if onContinueButton {
 				// On continue button - confirm if we have selections
@@ -530,16 +543,16 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.Prompt
 				if hasSelection {
 					ShowCursor(p.Out)
 					fmt.Fprint(p.Out, "\n")
-					return p.formatSelectedValues(req.Options, selected), nil
+					return p.formatSelectedValues(cfg.Options, selected), nil
 				}
 				// No selections - stay on continue button (can't continue without selections)
 			} else {
 				// Toggle current selection (Enter or Space both toggle)
-				if len(req.Options) > 0 {
+				if len(cfg.Options) > 0 {
 					selected[currentIdx] = !selected[currentIdx]
 					// Move cursor up to start of prompt, then redraw
 					MoveCursorUp(p.Out, linesToRender)
-					p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+					p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
 				}
 			}
 		case KeyCtrlC, KeyEscape:
@@ -551,23 +564,23 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.Prompt
 			onContinueButton = false
 			currentIdx = 0
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+			p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
 		case KeyEnd:
 			onContinueButton = true
-			currentIdx = len(req.Options) - 1
+			currentIdx = len(cfg.Options) - 1
 			MoveCursorUp(p.Out, linesToRender)
-			p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+			p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
 		default:
 			// Try number keys for quick toggle (1-9)
 			if key.IsPrintable() && key.Rune >= '1' && key.Rune <= '9' {
 				idx := int(key.Rune - '1')
-				if idx < len(req.Options) {
+				if idx < len(cfg.Options) {
 					onContinueButton = false
 					currentIdx = idx
 					selected[idx] = !selected[idx]
 					// Move cursor up to start of prompt, then redraw
 					MoveCursorUp(p.Out, linesToRender)
-					p.renderMultiSelectPrompt(req, selected, currentIdx, onContinueButton)
+					p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
 				}
 			}
 		}
@@ -575,22 +588,22 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, req clix.Prompt
 }
 
 // renderMultiSelectPrompt renders the multi-select prompt with current selection state.
-func (p TerminalPrompter) renderMultiSelectPrompt(req clix.PromptRequest, selected map[int]bool, currentIdx int, onContinueButton bool) {
+func (p TerminalPrompter) renderMultiSelectPrompt(cfg *clix.PromptConfig, selected map[int]bool, currentIdx int, onContinueButton bool) {
 	// Move to start of line and clear it
 	fmt.Fprint(p.Out, "\r\033[K")
-	prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
-	label := renderText(req.Theme.LabelStyle, req.Label)
+	prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+	label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 	fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
-	if req.Theme.Hint != "" {
-		hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+	if cfg.Theme.Hint != "" {
+		hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
 		fmt.Fprintf(p.Out, " %s", hint)
 	}
 	// Clear rest of line and move to next
 	fmt.Fprint(p.Out, "\033[K\n")
 
 	// Display options with checkboxes
-	for i, opt := range req.Options {
+	for i, opt := range cfg.Options {
 		// Move to start of line and clear it
 		fmt.Fprint(p.Out, "\r\033[K")
 		marker := "[ ]"
@@ -611,7 +624,7 @@ func (p TerminalPrompter) renderMultiSelectPrompt(req clix.PromptRequest, select
 	}
 
 	// Display continue button
-	continueText := req.ContinueText
+	continueText := cfg.ContinueText
 	if continueText == "" {
 		continueText = "Continue"
 	}
@@ -659,24 +672,24 @@ func parseIndices(input string, max int) []int {
 }
 
 // promptMultiSelectLineBased is the fallback line-based implementation for non-terminal input.
-func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req clix.PromptRequest) (string, error) {
+func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	// Parse default selections
 	selected := make(map[int]bool)
-	if req.Default != "" {
+	if cfg.Default != "" {
 		// Try parsing as indices first (e.g., "1,2,3")
-		indices := parseIndices(req.Default, len(req.Options))
+		indices := parseIndices(cfg.Default, len(cfg.Options))
 		if len(indices) > 0 {
 			for _, idx := range indices {
 				selected[idx] = true
 			}
 		} else {
 			// Try parsing as comma-separated values (e.g., "a,b,c")
-			values := strings.Split(req.Default, ",")
+			values := strings.Split(cfg.Default, ",")
 			for _, val := range values {
 				val = strings.TrimSpace(val)
-				for i, opt := range req.Options {
+				for i, opt := range cfg.Options {
 					if opt.Value == val || opt.Label == val {
 						selected[i] = true
 						break
@@ -687,18 +700,18 @@ func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req cl
 	}
 
 	for {
-		prefix := renderText(req.Theme.PrefixStyle, req.Theme.Prefix)
-		label := renderText(req.Theme.LabelStyle, req.Label)
+		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
-		if req.Theme.Hint != "" {
-			hint := renderText(req.Theme.HintStyle, req.Theme.Hint)
+		if cfg.Theme.Hint != "" {
+			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
 			fmt.Fprintf(p.Out, " %s", hint)
 		}
 		fmt.Fprint(p.Out, "\n")
 
 		// Display options with checkboxes
-		for i, opt := range req.Options {
+		for i, opt := range cfg.Options {
 			marker := "[ ]"
 			if selected[i] {
 				marker = "[x]"
@@ -722,27 +735,27 @@ func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req cl
 		// If "done" or "finish" typed, return selections
 		if strings.EqualFold(input, "done") || strings.EqualFold(input, "finish") || strings.EqualFold(input, "q") {
 			if len(selected) == 0 {
-				fmt.Fprintf(p.Out, "%sPlease select at least one option\n", renderText(req.Theme.ErrorStyle, req.Theme.Error))
+				fmt.Fprintf(p.Out, "%sPlease select at least one option\n", renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error))
 				continue
 			}
-			return p.formatSelectedValues(req.Options, selected), nil
+			return p.formatSelectedValues(cfg.Options, selected), nil
 		}
 
 		// Empty input with selections - return selected values
 		if input == "" {
 			if len(selected) > 0 {
-				return p.formatSelectedValues(req.Options, selected), nil
+				return p.formatSelectedValues(cfg.Options, selected), nil
 			}
-			fmt.Fprintf(p.Out, "%sPlease select at least one option\n", renderText(req.Theme.ErrorStyle, req.Theme.Error))
+			fmt.Fprintf(p.Out, "%sPlease select at least one option\n", renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error))
 			continue
 		}
 
 		// Parse input as indices (supports "1,2,3" or "1 2 3" or "1, 2, 3")
-		indices := parseIndices(input, len(req.Options))
+		indices := parseIndices(input, len(cfg.Options))
 
 		// Toggle selections
 		for _, idx := range indices {
-			if idx >= 0 && idx < len(req.Options) {
+			if idx >= 0 && idx < len(cfg.Options) {
 				selected[idx] = !selected[idx]
 			}
 		}
@@ -750,9 +763,9 @@ func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req cl
 		// If no valid indices, try to match by label/value
 		if len(indices) == 0 {
 			found := false
-			for _, opt := range req.Options {
+			for _, opt := range cfg.Options {
 				if strings.EqualFold(opt.Value, input) || strings.EqualFold(opt.Label, input) {
-					for i, o := range req.Options {
+					for i, o := range cfg.Options {
 						if o.Value == opt.Value || o.Label == opt.Label {
 							selected[i] = !selected[i]
 							found = true
@@ -765,7 +778,7 @@ func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, req cl
 				}
 			}
 			if !found {
-				fmt.Fprintf(p.Out, "%sInvalid selection. Enter option numbers (e.g., 1,2,3)\n", renderText(req.Theme.ErrorStyle, req.Theme.Error))
+				fmt.Fprintf(p.Out, "%sInvalid selection. Enter option numbers (e.g., 1,2,3)\n", renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error))
 				continue
 			}
 		}

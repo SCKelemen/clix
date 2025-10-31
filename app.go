@@ -302,6 +302,7 @@ func (a *App) promptForArguments(ctx context.Context, cmd *Command, args *[]stri
 			break
 		}
 
+		// Use struct-based API for consistency with rest of codebase
 		value, err := a.Prompter.Prompt(ctx, PromptRequest{
 			Label:    arg.PromptLabel(),
 			Default:  arg.Default,

@@ -1,8 +1,8 @@
 package prompt
 
 import (
-	"clix"
 	"bytes"
+	"clix"
 	"context"
 	"errors"
 	"strings"

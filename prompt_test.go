@@ -140,52 +140,24 @@ func TestTextPrompterRequiresIO(t *testing.T) {
 	}
 }
 
-func TestTextPrompterRejectsConfirmPrompts(t *testing.T) {
-	prompter := TextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
-	_, err := prompter.Prompt(context.Background(), PromptRequest{
+func TestTextPrompterSupportsConfirm(t *testing.T) {
+	in := bytes.NewBufferString("y\n")
+	out := &bytes.Buffer{}
+
+	prompter := TextPrompter{In: in, Out: out}
+	value, err := prompter.Prompt(context.Background(), PromptRequest{
 		Label:   "Continue?",
 		Confirm: true,
-		Theme:   DefaultPromptTheme,
 	})
-	if err == nil {
-		t.Fatal("expected error for confirm prompt")
+	if err != nil {
+		t.Fatalf("Prompt returned error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "confirm prompts require the prompt extension") {
-		t.Fatalf("expected error about extension, got: %v", err)
+	if value != "y" {
+		t.Fatalf("expected 'y', got %q", value)
 	}
-}
 
-func TestTextPrompterRejectsSelectPrompts(t *testing.T) {
-	prompter := TextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
-	_, err := prompter.Prompt(context.Background(), PromptRequest{
-		Label: "Choose",
-		Theme: DefaultPromptTheme,
-		Options: []SelectOption{
-			{Label: "Option A", Value: "a"},
-		},
-	})
-	if err == nil {
-		t.Fatal("expected error for select prompt")
-	}
-	if !strings.Contains(err.Error(), "select prompts require the prompt extension") {
-		t.Fatalf("expected error about extension, got: %v", err)
-	}
-}
-
-func TestTextPrompterRejectsMultiSelectPrompts(t *testing.T) {
-	prompter := TextPrompter{In: bytes.NewBufferString(""), Out: &bytes.Buffer{}}
-	_, err := prompter.Prompt(context.Background(), PromptRequest{
-		Label:       "Select",
-		Theme:       DefaultPromptTheme,
-		MultiSelect: true,
-		Options: []SelectOption{
-			{Label: "Option A", Value: "a"},
-		},
-	})
-	if err == nil {
-		t.Fatal("expected error for multi-select prompt")
-	}
-	if !strings.Contains(err.Error(), "multi-select prompts require the prompt extension") {
-		t.Fatalf("expected error about extension, got: %v", err)
+	output := out.String()
+	if !strings.Contains(output, "(Y/n)") {
+		t.Errorf("output should show default, got: %s", output)
 	}
 }

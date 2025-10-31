@@ -14,10 +14,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select options",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select options", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 				{Label: "Option C", Value: "c"},
@@ -45,10 +42,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select options",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select options", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 				{Label: "Option C", Value: "c"},
@@ -69,10 +63,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select options",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select options", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 				{Label: "Option C", Value: "c"},
@@ -93,10 +84,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select options",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select options", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -116,7 +104,8 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
 			Label:   "Select options",
 			Default: "a,b",
 			Theme:   clix.DefaultPromptTheme,
@@ -141,7 +130,8 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
 			Label:   "Select options",
 			Default: "1,2",
 			Theme:   clix.DefaultPromptTheme,
@@ -166,10 +156,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select options",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select options", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 			},
 			MultiSelect: true,
@@ -193,10 +180,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select options",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select options", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -215,10 +199,7 @@ func TestPromptMultiSelect(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select options",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select options", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 			},
 			MultiSelect: true,

@@ -66,14 +66,15 @@ func TestPromptSelectSupportsLipglossStyles(t *testing.T) {
 	out := &bytes.Buffer{}
 
 	prompter := TerminalPrompter{In: in, Out: out}
-	_, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-		Label: "Choose option",
-		Theme: theme,
-		Options: []clix.SelectOption{
-			{Label: "Option A", Value: "a"},
-			{Label: "Option B", Value: "b"},
-		},
-	})
+	_, err := prompter.Prompt(context.Background(),
+		clix.PromptRequest{
+			Label: "Choose option",
+			Theme: theme,
+			Options: []clix.SelectOption{
+				{Label: "Option A", Value: "a"},
+				{Label: "Option B", Value: "b"},
+			},
+		})
 	if err != nil {
 		t.Fatalf("Prompt returned error: %v", err)
 	}
@@ -101,8 +102,8 @@ func TestPromptConfirmSupportsLipglossStyles(t *testing.T) {
 	prompter := TerminalPrompter{In: in, Out: out}
 	value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
 		Label:   "Continue?",
-		Confirm: true,
 		Theme:   theme,
+		Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("Prompt returned error: %v", err)

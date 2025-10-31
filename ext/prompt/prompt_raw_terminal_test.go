@@ -46,10 +46,7 @@ func TestPromptSelectRawTerminal(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Choose",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Choose", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -75,10 +72,7 @@ func TestPromptSelectRawTerminal(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Choose",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Choose", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 				{Label: "Option C", Value: "c"},
@@ -101,10 +95,7 @@ func TestPromptMultiSelectRawTerminal(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -128,7 +119,8 @@ func TestPromptMultiSelectRawTerminal(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
+		value, err := prompter.Prompt(context.Background(),
+			clix.PromptRequest{
 			Label:        "Select",
 			Theme:        clix.DefaultPromptTheme,
 			ContinueText: "Done",
@@ -226,10 +218,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Choose option",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Choose option", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
 			},
@@ -253,10 +242,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select items",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select items", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "Item 1", Value: "1"},
 				{Label: "Item 2", Value: "2"},
 				{Label: "Item 3", Value: "3"},
@@ -281,10 +267,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Choose",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Choose", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "First", Value: "1"},
 				{Label: "Second", Value: "2"},
 				{Label: "Third", Value: "3"},
@@ -303,10 +286,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Choose",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Choose", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "First", Value: "1"},
 				{Label: "Second", Value: "2"},
 				{Label: "Third", Value: "3"},
@@ -325,10 +305,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "A", Value: "a"},
 				{Label: "B", Value: "b"},
 			},
@@ -347,10 +324,7 @@ func TestTerminalFallbackBehavior(t *testing.T) {
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
-		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		value, err := prompter.Prompt(context.Background(), clix.PromptRequest{Label: "Select", Theme: clix.DefaultPromptTheme, Options: []clix.SelectOption{
 				{Label: "A", Value: "a"},
 			},
 			MultiSelect: true,

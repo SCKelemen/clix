@@ -44,14 +44,19 @@ func TestPromptExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		value, err := app.Prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Choose",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		tp := AsTerminalPrompter(app.Prompter)
+		if tp == nil {
+			t.Fatal("expected TerminalPrompter after extension")
+		}
+
+		value, err := tp.Prompt(context.Background(),
+			clix.WithLabel("Choose"),
+			clix.WithTheme(clix.DefaultPromptTheme),
+			Select([]clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
-			},
-		})
+			}),
+		)
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -70,15 +75,19 @@ func TestPromptExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		value, err := app.Prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Select",
-			Theme: clix.DefaultPromptTheme,
-			Options: []clix.SelectOption{
+		tp := AsTerminalPrompter(app.Prompter)
+		if tp == nil {
+			t.Fatal("expected TerminalPrompter after extension")
+		}
+
+		value, err := tp.Prompt(context.Background(),
+			clix.WithLabel("Select"),
+			clix.WithTheme(clix.DefaultPromptTheme),
+			MultiSelect([]clix.SelectOption{
 				{Label: "Option A", Value: "a"},
 				{Label: "Option B", Value: "b"},
-			},
-			MultiSelect: true,
-		})
+			}),
+		)
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -97,11 +106,16 @@ func TestPromptExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		value, err := app.Prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label:   "Continue?",
-			Confirm: true,
-			Theme:   clix.DefaultPromptTheme,
-		})
+		tp := AsTerminalPrompter(app.Prompter)
+		if tp == nil {
+			t.Fatal("expected TerminalPrompter after extension")
+		}
+
+		value, err := tp.Prompt(context.Background(),
+			clix.WithLabel("Continue?"),
+			clix.WithTheme(clix.DefaultPromptTheme),
+			Confirm(),
+		)
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -120,10 +134,10 @@ func TestPromptExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		value, err := app.Prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label: "Enter value",
-			Theme: clix.DefaultPromptTheme,
-		})
+		value, err := app.Prompter.Prompt(context.Background(),
+			clix.WithLabel("Enter value"),
+			clix.WithTheme(clix.DefaultPromptTheme),
+		)
 		if err != nil {
 			t.Fatalf("Prompt returned error: %v", err)
 		}
@@ -150,20 +164,21 @@ func TestPromptExtension(t *testing.T) {
 }
 
 func TestPromptExtensionIntegration(t *testing.T) {
-	t.Run("app without extension rejects advanced prompts", func(t *testing.T) {
+	t.Run("app without extension cannot use advanced prompts", func(t *testing.T) {
 		app := clix.NewApp("test")
 		app.In = bytes.NewBufferString("")
 		app.Out = &bytes.Buffer{}
 
 		// Don't add extension
-
-		_, err := app.Prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label:   "Continue?",
-			Confirm: true,
-			Theme:   clix.DefaultPromptTheme,
-		})
+		// TextPrompter rejects Select/MultiSelect at runtime
+		// The compile-time safety comes from Select/MultiSelect only being available
+		// when you import clix/ext/prompt
+		_, err := app.Prompter.Prompt(context.Background(),
+			clix.WithLabel("Choose"),
+			Select([]clix.SelectOption{{Label: "A", Value: "a"}}),
+		)
 		if err == nil {
-			t.Fatal("expected error for confirm prompt without extension")
+			t.Fatal("expected error for select prompt without extension")
 		}
 		if !strings.Contains(err.Error(), "prompt extension") {
 			t.Fatalf("expected error about extension, got: %v", err)
@@ -180,14 +195,18 @@ func TestPromptExtensionIntegration(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		_, err := app.Prompter.Prompt(context.Background(), clix.PromptRequest{
-			Label:   "Continue?",
-			Confirm: true,
-			Theme:   clix.DefaultPromptTheme,
-		})
+		tp := AsTerminalPrompter(app.Prompter)
+		if tp == nil {
+			t.Fatal("expected TerminalPrompter after extension")
+		}
+
+		_, err := tp.Prompt(context.Background(),
+			clix.WithLabel("Continue?"),
+			clix.WithTheme(clix.DefaultPromptTheme),
+			Confirm(),
+		)
 		if err != nil {
 			t.Fatalf("unexpected error with extension: %v", err)
 		}
 	})
 }
-
