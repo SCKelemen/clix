@@ -99,6 +99,17 @@ type PromptConfig struct {
 	MultiSelect  bool
 	Confirm      bool
 	ContinueText string
+	// OnEscape is called when the Escape key is pressed.
+	// If it returns an error, that error is returned instead of "cancelled".
+	// Extensions (like survey) can use this to handle custom behavior for the Escape key.
+	// Note: This refers to the keyboard Escape key press, not ANSI escape code sequences.
+	OnEscape func() error
+	// OnFunctionKey is called when any F key (F1-F12) is pressed.
+	// The Key parameter indicates which F key was pressed (KeyF1 through KeyF12).
+	// If it returns an error, that error is returned instead of "cancelled".
+	// Extensions can use this to bind specific F keys to custom actions.
+	// Note: Key type is from clix/ext/prompt package - use prompt.KeyF1, etc.
+	OnFunctionKey func(key interface{}) error
 }
 
 // TextPromptOption implements PromptOption for basic text prompts.
@@ -288,6 +299,12 @@ func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (str
 			fmt.Fprintf(p.Out, " (y/%s)", defaultText)
 		}
 
+		// Show hint if provided (may include "back" instruction from survey)
+		if cfg.Theme.Hint != "" {
+			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
+			fmt.Fprintf(p.Out, " %s", hint)
+		}
+
 		fmt.Fprint(p.Out, ": ")
 
 		line, err := reader.ReadString('\n')
@@ -304,13 +321,18 @@ func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (str
 			return "n", nil
 		}
 
-		// Normalize response
-		value = strings.ToLower(value)
-		if value == "y" || value == "yes" {
+		// Normalize response (but preserve case for special commands like "back")
+		lowerValue := strings.ToLower(value)
+		if lowerValue == "y" || lowerValue == "yes" {
 			return "y", nil
 		}
-		if value == "n" || value == "no" {
+		if lowerValue == "n" || lowerValue == "no" {
 			return "n", nil
+		}
+
+		// Allow "back" to pass through for undo functionality (survey will handle it)
+		if lowerValue == "back" {
+			return value, nil // Return original case
 		}
 
 		// Invalid input

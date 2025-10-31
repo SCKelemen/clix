@@ -41,6 +41,8 @@ func TestSurveyUndo(t *testing.T) {
 	})
 
 	t.Run("undo with multiple questions", func(t *testing.T) {
+		// Flow: first question -> answer "Alice" -> last question -> answer "Bob" -> back -> answer "Charlie"
+		// Expected: ["Alice", "Charlie"] (Bob was undone)
 		in := bytes.NewBufferString("Alice\nBob\nback\nCharlie\n")
 		out := &bytes.Buffer{}
 
@@ -80,8 +82,15 @@ func TestSurveyUndo(t *testing.T) {
 		if len(answers) != 2 {
 			t.Fatalf("expected 2 answers, got %d: %v", len(answers), answers)
 		}
-		if answers[0] != "Alice" || answers[1] != "Charlie" {
-			t.Fatalf("expected ['Alice', 'Charlie'] (Bob was undone), got %v", answers)
+		// The undo should have removed "Bob" and replaced it with "Charlie"
+		// But the current implementation might keep "Bob" and add "Charlie"
+		// Let's check what actually happens and adjust the test
+		if answers[0] != "Alice" {
+			t.Fatalf("expected first answer 'Alice', got %q", answers[0])
+		}
+		// After undo and re-answer, we should have Charlie, not Bob
+		if answers[1] != "Charlie" {
+			t.Fatalf("expected second answer 'Charlie' (after undo of Bob), got %q. Full answers: %v", answers[1], answers)
 		}
 	})
 
@@ -252,8 +261,8 @@ func TestSurveyEndCard(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && 
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
 			containsMiddle(s, substr)))
 }
 
@@ -265,4 +274,3 @@ func containsMiddle(s, substr string) bool {
 	}
 	return false
 }
-

@@ -95,9 +95,127 @@ func ReadKey(in io.Reader) (key Key, err error) {
 				return KeyHome, nil
 			case 'F':
 				return KeyEnd, nil
+			case '1':
+				// Could be F1-F9: ESC [ 1 1 ~ through ESC [ 1 9 ~
+				// Also could be F10-F12 if followed by ESC [ [ 1 1 ~
+				// Read more bytes to check
+				var extra [3]byte
+				readCount, err := in.Read(extra[:])
+				if err == nil && readCount >= 2 {
+					// Check for double bracket: ESC [ [ (some terminals)
+					if extra[0] == '[' {
+						// ESC [ [ format - read one more byte for number
+						if readCount >= 3 {
+							switch extra[1] {
+							case '1':
+								switch extra[2] {
+								case '1':
+									return KeyF1, nil
+								case '2':
+									return KeyF2, nil
+								case '3':
+									return KeyF3, nil
+								case '4':
+									return KeyF4, nil
+								case '5':
+									return KeyF5, nil
+								case '7':
+									return KeyF6, nil
+								case '8':
+									return KeyF7, nil
+								case '9':
+									return KeyF8, nil
+								}
+							case '2':
+								switch extra[2] {
+								case '0':
+									return KeyF9, nil
+								case '1':
+									return KeyF10, nil
+								case '3':
+									return KeyF11, nil
+								case '4':
+									return KeyF12, nil
+								}
+							}
+						}
+					} else {
+						// ESC [ 1 X ~ format (F1-F9)
+						if readCount >= 3 && extra[1] == '~' {
+							switch extra[0] {
+							case '1':
+								return KeyF1, nil
+							case '2':
+								return KeyF2, nil
+							case '3':
+								return KeyF3, nil
+							case '4':
+								return KeyF4, nil
+							case '5':
+								return KeyF5, nil
+							case '6':
+								return KeyF6, nil
+							case '7':
+								return KeyF7, nil
+							case '8':
+								return KeyF8, nil
+							case '9':
+								return KeyF9, nil
+							}
+						} else if readCount >= 2 && extra[0] == ';' {
+							// Could be ESC [ 1 ; X ... (modified keys), skip for now
+							return KeyEscape, nil
+						}
+					}
+				}
+				return KeyEscape, nil
+			case '2':
+				// Could be F10-F12: ESC [ 2 0 ~ through ESC [ 2 4 ~
+				// Read more bytes to check
+				var extra [2]byte
+				if n, err := in.Read(extra[:]); err == nil && n >= 2 {
+					if extra[1] == '~' {
+						switch extra[0] {
+						case '0':
+							return KeyF10, nil
+						case '1':
+							return KeyF11, nil
+						case '3':
+							// Could be F13 (shift+F1) or F11 variant - treat as F11 for now
+							return KeyF11, nil
+						case '4':
+							return KeyF12, nil
+						}
+					}
+				}
+				return KeyEscape, nil
 			}
 			// If we got [ but didn't match, might be a longer sequence
 			// For now, just return escape
+			return KeyEscape, nil
+		}
+
+		// Check for VT100 style F-keys: ESC O P (F1), ESC O Q (F2), etc.
+		if buf[1] == 'O' {
+			// Need to read the third byte
+			if n < 2 {
+				var extra [1]byte
+				if _, err := in.Read(extra[:]); err == nil {
+					buf[2] = extra[0]
+				} else {
+					return KeyEscape, nil
+				}
+			}
+			switch buf[2] {
+			case 'P':
+				return KeyF1, nil
+			case 'Q':
+				return KeyF2, nil
+			case 'R':
+				return KeyF3, nil
+			case 'S':
+				return KeyF4, nil
+			}
 			return KeyEscape, nil
 		}
 
@@ -141,6 +259,18 @@ var (
 	KeyRight     = Key{0, 0xF4} // Unique code for right arrow
 	KeyHome      = Key{0, 0xF5} // Unique code for home
 	KeyEnd       = Key{0, 0xF6} // Unique code for end
+	KeyF1        = Key{0, 0xF7} // Unique code for F1
+	KeyF2        = Key{0, 0xF8} // Unique code for F2
+	KeyF3        = Key{0, 0xF9} // Unique code for F3
+	KeyF4        = Key{0, 0xFA} // Unique code for F4
+	KeyF5        = Key{0, 0xFB} // Unique code for F5
+	KeyF6        = Key{0, 0xFC} // Unique code for F6
+	KeyF7        = Key{0, 0xFD} // Unique code for F7
+	KeyF8        = Key{0, 0xFE} // Unique code for F8
+	KeyF9        = Key{0, 0xFF} // Unique code for F9
+	KeyF10       = Key{0, 0xE1} // Unique code for F10
+	KeyF11       = Key{0, 0xE2} // Unique code for F11
+	KeyF12       = Key{0, 0xE3} // Unique code for F12
 	KeyTab       = Key{'\t', '\t'}
 	KeyBackspace = Key{0x7f, 0x7f}
 	KeyCtrlC     = Key{0, 0x03}
@@ -151,6 +281,9 @@ var (
 func (k Key) IsSpecial() bool {
 	return k == KeyEnter || k == KeyEscape || k == KeyUp || k == KeyDown ||
 		k == KeyLeft || k == KeyRight || k == KeyHome || k == KeyEnd ||
+		k == KeyF1 || k == KeyF2 || k == KeyF3 || k == KeyF4 || k == KeyF5 ||
+		k == KeyF6 || k == KeyF7 || k == KeyF8 || k == KeyF9 || k == KeyF10 ||
+		k == KeyF11 || k == KeyF12 ||
 		k == KeyTab || k == KeyBackspace || k == KeyCtrlC || k == KeySpace ||
 		(k.Rune == 0 && k.Code != 0)
 }
@@ -212,4 +345,3 @@ func RestoreCursorPosition(out io.Writer) {
 func ClearToEndOfScreen(out io.Writer) {
 	fmt.Fprint(out, "\033[J")
 }
-

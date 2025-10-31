@@ -14,6 +14,10 @@ import (
 	"golang.org/x/term"
 )
 
+// ErrGoBack is returned by prompts when the user wants to go back to a previous question.
+// This can be triggered by Escape or F12 keys when undo is enabled in surveys.
+var ErrGoBack = errors.New("go back to previous question")
+
 // TerminalPrompter implements Prompter with full support for text, select,
 // multi-select, and confirm prompts, including raw terminal mode for interactive navigation.
 type TerminalPrompter struct {
@@ -62,6 +66,23 @@ func (p TerminalPrompter) prompt(ctx context.Context, cfg *clix.PromptConfig) (s
 
 // promptText handles regular text input prompts.
 func (p TerminalPrompter) promptText(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
+	// Check if input is a terminal - if not, use line-based fallback
+	inFile, isTerminal := p.In.(*os.File)
+	if !isTerminal {
+		return p.promptTextLineBased(ctx, cfg)
+	}
+
+	// Check if it's actually a TTY
+	if !term.IsTerminal(int(inFile.Fd())) {
+		return p.promptTextLineBased(ctx, cfg)
+	}
+
+	// Use interactive mode with raw terminal
+	return p.promptTextInteractive(ctx, cfg, inFile)
+}
+
+// promptTextLineBased handles text input with line-based reading (fallback for non-terminals).
+func (p TerminalPrompter) promptTextLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	reader := bufio.NewReader(p.In)
 
 	for {
@@ -72,11 +93,6 @@ func (p TerminalPrompter) promptText(ctx context.Context, cfg *clix.PromptConfig
 		if cfg.Default != "" {
 			def := renderText(cfg.Theme.DefaultStyle, cfg.Default)
 			fmt.Fprintf(p.Out, " [%s]", def)
-		}
-
-		if cfg.Theme.Hint != "" {
-			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
-			fmt.Fprintf(p.Out, " %s", hint)
 		}
 
 		fmt.Fprint(p.Out, ": ")
@@ -104,6 +120,169 @@ func (p TerminalPrompter) promptText(ctx context.Context, cfg *clix.PromptConfig
 		}
 
 		return value, nil
+	}
+}
+
+// promptTextInteractive handles text input with raw terminal mode for advanced features.
+func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.PromptConfig, inFile *os.File) (string, error) {
+	// Enable raw mode for individual keystroke handling
+	state, err := EnableRawMode(inFile)
+	if err != nil {
+		// Fall back to line-based if raw mode fails
+		return p.promptTextLineBased(ctx, cfg)
+	}
+	defer state.Restore()
+
+	currentInput := ""
+
+	for {
+		// Clear both lines (input and hint)
+		fmt.Fprint(p.Out, "\r\033[K") // Clear input line
+		fmt.Fprint(p.Out, "\n")
+		fmt.Fprint(p.Out, "\r\033[K") // Clear hint line
+		MoveCursorUp(p.Out, 1)        // Move back to input line
+
+		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
+
+		// Calculate actual text lengths (without ANSI codes) for cursor positioning
+		prefixTextLen := len(cfg.Theme.Prefix)
+		labelTextLen := len(cfg.Label)
+
+		fmt.Fprintf(p.Out, "%s%s", prefix, label)
+
+		// Show input value or placeholder with inline default
+		fmt.Fprint(p.Out, ": ")
+		if currentInput == "" {
+			// Show default in low contrast inline if no input and default exists
+			if cfg.Default != "" {
+				def := renderText(cfg.Theme.DefaultStyle, cfg.Default)
+				fmt.Fprint(p.Out, def)
+			}
+		} else {
+			// Show user's input
+			fmt.Fprint(p.Out, currentInput)
+		}
+
+		// Move to next line for hint info
+		fmt.Fprint(p.Out, "\n")
+		fmt.Fprint(p.Out, "\r\033[K")
+
+		// Show hint at bottom in low contrast (if provided)
+		// If no hint but no default, show a helpful message
+		if cfg.Theme.Hint != "" {
+			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
+			fmt.Fprint(p.Out, hint)
+		} else if cfg.Default == "" && currentInput == "" {
+			// No default and no input - show helpful hint
+			hintText := "Press Enter to submit"
+			if cfg.Theme.HintStyle != nil {
+				hintText = renderText(cfg.Theme.HintStyle, hintText)
+			}
+			fmt.Fprint(p.Out, hintText)
+		}
+
+		// Move cursor back up to input line and position at end
+		MoveCursorUp(p.Out, 1)
+
+		// Position cursor at end of input
+		fmt.Fprint(p.Out, "\r")
+		// Calculate position: prefix + label + ": " + input length (using actual text lengths)
+		inputLen := len(currentInput)
+		if currentInput == "" && cfg.Default != "" {
+			// When showing default, cursor should be at end of default
+			inputLen = len(cfg.Default)
+		}
+		totalPos := prefixTextLen + labelTextLen + 2 + inputLen // +2 for ": "
+
+		// Move cursor to position (we're already at start, so just move right)
+		// Note: We need to account for rendered styles which may include ANSI codes,
+		// but the cursor positioning should be based on actual character count
+		if totalPos > 0 {
+			// Use ANSI to move right - this moves by character count, not byte count
+			fmt.Fprintf(p.Out, "\033[%dC", totalPos)
+		}
+
+		// Read a single keypress
+		key, err := ReadKey(p.In)
+		if err != nil {
+			return "", err
+		}
+
+		ShowCursor(p.Out) // Show cursor for input
+
+		switch key {
+		case KeyEnter:
+			// Finished input - clear hint line and return
+			HideCursor(p.Out)
+			fmt.Fprint(p.Out, "\n")
+			fmt.Fprint(p.Out, "\r\033[K") // Clear hint line
+			ShowCursor(p.Out)
+
+			value := currentInput
+			if value == "" {
+				value = cfg.Default
+			}
+
+			if cfg.Validate != nil {
+				if err := cfg.Validate(value); err != nil {
+					errPrefix := renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error)
+					errMsg := err.Error()
+					if errMsg != "" {
+						errMsg = renderText(cfg.Theme.ErrorStyle, errMsg)
+					}
+					fmt.Fprintf(p.Out, "%s%s\n", errPrefix, errMsg)
+					currentInput = ""
+					continue
+				}
+			}
+
+			return value, nil
+		case KeyBackspace:
+			if len(currentInput) > 0 {
+				currentInput = currentInput[:len(currentInput)-1]
+			}
+		case KeyTab:
+			// Tab completion to default
+			if cfg.Default != "" {
+				currentInput = cfg.Default
+			}
+		case KeyCtrlC:
+			// Check if extension wants to handle Escape key
+			if cfg.OnEscape != nil {
+				if err := cfg.OnEscape(); err != nil {
+					return "", err
+				}
+			}
+			fmt.Fprint(p.Out, "\n")
+			fmt.Fprint(p.Out, "\r\033[K")
+			return "", errors.New("cancelled")
+		case KeyEscape:
+			// Check if extension wants to handle Escape key
+			if cfg.OnEscape != nil {
+				if err := cfg.OnEscape(); err != nil {
+					fmt.Fprint(p.Out, "\n")
+					fmt.Fprint(p.Out, "\r\033[K")
+					return "", err
+				}
+			}
+			// Default: clear input
+			currentInput = ""
+		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
+			// Check if extension wants to handle F keys
+			if cfg.OnFunctionKey != nil {
+				if err := cfg.OnFunctionKey(key); err != nil {
+					fmt.Fprint(p.Out, "\n")
+					fmt.Fprint(p.Out, "\r\033[K")
+					return "", err
+				}
+			}
+		default:
+			// Regular printable character
+			if key.IsPrintable() && key.Rune != 0 {
+				currentInput += string(key.Rune)
+			}
+		}
 	}
 }
 
@@ -151,8 +330,12 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 	HideCursor(p.Out)
 	defer ShowCursor(p.Out)
 
-	// Calculate number of lines we'll render
-	linesToRender := 1 + len(cfg.Options) // label line + options
+	// Calculate number of lines we'll render (label + options + hint line)
+	hintLines := 0
+	if cfg.Theme.Hint != "" {
+		hintLines = 1
+	}
+	linesToRender := 1 + len(cfg.Options) + hintLines // label line + options + hint
 
 	// Initial render
 	p.renderSelectPrompt(cfg, selectedIdx)
@@ -185,16 +368,82 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender)
 			p.renderSelectPrompt(cfg, selectedIdx)
 		case KeyEnter:
-			// Selection confirmed - show cursor and return
+			// Selection confirmed - clear all prompt lines and show selection
+			MoveCursorUp(p.Out, linesToRender)
+			// Clear all lines we rendered
+			for i := 0; i < linesToRender; i++ {
+				fmt.Fprint(p.Out, "\r\033[K")
+				if i < linesToRender-1 {
+					MoveCursorDown(p.Out, 1)
+				}
+			}
+			// Move back to the top line and clear it, then show the selected value
+			MoveCursorUp(p.Out, linesToRender-1)
+			fmt.Fprint(p.Out, "\r\033[K")
+			if len(cfg.Options) > 0 {
+				// Show what was selected (optional - can be removed if not desired)
+				prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+				label := renderText(cfg.Theme.LabelStyle, cfg.Label)
+				fmt.Fprintf(p.Out, "%s%s: %s\n", prefix, label, cfg.Options[selectedIdx].Label)
+			}
 			ShowCursor(p.Out)
-			fmt.Fprint(p.Out, "\n")
 			if len(cfg.Options) > 0 {
 				return cfg.Options[selectedIdx].Value, nil
 			}
-		case KeyCtrlC, KeyEscape:
-			// Cancelled - show cursor and return
+		case KeyCtrlC:
+			// Cancelled - clear all prompt lines
+			MoveCursorUp(p.Out, linesToRender)
+			// Clear all lines we rendered
+			for i := 0; i < linesToRender; i++ {
+				fmt.Fprint(p.Out, "\r\033[K")
+				if i < linesToRender-1 {
+					MoveCursorDown(p.Out, 1)
+				}
+			}
+			// Move back to the top line
+			MoveCursorUp(p.Out, linesToRender-1)
+			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			fmt.Fprint(p.Out, "\n")
+			return "", errors.New("cancelled")
+		case KeyEscape:
+			// Clear all prompt lines first
+			MoveCursorUp(p.Out, linesToRender)
+			for i := 0; i < linesToRender; i++ {
+				fmt.Fprint(p.Out, "\r\033[K")
+				if i < linesToRender-1 {
+					MoveCursorDown(p.Out, 1)
+				}
+			}
+			MoveCursorUp(p.Out, linesToRender-1)
+			fmt.Fprint(p.Out, "\r\033[K")
+			ShowCursor(p.Out)
+			// Check if extension wants to handle Escape key
+			if cfg.OnEscape != nil {
+				if err := cfg.OnEscape(); err != nil {
+					return "", err
+				}
+			}
+			// Default: treat as cancel
+			return "", errors.New("cancelled")
+		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
+			// Clear all prompt lines first
+			MoveCursorUp(p.Out, linesToRender)
+			for i := 0; i < linesToRender; i++ {
+				fmt.Fprint(p.Out, "\r\033[K")
+				if i < linesToRender-1 {
+					MoveCursorDown(p.Out, 1)
+				}
+			}
+			MoveCursorUp(p.Out, linesToRender-1)
+			fmt.Fprint(p.Out, "\r\033[K")
+			ShowCursor(p.Out)
+			// Check if extension wants to handle F keys
+			if cfg.OnFunctionKey != nil {
+				if err := cfg.OnFunctionKey(key); err != nil {
+					return "", err
+				}
+			}
+			// Default: treat as cancel
 			return "", errors.New("cancelled")
 		case KeyHome:
 			selectedIdx = 0
@@ -210,8 +459,29 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 				idx := int(key.Rune - '1')
 				if idx < len(cfg.Options) {
 					selectedIdx = idx
+					// Clear all prompt lines and show selection
+					MoveCursorUp(p.Out, linesToRender)
+					// Clear all lines we rendered
+					for i := 0; i < linesToRender; i++ {
+						fmt.Fprint(p.Out, "\r\033[K")
+						if i < linesToRender-1 {
+							MoveCursorDown(p.Out, 1)
+						}
+					}
+					// Clear all lines and show the selected value on a fresh line
+					MoveCursorUp(p.Out, linesToRender)
+					for i := 0; i < linesToRender; i++ {
+						fmt.Fprint(p.Out, "\r\033[K")
+						if i < linesToRender-1 {
+							fmt.Fprint(p.Out, "\n")
+						}
+					}
+					// Show what was selected on a clean line (starting from beginning of line)
+					fmt.Fprint(p.Out, "\r\033[K") // Ensure we're at start of line
+					prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+					label := renderText(cfg.Theme.LabelStyle, cfg.Label)
+					fmt.Fprintf(p.Out, "%s%s: %s\n", prefix, label, cfg.Options[selectedIdx].Label)
 					ShowCursor(p.Out)
-					fmt.Fprint(p.Out, "\n")
 					return cfg.Options[selectedIdx].Value, nil
 				}
 			}
@@ -250,6 +520,14 @@ func (p TerminalPrompter) renderSelectPrompt(cfg *clix.PromptConfig, selectedIdx
 		}
 		// Clear rest of line and move to next
 		fmt.Fprint(p.Out, "\033[K\n")
+	}
+
+	// Show hint at bottom in low contrast
+	if cfg.Theme.Hint != "" {
+		fmt.Fprint(p.Out, "\r\033[K")
+		hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
+		fmt.Fprint(p.Out, hint)
+		fmt.Fprint(p.Out, "\n")
 	}
 }
 
@@ -389,6 +667,12 @@ func (p TerminalPrompter) promptConfirm(ctx context.Context, cfg *clix.PromptCon
 			fmt.Fprintf(p.Out, " (y/%s)", defaultText)
 		}
 
+		// Show hint if provided (may include "back" instruction from survey)
+		if cfg.Theme.Hint != "" {
+			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
+			fmt.Fprintf(p.Out, " %s", hint)
+		}
+
 		fmt.Fprint(p.Out, ": ")
 
 		line, err := reader.ReadString('\n')
@@ -405,13 +689,18 @@ func (p TerminalPrompter) promptConfirm(ctx context.Context, cfg *clix.PromptCon
 			return "n", nil
 		}
 
-		// Normalize response
-		value = strings.ToLower(value)
-		if value == "y" || value == "yes" {
+		// Normalize response (but preserve case for special commands like "back")
+		lowerValue := strings.ToLower(value)
+		if lowerValue == "y" || lowerValue == "yes" {
 			return "y", nil
 		}
-		if value == "n" || value == "no" {
+		if lowerValue == "n" || lowerValue == "no" {
 			return "n", nil
+		}
+
+		// Allow "back" to pass through for undo functionality (survey will handle it)
+		if lowerValue == "back" {
+			return value, nil // Return original case
 		}
 
 		// Invalid input
@@ -484,8 +773,12 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 	HideCursor(p.Out)
 	defer ShowCursor(p.Out)
 
-	// Calculate number of lines we'll render (label + options + continue line)
-	linesToRender := 2 + len(cfg.Options) // label line + options + continue line
+	// Calculate number of lines we'll render (label + options + continue line + hint line)
+	hintLines := 0
+	if cfg.Theme.Hint != "" {
+		hintLines = 1
+	}
+	linesToRender := 2 + len(cfg.Options) + hintLines // label line + options + continue line + hint
 
 	// Track if we're on the continue button (-1 means continue button, >= 0 means option index)
 	onContinueButton := false
@@ -555,10 +848,58 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 					p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
 				}
 			}
-		case KeyCtrlC, KeyEscape:
-			// Cancelled - show cursor and return
+		case KeyCtrlC:
+			// Cancelled - clear all prompt lines
+			MoveCursorUp(p.Out, linesToRender)
+			for i := 0; i < linesToRender; i++ {
+				fmt.Fprint(p.Out, "\r\033[K")
+				if i < linesToRender-1 {
+					MoveCursorDown(p.Out, 1)
+				}
+			}
+			MoveCursorUp(p.Out, linesToRender-1)
+			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			fmt.Fprint(p.Out, "\n")
+			return "", errors.New("cancelled")
+		case KeyEscape:
+			// Clear all prompt lines first
+			MoveCursorUp(p.Out, linesToRender)
+			for i := 0; i < linesToRender; i++ {
+				fmt.Fprint(p.Out, "\r\033[K")
+				if i < linesToRender-1 {
+					MoveCursorDown(p.Out, 1)
+				}
+			}
+			MoveCursorUp(p.Out, linesToRender-1)
+			fmt.Fprint(p.Out, "\r\033[K")
+			ShowCursor(p.Out)
+			// Check if extension wants to handle Escape key
+			if cfg.OnEscape != nil {
+				if err := cfg.OnEscape(); err != nil {
+					return "", err
+				}
+			}
+			// Default: treat as cancel
+			return "", errors.New("cancelled")
+		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
+			// Clear all prompt lines first
+			MoveCursorUp(p.Out, linesToRender)
+			for i := 0; i < linesToRender; i++ {
+				fmt.Fprint(p.Out, "\r\033[K")
+				if i < linesToRender-1 {
+					MoveCursorDown(p.Out, 1)
+				}
+			}
+			MoveCursorUp(p.Out, linesToRender-1)
+			fmt.Fprint(p.Out, "\r\033[K")
+			ShowCursor(p.Out)
+			// Check if extension wants to handle F keys
+			if cfg.OnFunctionKey != nil {
+				if err := cfg.OnFunctionKey(key); err != nil {
+					return "", err
+				}
+			}
+			// Default: treat as cancel
 			return "", errors.New("cancelled")
 		case KeyHome:
 			onContinueButton = false
@@ -594,12 +935,7 @@ func (p TerminalPrompter) renderMultiSelectPrompt(cfg *clix.PromptConfig, select
 	prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
 	label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 	fmt.Fprintf(p.Out, "%s%s", prefix, label)
-
-	if cfg.Theme.Hint != "" {
-		hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
-		fmt.Fprintf(p.Out, " %s", hint)
-	}
-	// Clear rest of line and move to next
+	// Clear rest of line and move to next (hint moved to bottom)
 	fmt.Fprint(p.Out, "\033[K\n")
 
 	// Display options with checkboxes
@@ -637,17 +973,30 @@ func (p TerminalPrompter) renderMultiSelectPrompt(cfg *clix.PromptConfig, select
 	fmt.Fprintf(p.Out, "%s %s", indicator, continueText)
 	// Clear rest of line
 	fmt.Fprint(p.Out, "\033[K\n")
+
+	// Show hint at bottom in low contrast
+	if cfg.Theme.Hint != "" {
+		fmt.Fprint(p.Out, "\r\033[K")
+		hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
+		fmt.Fprint(p.Out, hint)
+		fmt.Fprint(p.Out, "\n")
+	}
 }
 
-// formatSelectedValues formats selected options into a comma-separated string.
+// formatSelectedValues formats selected options into a tag-style string.
+// Returns labels formatted as " label1 ,  label2 " (space-comma-space separated with leading/trailing spaces).
 func (p TerminalPrompter) formatSelectedValues(options []clix.SelectOption, selected map[int]bool) string {
-	var values []string
+	var labels []string
 	for i, opt := range options {
 		if selected[i] {
-			values = append(values, opt.Value)
+			labels = append(labels, opt.Label)
 		}
 	}
-	return strings.Join(values, ",")
+	// Format as " label1 ,  label2 " (old tag style)
+	if len(labels) == 0 {
+		return ""
+	}
+	return " " + strings.Join(labels, " ,  ") + " "
 }
 
 // parseIndices parses a string containing indices (supports comma, space, or comma-space separated).

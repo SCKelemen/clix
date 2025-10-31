@@ -5,11 +5,16 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"clix"
 	"clix/ext/prompt"
 )
+
+// ErrGoBack is the error returned by prompts when user wants to go back.
+// Re-exported from prompt package for convenience.
+var ErrGoBack = prompt.ErrGoBack
 
 // Question represents a single prompt in a survey.
 // Questions can be defined as struct literals, similar to clix.Command.
@@ -58,8 +63,9 @@ func (b HandlerBranch) Execute(answer string, s *Survey) {
 type EndBranch struct{}
 
 func (b EndBranch) Execute(answer string, s *Survey) {
-	// Clear the stack so the survey loop will exit
-	// But if undo is enabled, user can still go back from end card
+	// Clear the stack so the survey loop will exit after this question
+	// The loop will check the stack at the start of the next iteration
+	// If undo is enabled, user can still type "back" before the loop exits
 	s.stack = s.stack[:0]
 }
 
@@ -87,9 +93,10 @@ type Survey struct {
 	ctx            context.Context
 	stack          []*Question
 	answers        []string
-	questionIDs    []string            // Track question IDs in order for end card summary
+	questionIDs    []string             // Track question IDs in order for end card summary
 	questions      map[string]*Question // Static question registry
 	reader         *bufio.Reader        // Shared reader to avoid bufio buffering issues
+	originalFile   *os.File             // Original *os.File if available (for TerminalPrompter raw mode)
 	isTextPrompter bool                 // Whether we're using TextPrompter (needs shared reader)
 
 	// Undo/back functionality
@@ -97,8 +104,8 @@ type Survey struct {
 	history       []historyEntry // Question/answer history for undo
 
 	// End card
-	withEndCard bool
-	endCardText string
+	withEndCard  bool
+	endCardText  string
 	endCardTheme clix.PromptTheme // Theme for end card display
 }
 
@@ -191,19 +198,30 @@ func New(ctx context.Context, prompter clix.Prompter, options ...SurveyOption) *
 
 	// Extract the reader from the prompter if possible
 	// This avoids bufio.Reader buffering issues when making multiple Prompt calls
+	// Also save the original *os.File if available, as TerminalPrompter needs it for raw mode
 	var reader io.Reader
+	var originalFile *os.File
 
 	// Try TextPrompter first
 	if tp, ok := prompter.(clix.TextPrompter); ok && tp.In != nil {
 		reader = tp.In
 		s.isTextPrompter = true
+		// Try to extract underlying *os.File
+		if file, ok := tp.In.(*os.File); ok {
+			originalFile = file
+		}
 	} else if tp, ok := prompter.(prompt.TerminalPrompter); ok {
 		// TerminalPrompter has exported In field
 		reader = tp.In
+		// Try to extract underlying *os.File
+		if file, ok := tp.In.(*os.File); ok {
+			originalFile = file
+		}
 	}
 
 	if reader != nil {
 		s.reader = bufio.NewReader(reader)
+		s.originalFile = originalFile // Store for TerminalPrompter to use
 	}
 
 	return s
@@ -309,19 +327,77 @@ func (s *Survey) pushQuestion(q *Question) {
 	s.stack = append(s.stack, q)
 }
 
+// handleGoBack handles the "go back" command when triggered by Escape/F12 or text "back".
+func (s *Survey) handleGoBack() error {
+	if len(s.history) > 0 {
+		// Restore last question from history immediately
+		lastEntry := s.history[len(s.history)-1]
+		s.history = s.history[:len(s.history)-1]
+
+		// Push the previous question to stack so it gets asked next
+		s.pushQuestion(lastEntry.question)
+
+		// Remove the last answer since we're going back to edit it
+		if len(s.answers) > 0 {
+			s.answers = s.answers[:len(s.answers)-1]
+		}
+		if len(s.questionIDs) > 0 {
+			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
+		}
+
+		// Continue running the survey to ask the restored question
+		return s.Run()
+	}
+	// No history, can't go back - continue normally
+	return nil
+}
+
+// handleGoBackWithQuestion handles "go back" when we still have the current question.
+func (s *Survey) handleGoBackWithQuestion(question *Question) error {
+	if len(s.history) > 0 {
+		// Restore last question from history
+		lastEntry := s.history[len(s.history)-1]
+		s.history = s.history[:len(s.history)-1]
+
+		// Push both the previous and current question to stack
+		s.pushQuestion(lastEntry.question)
+
+		// Remove the last answer since we're going back to edit it
+		if len(s.answers) > 0 {
+			s.answers = s.answers[:len(s.answers)-1]
+		}
+		if len(s.questionIDs) > 0 {
+			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
+		}
+
+		// Continue running the survey to ask the restored question
+		return s.Run()
+	}
+	// No history, can't go back - ask current question again
+	s.pushQuestion(question)
+	return s.Run()
+}
+
 // Run executes all questions in the survey using depth-first traversal.
 // Questions are processed from the top of the stack, and new questions
 // added by branches are immediately processed before continuing.
 // If undo is enabled, users can type "back" to return to previous questions.
 func (s *Survey) Run() error {
 	for {
-		// Check if we're done (no more questions in stack)
-		if len(s.stack) == 0 {
-			break
-		}
-		
 		var question *Question
 		var isFromHistory bool
+
+		// Check if we're done (no more questions in stack)
+		// But wait one iteration if undo is enabled to allow "back" command
+		if len(s.stack) == 0 {
+			// If undo is enabled and we just processed something, allow one more iteration for "back"
+			if !s.withUndoStack || len(s.history) == 0 {
+				break
+			}
+			// If there's history but stack is empty, we can't prompt - we're done
+			// (This case is for when End() cleared the stack but user might want to go back)
+			break
+		}
 
 		// Pop the last question (depth-first: process most recently added first)
 		idx := len(s.stack) - 1
@@ -331,17 +407,21 @@ func (s *Survey) Run() error {
 		// Ensure theme is set if not already provided
 		req := question.Request
 
-		// Add undo hint if enabled and not from history
-		if s.withUndoStack && !isFromHistory && len(s.history) > 0 {
-			if req.Theme.Hint == "" {
-				req.Theme.Hint = "(type 'back' to go to previous question)"
-			} else {
-				req.Theme.Hint = req.Theme.Hint + " (type 'back' to go to previous question)"
-			}
-		}
-
 		if req.Theme.Prefix == "" && req.Theme.Error == "" && req.Theme.PrefixStyle == nil {
 			req.Theme = clix.DefaultPromptTheme
+		}
+
+		// Determine if this is the last question (stack will be empty after this)
+		// Check if there are more questions in the stack or if branches will add more
+		isLastQuestion := len(s.stack) == 0
+
+		// For multi-select prompts, set ContinueText to "Finish" if it's the last question, "Continue" otherwise
+		if req.MultiSelect {
+			if isLastQuestion && req.ContinueText == "" {
+				req.ContinueText = "Finish"
+			} else if !isLastQuestion && req.ContinueText == "" {
+				req.ContinueText = "Continue"
+			}
 		}
 
 		// Ask the question
@@ -351,37 +431,70 @@ func (s *Survey) Run() error {
 		var answer string
 		var err error
 
+		// Prepare options - add undo handlers if enabled
+		var options []clix.PromptOption
+		if s.withUndoStack && !isFromHistory && len(s.history) > 0 {
+			// Add undo handlers for Escape and F12
+			undoOption := clix.TextPromptOption(func(cfg *clix.PromptConfig) {
+				cfg.OnEscape = func() error {
+					return ErrGoBack
+				}
+				cfg.OnFunctionKey = func(key interface{}) error {
+					// Check if it's F12 (or we could allow any F key)
+					// The key is from prompt package, so we need to compare by code
+					// For now, accept F12 for "back" functionality
+					promptKey, ok := key.(prompt.Key)
+					if ok && promptKey == prompt.KeyF12 {
+						return ErrGoBack
+					}
+					return nil // Other F keys don't trigger undo by default
+				}
+			})
+			options = []clix.PromptOption{req, undoOption}
+		} else {
+			options = []clix.PromptOption{req}
+		}
+
 		// Use shared reader wrapper to avoid bufio.Reader buffering issues
 		if s.reader != nil {
 			if tp, ok := s.prompter.(clix.TextPrompter); ok {
 				wrapper := sharedTextPrompter{base: tp, reader: s.reader, out: tp.Out}
-				answer, err = wrapper.Prompt(s.ctx, req)
+				answer, err = wrapper.Prompt(s.ctx, options...)
 			} else if tp, ok := s.prompter.(prompt.TerminalPrompter); ok {
-				// For TerminalPrompter, create a new prompter with shared reader
-				sharedPrompter := prompt.TerminalPrompter{In: s.reader, Out: tp.Out}
-				answer, err = sharedPrompter.Prompt(s.ctx, req)
+				// For TerminalPrompter, use original file if available (for raw mode), otherwise use shared reader
+				var inReader io.Reader = s.reader
+				if s.originalFile != nil {
+					// Use original file for raw terminal mode support
+					inReader = s.originalFile
+				}
+				sharedPrompter := prompt.TerminalPrompter{In: inReader, Out: tp.Out}
+				answer, err = sharedPrompter.Prompt(s.ctx, options...)
 			} else {
-				answer, err = s.prompter.Prompt(s.ctx, req)
+				answer, err = s.prompter.Prompt(s.ctx, options...)
 			}
 		} else {
 			// No shared reader available, use prompter directly
-			answer, err = s.prompter.Prompt(s.ctx, req)
+			answer, err = s.prompter.Prompt(s.ctx, options...)
 		}
 		if err != nil {
+			// Check if error is "go back" signal
+			if s.withUndoStack && err == ErrGoBack {
+				return s.handleGoBack()
+			}
 			return fmt.Errorf("prompt failed: %w", err)
 		}
 
-		// Handle undo command
+		// Handle undo command BEFORE saving answer (legacy text "back" - deprecated)
 		if s.withUndoStack && strings.ToLower(strings.TrimSpace(answer)) == "back" {
 			// User wants to go back - restore from history
 			if len(s.history) > 0 {
 				// Restore last question from history immediately
 				lastEntry := s.history[len(s.history)-1]
 				s.history = s.history[:len(s.history)-1]
-				
+
 				// Push the previous question to stack so it gets asked next
 				s.pushQuestion(lastEntry.question)
-				
+
 				// Remove the last answer since we're going back to edit it
 				if len(s.answers) > 0 {
 					s.answers = s.answers[:len(s.answers)-1]
@@ -389,7 +502,7 @@ func (s *Survey) Run() error {
 				if len(s.questionIDs) > 0 {
 					s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
 				}
-				
+
 				// Continue loop to ask the restored question (depth-first: last pushed is asked first)
 				continue
 			}
@@ -398,11 +511,12 @@ func (s *Survey) Run() error {
 			continue
 		}
 
-		// Save answer and question ID
+		// Save answer and question ID (only if not "back")
 		s.answers = append(s.answers, answer)
 		s.questionIDs = append(s.questionIDs, question.ID)
 
 		// If undo is enabled, save to history before executing branch
+		// This happens even if branch might clear the stack - we need history for undo
 		if s.withUndoStack {
 			s.history = append(s.history, historyEntry{
 				question: question,
@@ -412,12 +526,15 @@ func (s *Survey) Run() error {
 
 		// Execute branch based on answer
 		// First try exact match, then fallback to empty string (always branch)
-		branch, ok := question.Branches[answer]
-		if !ok {
-			branch, ok = question.Branches[""]
-		}
-		if ok && branch != nil {
-			branch.Execute(answer, s)
+		// Note: Don't execute branch if answer was "back" (already handled above)
+		if strings.ToLower(strings.TrimSpace(answer)) != "back" {
+			branch, ok := question.Branches[answer]
+			if !ok {
+				branch, ok = question.Branches[""]
+			}
+			if ok && branch != nil {
+				branch.Execute(answer, s)
+			}
 		}
 	}
 
@@ -456,7 +573,7 @@ func (s *Survey) showEndCard() error {
 		// Use text prompt so user can type "back" or "yes"/"no"
 		promptReq = clix.PromptRequest{
 			Label: label + " (yes/no/back)",
-			Theme:  theme,
+			Theme: theme,
 		}
 	} else {
 		// Use confirm prompt for simple yes/no
@@ -474,7 +591,12 @@ func (s *Survey) showEndCard() error {
 			wrapper := sharedTextPrompter{base: tp, reader: s.reader, out: tp.Out}
 			answer, err = wrapper.Prompt(s.ctx, promptReq)
 		} else if tp, ok := s.prompter.(prompt.TerminalPrompter); ok {
-			sharedPrompter := prompt.TerminalPrompter{In: s.reader, Out: tp.Out}
+			// Use original file if available (for raw mode), otherwise use shared reader
+			var inReader io.Reader = s.reader
+			if s.originalFile != nil {
+				inReader = s.originalFile
+			}
+			sharedPrompter := prompt.TerminalPrompter{In: inReader, Out: tp.Out}
 			answer, err = sharedPrompter.Prompt(s.ctx, promptReq)
 		}
 	} else {
@@ -579,8 +701,30 @@ func (s *Survey) renderSummary(out io.Writer) {
 		if theme.LabelStyle != nil {
 			styledLabel = renderText(theme.LabelStyle, label)
 		}
+
+		// Check if answer is in tag format (space-comma-space separated)
+		// Format: " label1 ,  label2 " -> parse and style each tag
 		styledAnswer := answer
-		if theme.DefaultStyle != nil {
+		if strings.HasPrefix(answer, " ") && strings.HasSuffix(answer, " ") && strings.Contains(answer, " ,  ") {
+			// Parse tag-style answer: " label1 ,  label2 "
+			tags := strings.Split(strings.TrimSpace(answer), " ,  ")
+			var styledTags []string
+			for _, tag := range tags {
+				tag = strings.TrimSpace(tag)
+				if tag != "" {
+					if theme.DefaultStyle != nil {
+						styledTags = append(styledTags, renderText(theme.DefaultStyle, tag))
+					} else {
+						styledTags = append(styledTags, tag)
+					}
+				}
+			}
+			// Rejoin with tag-style separators
+			if len(styledTags) > 0 {
+				styledAnswer = " " + strings.Join(styledTags, " ,  ") + " "
+			}
+		} else if theme.DefaultStyle != nil {
+			// Regular answer, apply style
 			styledAnswer = renderText(theme.DefaultStyle, answer)
 		}
 
