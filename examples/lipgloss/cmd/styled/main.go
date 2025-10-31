@@ -173,8 +173,9 @@ $ styled-demo style prompt multiselect
 		promptTheme.Hint = "Enter option numbers (e.g., 1,2,3), then press Enter"
 
 		selected, err := prompter.Prompt(ctx, clix.PromptRequest{
-			Label: "Select features to enable",
-			Theme: promptTheme,
+			Label:       "Select features to enable",
+			Theme:       promptTheme,
+			ContinueText: "Done",
 			Options: []clix.SelectOption{
 				{Label: "Auto-completion", Value: "autocomplete"},
 				{Label: "Syntax highlighting", Value: "highlighting"},
