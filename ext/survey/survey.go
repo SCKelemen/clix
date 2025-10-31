@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 
 	"clix"
 	"clix/ext/prompt"
@@ -57,7 +58,9 @@ func (b HandlerBranch) Execute(answer string, s *Survey) {
 type EndBranch struct{}
 
 func (b EndBranch) Execute(answer string, s *Survey) {
-	// Do nothing - survey will end when stack is empty
+	// Clear the stack so the survey loop will exit
+	// But if undo is enabled, user can still go back from end card
+	s.stack = s.stack[:0]
 }
 
 // Helper functions to create branches (for use in struct literals)
@@ -84,21 +87,106 @@ type Survey struct {
 	ctx            context.Context
 	stack          []*Question
 	answers        []string
+	questionIDs    []string            // Track question IDs in order for end card summary
 	questions      map[string]*Question // Static question registry
 	reader         *bufio.Reader        // Shared reader to avoid bufio buffering issues
 	isTextPrompter bool                 // Whether we're using TextPrompter (needs shared reader)
+
+	// Undo/back functionality
+	withUndoStack bool
+	history       []historyEntry // Question/answer history for undo
+
+	// End card
+	withEndCard bool
+	endCardText string
+	endCardTheme clix.PromptTheme // Theme for end card display
+}
+
+// historyEntry tracks a question and its answer for undo functionality
+type historyEntry struct {
+	question *Question
+	answer   string
+}
+
+// SurveyOption configures survey behavior
+type SurveyOption interface {
+	Apply(*Survey)
+}
+
+// SurveyConfig holds survey configuration
+type SurveyConfig struct {
+	WithUndoStack bool
+	WithEndCard   bool
+	EndCardText   string
+}
+
+// WithUndoStack enables undo/back functionality in the survey.
+// Users can go back to previous questions to change their answers.
+func WithUndoStack() SurveyOption {
+	return undoStackOption{}
+}
+
+type undoStackOption struct{}
+
+func (o undoStackOption) Apply(s *Survey) {
+	s.withUndoStack = true
+	s.history = make([]historyEntry, 0)
+}
+
+// WithEndCard enables a confirmation prompt after the survey completes.
+// The end card shows a formatted summary of all answers with styling support.
+// Users can confirm they're satisfied with their answers, or go back to edit (if WithUndoStack is enabled).
+// The end card uses a confirmation prompt (yes/no) - answering "no" will go back if undo is enabled.
+func WithEndCard() SurveyOption {
+	return endCardOption{text: "", theme: clix.PromptTheme{}}
+}
+
+// WithEndCardText sets a custom end card confirmation message.
+func WithEndCardText(text string) SurveyOption {
+	return endCardOption{text: text, theme: clix.PromptTheme{}}
+}
+
+// WithEndCardTheme sets a custom theme for the end card display.
+// The theme's styles will be used to format the summary of answers.
+func WithEndCardTheme(theme clix.PromptTheme) SurveyOption {
+	return endCardOption{text: "", theme: theme}
+}
+
+type endCardOption struct {
+	text  string
+	theme clix.PromptTheme
+}
+
+func (o endCardOption) Apply(s *Survey) {
+	s.withEndCard = true
+	if o.text != "" {
+		s.endCardText = o.text
+	} else {
+		s.endCardText = "Survey complete. Are you satisfied with your answers?"
+	}
+	s.endCardTheme = o.theme
 }
 
 // New creates a new survey with the given prompter.
-// If the prompter uses an io.Reader, we create a shared reader to handle
-// bufio.Reader buffering correctly across multiple prompts.
-func New(ctx context.Context, prompter clix.Prompter) *Survey {
+// Options can be provided to configure survey behavior:
+//
+//	s := survey.New(ctx, prompter,
+//		survey.WithUndoStack(),
+//		survey.WithEndCard(),
+//	)
+func New(ctx context.Context, prompter clix.Prompter, options ...SurveyOption) *Survey {
 	s := &Survey{
-		prompter:  prompter,
-		ctx:       ctx,
-		stack:     make([]*Question, 0),
-		answers:   make([]string, 0),
-		questions: make(map[string]*Question),
+		prompter:    prompter,
+		ctx:         ctx,
+		stack:       make([]*Question, 0),
+		answers:     make([]string, 0),
+		questionIDs: make([]string, 0),
+		questions:   make(map[string]*Question),
+	}
+
+	// Apply options
+	for _, opt := range options {
+		opt.Apply(s)
 	}
 
 	// Extract the reader from the prompter if possible
@@ -123,47 +211,17 @@ func New(ctx context.Context, prompter clix.Prompter) *Survey {
 
 // NewFromQuestions creates a survey from a slice of questions.
 // This allows defining surveys as struct literals, similar to clix.Command.
+// Options can be provided to enable features like undo and end cards.
 //
 // Example:
 //
-//	questions := []survey.Question{
-//		{
-//			ID: "add-child",
-//			Request: clix.PromptRequest{
-//				Label: "Do you want to add a child?",
-//				Options: []clix.SelectOption{
-//					{Label: "Yes", Value: "yes"},
-//					{Label: "No", Value: "no"},
-//				},
-//			},
-//			Branches: map[string]survey.Branch{
-//				"yes": survey.PushQuestion("child-name"),
-//				"no":  survey.End(),
-//			},
-//		},
-//		{
-//			ID: "child-name",
-//			Request: clix.PromptRequest{Label: "Child's name"},
-//			Branches: map[string]survey.Branch{
-//				"": survey.PushQuestion("add-another"),
-//			},
-//		},
-//		{
-//			ID: "add-another",
-//			Request: clix.PromptRequest{
-//				Label: "Add another child?",
-//				Confirm: true,
-//			},
-//			Branches: map[string]survey.Branch{
-//				"y": survey.PushQuestion("child-name"), // Loop back
-//				"n": survey.End(),
-//			},
-//		},
-//	}
-//
-//	s := survey.NewFromQuestions(ctx, prompter, questions, "add-child")
-func NewFromQuestions(ctx context.Context, prompter clix.Prompter, questions []Question, startID string) *Survey {
-	s := New(ctx, prompter)
+//	questions := []survey.Question{...}
+//	s := survey.NewFromQuestions(ctx, prompter, questions, "add-child",
+//		survey.WithUndoStack(),
+//		survey.WithEndCard(),
+//	)
+func NewFromQuestions(ctx context.Context, prompter clix.Prompter, questions []Question, startID string, options ...SurveyOption) *Survey {
+	s := New(ctx, prompter, options...)
 	s.AddQuestions(questions)
 	s.Start(startID)
 	return s
@@ -254,15 +312,34 @@ func (s *Survey) pushQuestion(q *Question) {
 // Run executes all questions in the survey using depth-first traversal.
 // Questions are processed from the top of the stack, and new questions
 // added by branches are immediately processed before continuing.
+// If undo is enabled, users can type "back" to return to previous questions.
 func (s *Survey) Run() error {
-	for len(s.stack) > 0 {
+	for {
+		// Check if we're done (no more questions in stack)
+		if len(s.stack) == 0 {
+			break
+		}
+		
+		var question *Question
+		var isFromHistory bool
+
 		// Pop the last question (depth-first: process most recently added first)
 		idx := len(s.stack) - 1
-		question := s.stack[idx]
+		question = s.stack[idx]
 		s.stack = s.stack[:idx]
 
 		// Ensure theme is set if not already provided
 		req := question.Request
+
+		// Add undo hint if enabled and not from history
+		if s.withUndoStack && !isFromHistory && len(s.history) > 0 {
+			if req.Theme.Hint == "" {
+				req.Theme.Hint = "(type 'back' to go to previous question)"
+			} else {
+				req.Theme.Hint = req.Theme.Hint + " (type 'back' to go to previous question)"
+			}
+		}
+
 		if req.Theme.Prefix == "" && req.Theme.Error == "" && req.Theme.PrefixStyle == nil {
 			req.Theme = clix.DefaultPromptTheme
 		}
@@ -294,7 +371,44 @@ func (s *Survey) Run() error {
 			return fmt.Errorf("prompt failed: %w", err)
 		}
 
+		// Handle undo command
+		if s.withUndoStack && strings.ToLower(strings.TrimSpace(answer)) == "back" {
+			// User wants to go back - restore from history
+			if len(s.history) > 0 {
+				// Restore last question from history immediately
+				lastEntry := s.history[len(s.history)-1]
+				s.history = s.history[:len(s.history)-1]
+				
+				// Push the previous question to stack so it gets asked next
+				s.pushQuestion(lastEntry.question)
+				
+				// Remove the last answer since we're going back to edit it
+				if len(s.answers) > 0 {
+					s.answers = s.answers[:len(s.answers)-1]
+				}
+				if len(s.questionIDs) > 0 {
+					s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
+				}
+				
+				// Continue loop to ask the restored question (depth-first: last pushed is asked first)
+				continue
+			}
+			// No history, can't go back - ask current question again
+			s.pushQuestion(question)
+			continue
+		}
+
+		// Save answer and question ID
 		s.answers = append(s.answers, answer)
+		s.questionIDs = append(s.questionIDs, question.ID)
+
+		// If undo is enabled, save to history before executing branch
+		if s.withUndoStack {
+			s.history = append(s.history, historyEntry{
+				question: question,
+				answer:   answer,
+			})
+		}
 
 		// Execute branch based on answer
 		// First try exact match, then fallback to empty string (always branch)
@@ -307,6 +421,190 @@ func (s *Survey) Run() error {
 		}
 	}
 
+	// Show end card if enabled
+	if s.withEndCard {
+		return s.showEndCard()
+	}
+
+	return nil
+}
+
+// showEndCard displays an end card with a formatted summary of answers,
+// then asks for confirmation. Users can go back if undo is enabled.
+func (s *Survey) showEndCard() error {
+	out := s.getOut()
+	if out == nil {
+		return fmt.Errorf("no output writer available")
+	}
+
+	// Display formatted summary of answers
+	s.renderSummary(out)
+
+	label := s.endCardText
+	if label == "" {
+		label = "Are you satisfied with your answers?"
+	}
+
+	// Use the end card theme if provided, otherwise use default
+	theme := s.endCardTheme
+	if theme.Prefix == "" && theme.Error == "" && theme.PrefixStyle == nil {
+		theme = clix.DefaultPromptTheme
+	}
+
+	var promptReq clix.PromptRequest
+	if s.withUndoStack && len(s.history) > 0 {
+		// Use text prompt so user can type "back" or "yes"/"no"
+		promptReq = clix.PromptRequest{
+			Label: label + " (yes/no/back)",
+			Theme:  theme,
+		}
+	} else {
+		// Use confirm prompt for simple yes/no
+		promptReq = clix.PromptRequest{
+			Label:   label,
+			Confirm: true,
+			Theme:   theme,
+		}
+	}
+
+	var answer string
+	var err error
+	if s.reader != nil {
+		if tp, ok := s.prompter.(clix.TextPrompter); ok {
+			wrapper := sharedTextPrompter{base: tp, reader: s.reader, out: tp.Out}
+			answer, err = wrapper.Prompt(s.ctx, promptReq)
+		} else if tp, ok := s.prompter.(prompt.TerminalPrompter); ok {
+			sharedPrompter := prompt.TerminalPrompter{In: s.reader, Out: tp.Out}
+			answer, err = sharedPrompter.Prompt(s.ctx, promptReq)
+		}
+	} else {
+		answer, err = s.prompter.Prompt(s.ctx, promptReq)
+	}
+
+	if err != nil {
+		return err
+	}
+
+	answer = strings.ToLower(strings.TrimSpace(answer))
+
+	// If undo is enabled and user typed "back", restore from history
+	if s.withUndoStack && answer == "back" && len(s.history) > 0 {
+		// Restore last question from history
+		lastEntry := s.history[len(s.history)-1]
+		s.history = s.history[:len(s.history)-1]
+		s.pushQuestion(lastEntry.question)
+
+		// Remove last answer
+		if len(s.answers) > 0 {
+			s.answers = s.answers[:len(s.answers)-1]
+		}
+		if len(s.questionIDs) > 0 {
+			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
+		}
+
+		// Continue running the survey
+		return s.Run()
+	}
+
+	// If user said no (not satisfied), go back if undo is enabled
+	if (answer == "n" || answer == "no") && s.withUndoStack && len(s.history) > 0 {
+		// Restore last question from history
+		lastEntry := s.history[len(s.history)-1]
+		s.history = s.history[:len(s.history)-1]
+		s.pushQuestion(lastEntry.question)
+
+		// Remove last answer
+		if len(s.answers) > 0 {
+			s.answers = s.answers[:len(s.answers)-1]
+		}
+		if len(s.questionIDs) > 0 {
+			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
+		}
+
+		// Continue running the survey
+		return s.Run()
+	}
+
+	// User said yes or pressed enter - we're done
+	return nil
+}
+
+// renderSummary displays a formatted summary of all answers with styling support.
+// Works with TextPrompter, TerminalPrompter, and supports lipgloss styles via PromptTheme.
+func (s *Survey) renderSummary(out io.Writer) {
+	if len(s.answers) == 0 {
+		return
+	}
+
+	theme := s.endCardTheme
+	if theme.Prefix == "" && theme.Error == "" && theme.PrefixStyle == nil {
+		theme = clix.DefaultPromptTheme
+	}
+
+	// Render summary title with styling
+	title := "Summary of your answers:"
+	if theme.LabelStyle != nil {
+		title = renderText(theme.LabelStyle, title)
+	}
+	fmt.Fprintf(out, "\n%s\n", title)
+
+	// Render each question/answer pair with styling
+	for i, answer := range s.answers {
+		if i >= len(s.questionIDs) {
+			continue
+		}
+		questionID := s.questionIDs[i]
+		question, ok := s.questions[questionID]
+		if !ok {
+			// Handle dynamic questions that might not be in registry
+			if strings.HasPrefix(questionID, "_dynamic_") {
+				// For dynamic questions, just show the answer
+				styledAnswer := answer
+				if theme.DefaultStyle != nil {
+					styledAnswer = renderText(theme.DefaultStyle, answer)
+				}
+				fmt.Fprintf(out, "  • %s\n", styledAnswer)
+			}
+			continue
+		}
+
+		// Get question label
+		label := question.Request.Label
+		if label == "" {
+			label = questionID
+		}
+
+		// Render with styles (compatible with lipgloss.Style)
+		styledLabel := label
+		if theme.LabelStyle != nil {
+			styledLabel = renderText(theme.LabelStyle, label)
+		}
+		styledAnswer := answer
+		if theme.DefaultStyle != nil {
+			styledAnswer = renderText(theme.DefaultStyle, answer)
+		}
+
+		fmt.Fprintf(out, "  %s: %s\n", styledLabel, styledAnswer)
+	}
+	fmt.Fprint(out, "\n")
+}
+
+// renderText applies a TextStyle to text, similar to prompt rendering
+func renderText(style clix.TextStyle, value string) string {
+	if style == nil {
+		return value
+	}
+	return style.Render(value)
+}
+
+// getOut returns the output writer from the prompter
+func (s *Survey) getOut() io.Writer {
+	if tp, ok := s.prompter.(clix.TextPrompter); ok {
+		return tp.Out
+	}
+	if tp, ok := s.prompter.(prompt.TerminalPrompter); ok {
+		return tp.Out
+	}
 	return nil
 }
 

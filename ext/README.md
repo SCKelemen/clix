@@ -215,6 +215,22 @@ s.Start("name")
 s.Run()
 ```
 
+#### Survey Options
+
+Surveys support optional features via `SurveyOption`:
+
+```go
+s := survey.NewFromQuestions(ctx, app.Prompter, questions, "start",
+	survey.WithUndoStack(),    // Enable "back" command to undo answers
+	survey.WithEndCard(),       // Show summary and confirmation at end
+	survey.WithEndCardTheme(theme), // Custom styling for end card
+)
+```
+
+**WithUndoStack()**: Allows users to type `back` at any prompt to return to the previous question and change their answer.
+
+**WithEndCard()**: Shows a formatted summary of all answers (with styling support) and asks for confirmation. If undo is enabled, users can type `no` or `back` to go back and edit answers.
+
 #### Dynamic Survey (Handler-based)
 
 For dynamic question flows:
