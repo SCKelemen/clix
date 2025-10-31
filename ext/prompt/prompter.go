@@ -156,7 +156,12 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		if currentInput == "" {
 			// Show default in low contrast inline if no input and default exists
 			if cfg.Default != "" {
-				def := renderText(cfg.Theme.DefaultStyle, cfg.Default)
+				// Use PlaceholderStyle if available, otherwise DefaultStyle
+				style := cfg.Theme.PlaceholderStyle
+				if style == nil {
+					style = cfg.Theme.DefaultStyle
+				}
+				def := renderText(style, cfg.Default)
 				fmt.Fprint(p.Out, def)
 			}
 		} else {
@@ -164,23 +169,59 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 			fmt.Fprint(p.Out, currentInput)
 		}
 
-		// Move to next line for hint info
+		// Move to next line for key hints
 		fmt.Fprint(p.Out, "\n")
 		fmt.Fprint(p.Out, "\r\033[K")
 
-		// Show hint at bottom in low contrast (if provided)
-		// If no hint but no default, show a helpful message
-		if cfg.Theme.Hint != "" {
-			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
-			fmt.Fprint(p.Out, hint)
-		} else if cfg.Default == "" && currentInput == "" {
-			// No default and no input - show helpful hint
-			hintText := "Press Enter to submit"
-			if cfg.Theme.HintStyle != nil {
-				hintText = renderText(cfg.Theme.HintStyle, hintText)
+		// Show key hints: [ Tab ] Autocomplete [ ESC ] Back [ Enter ] Submit
+		var hints []string
+
+		// Tab / Autocomplete (only if default exists)
+		hasDefault := cfg.Default != ""
+		if hasDefault {
+			hint := "[ Tab ] Autocomplete"
+			if cfg.Theme.ButtonActiveStyle != nil {
+				hint = renderText(cfg.Theme.ButtonActiveStyle, hint)
 			}
-			fmt.Fprint(p.Out, hintText)
+			hints = append(hints, hint)
+		} else {
+			hint := "[ Tab ] Autocomplete"
+			if cfg.Theme.ButtonInactiveStyle != nil {
+				hint = renderText(cfg.Theme.ButtonInactiveStyle, hint)
+			}
+			hints = append(hints, hint)
 		}
+
+		// ESC / Back (only if OnEscape is set)
+		hasBack := cfg.OnEscape != nil
+		if hasBack {
+			hint := "[ ESC ] Back"
+			if cfg.Theme.ButtonActiveStyle != nil {
+				hint = renderText(cfg.Theme.ButtonActiveStyle, hint)
+			}
+			hints = append(hints, hint)
+		} else {
+			hint := "[ ESC ] Back"
+			if cfg.Theme.ButtonInactiveStyle != nil {
+				hint = renderText(cfg.Theme.ButtonInactiveStyle, hint)
+			}
+			hints = append(hints, hint)
+		}
+
+		// Enter / Submit (always available)
+		hint := "[ Enter ] Submit"
+		if cfg.Theme.ButtonActiveStyle != nil {
+			hint = renderText(cfg.Theme.ButtonActiveStyle, hint)
+		}
+		hints = append(hints, hint)
+
+		// Join hints with spaces
+		hintText := strings.Join(hints, "    ")
+		if cfg.Theme.HintStyle != nil {
+			// Apply hint style to the whole line
+			hintText = renderText(cfg.Theme.HintStyle, hintText)
+		}
+		fmt.Fprint(p.Out, hintText)
 
 		// Move cursor back up to input line and position at end
 		MoveCursorUp(p.Out, 1)

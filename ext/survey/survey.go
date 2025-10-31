@@ -433,7 +433,8 @@ func (s *Survey) Run() error {
 
 		// Prepare options - add undo handlers if enabled
 		var options []clix.PromptOption
-		if s.withUndoStack && !isFromHistory && len(s.history) > 0 {
+		canGoBack := s.withUndoStack && !isFromHistory && len(s.history) > 0
+		if canGoBack {
 			// Add undo handlers for Escape and F12
 			undoOption := clix.TextPromptOption(func(cfg *clix.PromptConfig) {
 				cfg.OnEscape = func() error {

@@ -170,11 +170,15 @@ type PromptTheme struct {
 	Hint   string
 	Error  string
 
-	PrefixStyle  TextStyle
-	LabelStyle   TextStyle
-	HintStyle    TextStyle
-	DefaultStyle TextStyle
-	ErrorStyle   TextStyle
+	PrefixStyle         TextStyle
+	LabelStyle          TextStyle
+	HintStyle           TextStyle
+	DefaultStyle        TextStyle
+	PlaceholderStyle    TextStyle // Style for placeholder/default text
+	ErrorStyle          TextStyle
+	ButtonActiveStyle   TextStyle // Style for active button hints
+	ButtonInactiveStyle TextStyle // Style for inactive/grayed-out button hints
+	ButtonHoverStyle    TextStyle // Style for hovered button hints
 }
 
 // DefaultPromptTheme provides a sensible default for terminal prompts.
