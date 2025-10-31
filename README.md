@@ -9,30 +9,49 @@
   ╚═════╝ ╚══════╝ ╚═╝ ╚═╝  ╚═╝
 ```
 
-`clix` is an opinionated, batteries-optional framework for building nested CLI
-applications using plain Go. It provides a declarative API for describing
-commands, flags, and arguments while handling configuration hydration,
-interactive prompting, and contextual execution hooks for you. The project
-strives for minimal dependencies and simplicity while delivering a cohesive CLI
-experience similar in spirit to Cobra, ff, and Prompt UI.
+## Introduction
 
-## Features
+`clix` is an opinionated, batteries-optional framework for building nested CLI applications using plain Go. It provides a declarative API for describing commands, flags, and arguments while handling configuration hydration, interactive prompting, and contextual execution hooks for you.
 
-- Hierarchical commands with aliases, usage metadata, and visibility controls to
-  reinforce consistent command hierarchies
-- Global and command-level flags with environment variable and config defaults
-- Required and optional positional arguments with automatic prompting
-- Pre- and post-run hooks for cross-cutting concerns
-- YAML configuration backed by `~/.config/<app>/config.yaml`
-- Built-in `help`, `config`, and `autocomplete` commands
-- Structured output helpers via a global `--format` flag (json/yaml/text)
-- Intuitive prompting that stays consistent across category and leaf commands
-- First-class JSON and YAML rendering utilities for structured workflows
+The project strives for minimal dependencies and simplicity while delivering a cohesive CLI experience similar in spirit to Cobra, ff, and Prompt UI. `clix` is designed to be **simple by default, powerful when needed**—starting with core functionality and allowing optional features through an extension system.
 
-## Quick start
+## Principles
 
-Applications built with `clix` work best when the executable wiring and the
-command implementations live in separate packages. A minimal layout looks like:
+`clix` follows a few core behavioral principles that ensure consistent and intuitive CLI interactions:
+
+1. **Parent commands show help**: Commands with subcommands display their help surface when invoked without a subcommand or with an unknown subcommand.
+
+2. **Actionable commands prompt**: Commands without subcommands that require arguments will automatically prompt for missing required arguments, providing a smooth interactive experience.
+
+3. **Help flags take precedence**: Global and command-level `-h`/`--help` flags always show help information, even if arguments are missing.
+
+4. **Configuration precedence**: Values are resolved in the following order (highest precedence first):
+   - Explicit flag values from the command line
+   - Environment variables matching the flag or command setting
+   - Entries in `~/.config/<app>/config.yaml`
+   - Flag defaults defined on the command or global flag set
+
+## Goals
+
+- **Minimal overhead for simple apps**: Core library is lightweight, with optional features via extensions
+- **Declarative API**: Describe your CLI structure clearly and concisely
+- **Consistent behavior**: Predictable help, prompting, and command execution patterns
+- **Great developer experience**: Clear types, helpful defaults, and comprehensive examples
+- **Batteries-included when needed**: Extensions provide powerful features without polluting core functionality
+- **Structured output support**: Built-in JSON/YAML/text formatting for machine-readable output
+- **Interactive by default**: Smart prompting that guides users through required inputs
+
+## Not Goals
+
+- **Everything as a dependency**: Features like help commands, autocomplete, and version checking are opt-in via extensions
+- **Complex state management**: `clix` focuses on CLI structure, not application state
+- **Built-in templating or rich output**: While styling is supported, `clix` doesn't include markdown rendering or complex UI components by default
+- **Subcommand auto-generation**: You explicitly define your command tree
+- **Automatic flag inference**: Flags must be explicitly declared (though defaults, env vars, and config files reduce boilerplate)
+
+## Quick Start
+
+Applications built with `clix` work best when the executable wiring and the command implementations live in separate packages. A minimal layout looks like:
 
 ```
 demo/
@@ -41,8 +60,7 @@ demo/
   internal/greet/command.go
 ```
 
-`cmd/demo/main.go` bootstraps cancellation, logging, and error handling for the
-process:
+`cmd/demo/main.go` bootstraps cancellation, logging, and error handling for the process:
 
 ```go
 // cmd/demo/main.go
@@ -64,8 +82,7 @@ func main() {
 }
 ```
 
-`cmd/demo/app.go` owns the `clix.App` and root command definition while
-delegating subcommands to the `internal/` tree:
+`cmd/demo/app.go` owns the `clix.App` and root command definition while delegating subcommands to the `internal/` tree:
 
 ```go
 // cmd/demo/app.go
@@ -73,6 +90,7 @@ package main
 
 import (
         "clix"
+        "clix/ext/help"
         "example.com/demo/internal/greet"
 )
 
@@ -99,12 +117,15 @@ func newApp() *clix.App {
         }
 
         app.Root = root
+
+        // Add optional extensions
+        app.AddExtension(help.Extension{})
+
         return app
 }
 ```
 
-The implementation of the `greet` command (including flags, arguments, and
-handlers) lives in `internal/greet`:
+The implementation of the `greet` command (including flags, arguments, and handlers) lives in `internal/greet`:
 
 ```go
 // internal/greet/command.go
@@ -140,73 +161,64 @@ func NewCommand(project *string) *clix.Command {
 }
 ```
 
-When no positional arguments are provided, `clix` will prompt the user for any
-required values. For example `demo greet` will prompt for the `name` argument
-before executing the command handler. Because the root command's `Run` handler
-renders the help surface, invoking `demo` on its own prints the full set of
-available commands. Category commands can follow the same pattern to display
-their scoped help (`clix.HelpRenderer{App: ctx.App, Command: ctx.Command}`)
-whenever they're executed without a subcommand, mirroring tools like `gh auth`.
+When no positional arguments are provided, `clix` will prompt the user for any required values. For example `demo greet` will prompt for the `name` argument before executing the command handler. Because the root command's `Run` handler renders the help surface, invoking `demo` on its own prints the full set of available commands.
 
-The full runnable version of this example (including additional flags and
-configuration usage) can be found in [`examples/basic`](examples/basic).
+The full runnable version of this example (including additional flags and configuration usage) can be found in [`examples/basic`](examples/basic).
 
-### Defining commands and subcommands
+## Features
 
-Every command in a `clix` application is represented by a [`*clix.Command`](command.go).
-`clix.NewCommand` initializes a command with a scoped flag set and a default
-`--help` flag, letting you focus on wiring behavior:
+### Hierarchical Commands
+
+Commands can contain nested subcommands, forming a tree structure. Each command supports:
+- **Aliases**: Alternative names for the same command
+- **Usage metadata**: Short descriptions, long descriptions, examples
+- **Visibility controls**: Hidden commands for internal or experimental features
+- **Execution hooks**: `PreRun`, `Run`, and `PostRun` handlers
 
 ```go
-import "fmt"
-
 users := clix.NewCommand("users")
 users.Short = "Manage user accounts"
 users.Long = "Create, list, and delete users in the current project"
 users.Run = func(ctx *clix.Context) error {
         return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 }
-```
 
-Commands can expose execution hooks (`PreRun`, `Run`, `PostRun`), aliases, usage
-strings, and examples. Nested command trees are described declaratively via the
-`Subcommands` field or built programmatically with `AddCommand` to reinforce
-your command hierarchy:
-
-```go
 create := clix.NewCommand("create")
 create.Short = "Create a user"
-create.Run = func(ctx *clix.Context) error {
-        fmt.Fprintf(ctx.App.Out, "creating %s\n", ctx.Args[0])
-        return nil
-}
-
-delete := clix.NewCommand("delete")
-delete.Short = "Delete a user"
-
-users.Subcommands = []*clix.Command{create, delete}
+users.AddCommand(create)
 ```
 
-When the app starts, `clix` prepares the tree so that `users create` resolves to
-the `create` command. Invoking `users` on its own executes the `users.Run`
-handler, which is a good place to render scoped help for that category. Because
-each package exports a fully configured command (including its children), the
-same module can power standalone binaries and larger shared CLIs by importing it
-under multiple roots.
+### Flags and Configuration
 
-### Working with positional arguments
-
-Commands declare positional inputs with [`*clix.Argument`](argument.go)
-definitions. Each argument describes its `Name`, whether it is `Required`, an
-optional prompt label, a default value, and validation logic:
+Global and command-level flags support:
+- **Environment variable defaults**: Automatically read from environment
+- **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml`
+- **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`)
+- **Type support**: String, bool, int, int64, float64
+- **Precedence**: Flag values > Environment variables > Config file > Defaults
 
 ```go
-import (
-        "fmt"
-        "strings"
-)
+var project string
+app.GlobalFlags.StringVar(&clix.StringVarOptions{
+        Name:    "project",
+        Short:   "p",
+        Usage:   "Project to operate on",
+        EnvVar:  "MYAPP_PROJECT",
+        Value:   &project,
+        Default: "default-project",
+})
+```
 
-create.Arguments = []*clix.Argument{{
+### Positional Arguments
+
+Commands can define required or optional positional arguments with:
+- **Automatic prompting**: Missing required arguments trigger interactive prompts
+- **Validation**: Custom validation functions run before execution
+- **Default values**: Optional arguments can have defaults
+- **Smart labels**: Prompt labels default to title-cased argument names
+
+```go
+cmd.Arguments = []*clix.Argument{{
         Name:     "email",
         Prompt:   "Email address",
         Required: true,
@@ -219,127 +231,66 @@ create.Arguments = []*clix.Argument{{
 }}
 ```
 
-At runtime `clix` ensures required arguments are provided, prompting the user
-interactively when a value is missing. Prompt labels default to a title-cased
-version of the argument name (for example `project-id` becomes `Project Id`).
-Validation errors surface immediately, letting you guide users toward acceptable
-input before the handler executes.
+### Interactive Prompting
 
-### Opting into feature packages
+`clix` provides several prompt types:
+- **Text input**: Standard text prompts with validation
+- **Select**: Single-choice from a list (navigable with arrow keys)
+- **Multi-select**: Multiple choices from a list
+- **Confirm**: Yes/no confirmation prompts
 
-Keeping the executable under `cmd/` lets you choose which internal feature
-packages to include when assembling your CLI. For instance, the
-[`examples/gcloud`](examples/gcloud) binary enables authentication,
-configuration, and project management by wiring those modules explicitly:
+Prompts automatically use raw terminal mode when available (for arrow key navigation) and fall back to line-based input otherwise.
 
 ```go
-var (
-        includeAuth     = true
-        includeConfig   = true
-        includeProjects = true
-)
-
-builders := map[string]commandBuilder{
-        "auth": {
-                Enabled: includeAuth,
-                Build:   authcmd.NewCommand,
+// Select prompt
+result, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
+        Label: "Choose an option",
+        Options: []clix.SelectOption{
+                {Label: "Option 1", Value: "1"},
+                {Label: "Option 2", Value: "2"},
         },
-        "projects": {
-                Enabled: includeProjects,
-                Build:   func() *clix.Command { return projectscmd.NewCommand(&project) },
-        },
-        "config": {
-                Enabled: includeConfig,
-                Build:   func() *clix.Command { return configcmd.NewCommand(&project) },
-        },
-}
+})
+
+// Confirm prompt
+result, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
+        Label:   "Proceed?",
+        Confirm: true,
+        Default: "y",
+})
 ```
 
-Setting one of the feature flags to `false` removes that command tree entirely
-without having to touch the implementation living under `internal/`.
+### Structured Output
 
-Because each internal package describes its own child commands declaratively,
-those modules can run as standalone CLIs and slot into a larger binary without
-rewiring. A team can prototype a `database` tool under
-`internal/database/commands.go`, ship a dedicated `cmd/database/main.go` for
-their day-to-day workflows, and later publish that same package to the broader
-`dev` CLI simply by importing it:
+Global `--format` flag supports `json`, `yaml`, and `text` output formats:
 
 ```go
-// cmd/dev/app.go
-root := clix.NewCommand("dev")
-root.Subcommands = []*clix.Command{
-        authcmd.NewCommand(),         // shared authentication helpers
-        databasecmd.NewCommand(),     // promoted from the database team's CLI
-        vulnerabilitycmd.NewCommand() // opt-in tooling from the security team
-}
+// In your command handler
+return ctx.App.FormatOutput(data) // Uses --format flag automatically
 ```
 
-Feature-specific binaries can keep additional subcommands private (for example,
-advanced vulnerability auditing routines) while the shared packages expose only
-the commands intended for the wider engineering org.
+Commands like `version` and `config list` automatically support structured output for machine-readable workflows.
 
-### Static command trees
+### Styling
 
-If you prefer to describe your CLI hierarchy using Go struct literals, assign
-the fully populated command tree to `app.Root`. `clix` will automatically wire
-up parent references and ensure a help flag is available on every command when
-the application starts.
+Optional styling hooks allow integration with packages like [`lipgloss`](https://github.com/charmbracelet/lipgloss):
 
 ```go
-app.Root = &clix.Command{
-        Name:  "demo",
-        Short: "Demo application",
-        Subcommands: []*clix.Command{{
-                Name:  "greet",
-                Short: "Print a greeting",
-                Usage: "demo greet [name]",
-                Arguments: []*clix.Argument{{
-                        Name:     "name",
-                        Prompt:   "Name of the person to greet",
-                        Required: true,
-                }},
-                Run: func(ctx *clix.Context) error {
-                        fmt.Fprintf(ctx.App.Out, "Hello %s!\n", ctx.Args[0])
-                        return nil
-                },
-        }},
-}
+import "github.com/charmbracelet/lipgloss"
+
+style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+app.DefaultTheme.PrefixStyle = clix.StyleFunc(style.Render)
+app.Styles.SectionHeading = clix.StyleFunc(style.Render)
 ```
 
-Both construction styles are fully supported—mix and match them as your
-application grows.
+Styling is optional—applications without styling still work perfectly.
 
-## Pre- and post-run hooks
+### Command Context
 
-Every command exposes optional `PreRun` and `PostRun` hooks in addition to the
-main `Run` handler. Hooks receive the same [`*clix.Context`](#command-context)
-as the main handler and execute immediately before and after the command body
-respectively. Hooks are often used for validation, logging, telemetry, or
-resource cleanup. Returning a non-nil error from a hook aborts execution.
-
-```go
-cmd := clix.NewCommand("sync")
-cmd.PreRun = func(ctx *clix.Context) error {
-        // validate configuration or establish shared resources
-        return nil
-}
-cmd.Run = func(ctx *clix.Context) error {
-        // main command logic
-        return nil
-}
-cmd.PostRun = func(ctx *clix.Context) error {
-        // emit analytics or teardown resources
-        return nil
-}
-```
-
-## Command context
-
-Command handlers receive a `*clix.Context`, which embeds the standard
-`context.Context` for cancellation and deadlines while surfacing convenient
-accessors for the active command, arguments, application instance, and
-hydrated flag/config values.
+Command handlers receive a `*clix.Context` that embeds `context.Context` and provides:
+- Access to the active command and arguments
+- Application instance and configuration
+- Hydrated flag/config values via helper methods
+- Standard output/error streams
 
 ```go
 cmd.Run = func(ctx *clix.Context) error {
@@ -357,82 +308,246 @@ cmd.Run = func(ctx *clix.Context) error {
 }
 ```
 
-Because `clix.Context` embeds `context.Context`, it plays nicely with other Go
-APIs that accept a `context.Context`. If you prefer not to use context
-propagation you can ignore the embedded behavior and treat it purely as a
-container for CLI state.
+## Extensions
 
-## Configuration and environment defaults
+Extensions provide optional "batteries-included" features that can be added to your CLI application without adding overhead for simple apps that don't need them.
 
-Values are resolved in the following order (highest precedence first):
+This design is inspired by [goldmark's extension system](https://github.com/yuin/goldmark), which allows features to be added without polluting the core library.
 
-1. Explicit flag values from the command line
-2. Environment variables matching the flag or command setting
-3. Entries in `~/.config/<app>/config.yaml`
-4. Flag defaults defined on the command or global flag set
+### Philosophy
 
-The built-in `config` command helps inspect and mutate the persisted YAML
-configuration file.
+**Simple by default, powerful when needed.** `clix` starts with minimal overhead:
+- Core command/flag/argument parsing
+- Flag-based help (`-h`, `--help`) - always available
+- Prompting UI
+- Configuration management (API only, not commands)
 
-## Autocompletion
+Everything else is opt-in via extensions, including:
+- Command-based help (`cli help`)
+- Config management commands (`cli config`)
+- Shell completion (`cli autocomplete`)
+- Version information (`cli version`)
+- And future extensions...
 
-The built-in `autocomplete` command outputs shell-specific completion scripts.
-Run `cli autocomplete bash` (or `fish`/`zsh`) and follow the instructions
-printed to integrate completion into your environment.
+### Using Extensions
 
-## Styling prompts and help output
-
-`clix` exposes optional styling hooks that leave the default text-only output
-untouched while enabling integrations with packages like
-[`lipgloss`](https://github.com/charmbracelet/lipgloss). Styles are represented
-as simple render functions via the `TextStyle` interface, making it easy to plug
-in any formatter:
+Add extensions to your app before calling `Run()`:
 
 ```go
 import (
         "clix"
-        "strings"
-
-        "github.com/charmbracelet/lipgloss"
+        "clix/ext/autocomplete"
+        "clix/ext/config"
+        "clix/ext/help"
+        "clix/ext/version"
 )
 
-theme := clix.DefaultPromptTheme
-theme.LabelStyle = clix.StyleFunc(strings.ToUpper)
+app := clix.NewApp("myapp")
+app.Root = clix.NewCommand("myapp")
 
-app := clix.NewApp("demo")
-app.DefaultTheme = theme
-
-help := clix.DefaultStyles
-help.SectionHeading = clix.StyleFunc(func(s string) string {
-        return "== " + strings.ToUpper(s) + " =="
+// Add extensions for optional features
+app.AddExtension(help.Extension{})         // Adds: myapp help [command]
+app.AddExtension(config.Extension{})       // Adds: myapp config, myapp config list, etc.
+app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [shell]
+app.AddExtension(version.Extension{        // Adds: myapp version
+        Version: "1.0.0",
+        Commit:  "abc123",  // optional
+        Date:    "2024-01-01", // optional
 })
-app.Styles = help
 
-// lipgloss integration
-style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-app.DefaultTheme.PrefixStyle = clix.StyleFunc(style.Render)
+// Flag-based help works without extensions: myapp -h, myapp --help
+app.Run(context.Background(), nil)
 ```
 
-Because the styling API only wraps render functions, you can freely mix and
-match plain strings, `lipgloss` styles, or your own formatters without affecting
-applications that prefer minimal output.
+### Available Extensions
+
+#### Help Extension (`clix/ext/help`)
+
+Adds command-based help similar to man pages:
+- `cli help` - Show help for the root command
+- `cli help [command]` - Show help for a specific command
+
+**Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
+
+#### Config Extension (`clix/ext/config`)
+
+Adds configuration management commands:
+- `cli config` - Show help for config commands
+- `cli config list` - List all configuration values (supports `--format=json|yaml|text`)
+- `cli config get <key>` - Get a specific value
+- `cli config set <key> <value>` - Set a value
+- `cli config reset` - Clear all configuration
+
+#### Autocomplete Extension (`clix/ext/autocomplete`)
+
+Adds shell completion script generation:
+- `cli autocomplete [bash|zsh|fish]` - Generate completion script for the specified shell
+- If no shell is provided, shows help
+
+#### Version Extension (`clix/ext/version`)
+
+Adds version information:
+- `cli version` - Show version information, including Go version and build info (supports `--format=json|yaml|text`)
+- Global `--version`/`-v` flag - Show simple version string (e.g., `cli --version` shows "cli version 1.0.0")
+
+```go
+app.AddExtension(version.Extension{
+        Version: "1.0.0",
+        Commit:  "abc123",  // optional
+        Date:    "2024-01-01", // optional
+})
+```
+
+**Zero overhead if not imported:** Extensions only add commands when imported and registered. Simple apps that don't import them pay zero cost.
+
+### Creating Extensions
+
+Extensions implement the `clix.Extension` interface:
+
+```go
+package myextension
+
+import "clix"
+
+type Extension struct {
+        // Optional: extension-specific configuration
+}
+
+func (e Extension) Extend(app *clix.App) error {
+        // Add commands, modify behavior, etc.
+        if app.Root != nil {
+                app.Root.AddCommand(MyCustomCommand(app))
+        }
+        return nil
+}
+```
+
+Extensions are applied lazily when `Run()` is called, or can be applied early with `ApplyExtensions()`.
+
+For more details, see [`ext/README.md`](ext/README.md).
+
+## Key API Types
+
+### `clix.App`
+
+The `App` struct represents a runnable CLI application and wires together the root command, global flag set, configuration manager, and prompting behavior.
+
+```go
+type App struct {
+        Name        string
+        Version     string
+        Description string
+
+        Root        *Command
+        GlobalFlags *FlagSet
+        Config      *ConfigManager
+        Prompter    Prompter
+        Out         io.Writer
+        Err         io.Writer
+        In          io.Reader
+        EnvPrefix   string
+
+        DefaultTheme  PromptTheme
+        Styles        Styles
+}
+```
+
+Key methods:
+- `NewApp(name string) *App` - Construct a new application
+- `Run(ctx context.Context, args []string) error` - Execute the application
+- `AddExtension(ext Extension)` - Register an extension
+- `ApplyExtensions() error` - Apply all registered extensions
+- `OutputFormat() string` - Get the current output format (json/yaml/text)
+- `FormatOutput(data interface{}) error` - Format data using the current format
+
+### `clix.Command`
+
+A `Command` represents a CLI command. Commands can contain nested subcommands, flags, argument definitions, and execution hooks.
+
+```go
+type Command struct {
+        Name        string
+        Aliases     []string
+        Short       string
+        Long        string
+        Usage       string
+        Example     string
+        Hidden      bool
+        Flags       *FlagSet
+        Arguments   []*Argument
+        Subcommands []*Command
+
+        Run     Handler
+        PreRun  Hook
+        PostRun Hook
+}
+```
+
+Key methods:
+- `NewCommand(name string) *Command` - Construct a new command
+- `AddCommand(cmd *Command)` - Register a subcommand
+- `Path() string` - Get the full command path from root
+
+### `clix.Argument`
+
+An `Argument` describes a positional argument for a command.
+
+```go
+type Argument struct {
+        Name     string
+        Prompt   string
+        Default  string
+        Required bool
+        Validate func(string) error
+}
+```
+
+Methods:
+- `PromptLabel() string` - Get the prompt label (defaults to title-cased name)
+
+### `clix.PromptRequest`
+
+A `PromptRequest` carries the information necessary to display a prompt.
+
+```go
+type PromptRequest struct {
+        Label    string
+        Default  string
+        Validate func(string) error
+        Theme    PromptTheme
+
+        // Options for select-style prompts
+        Options []SelectOption
+
+        // MultiSelect enables multi-selection mode
+        MultiSelect bool
+
+        // Confirm is for yes/no confirmation prompts
+        Confirm bool
+
+        // ContinueText for multi-select prompts
+        ContinueText string
+}
+```
+
+### `clix.Extension`
+
+The `Extension` interface allows optional features to be added to an application.
+
+```go
+type Extension interface {
+        Extend(app *App) error
+}
+```
 
 ## Examples
 
-- [`examples/basic`](examples/basic): end-to-end application demonstrating
-  commands, flags, prompting, and configuration usage.
-- [`examples/gh`](examples/gh): a GitHub CLI-style hierarchy with familiar
-  subcommands, aliases, and interactive prompts.
-- [`examples/gcloud`](examples/gcloud): a Google Cloud CLI-inspired tree with
-  large command groups, global flags, and configuration interactions.
-- [`examples/lipgloss`](examples/lipgloss): demonstrates prompt and help styling
-  using [`lipgloss`](https://github.com/charmbracelet/lipgloss).
-
-More scenarios (including prompting workflows and advanced flag composition)
-will be added over time.
+- [`examples/basic`](examples/basic): End-to-end application demonstrating commands, flags, prompting, and configuration usage.
+- [`examples/gh`](examples/gh): A GitHub CLI-style hierarchy with familiar subcommands, aliases, and interactive prompts.
+- [`examples/gcloud`](examples/gcloud): A Google Cloud CLI-inspired tree with large command groups, global flags, and configuration interactions.
+- [`examples/lipgloss`](examples/lipgloss): Demonstrates prompt and help styling using [`lipgloss`](https://github.com/charmbracelet/lipgloss), including select, multi-select, and confirm prompts.
+- [`examples/multicli`](examples/multicli): Demonstrates sharing command implementations across multiple CLI applications with different hierarchies, similar to Google Cloud's gcloud/bq pattern.
 
 ## Contributing
 
-Issues and pull requests are welcome. Please include tests when adding new
-behavior and run `go test ./...` before submitting changes.
-
+Issues and pull requests are welcome. Please include tests when adding new behavior and run `go test ./...` before submitting changes.
