@@ -1,0 +1,9 @@
+# Build artifacts
+demo
+gcloud
+gh
+examples/lipgloss/styled
+*.exe
+*.test
+*.out
+
