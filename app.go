@@ -31,6 +31,10 @@ type App struct {
 	configLoaded  bool
 	configLoadErr error
 	rootPrepared  bool
+
+	// Extensions for optional batteries-included features
+	extensions        []Extension
+	extensionsApplied bool
 }
 
 // NewApp constructs an application with sensible defaults. Callers are still
@@ -69,8 +73,10 @@ func NewApp(name string) *App {
 	return app
 }
 
-// AddDefaultCommands attaches built-in helper commands to the application. It
-// is safe to call multiple times; duplicate commands will not be added.
+// AddDefaultCommands attaches built-in helper commands to the application.
+// Currently only includes "help" (minimal overhead). Use extensions for
+// optional features like config management.
+// It is safe to call multiple times; duplicate commands will not be added.
 func (a *App) AddDefaultCommands() {
 	if a.Root == nil {
 		return
@@ -80,10 +86,8 @@ func (a *App) AddDefaultCommands() {
 		a.Root.AddCommand(NewHelpCommand(a))
 	}
 
-	if a.Root.findSubcommand("config") == nil {
-		a.Root.AddCommand(NewConfigCommand(a))
-	}
-
+	// Config is now an extension - add via clix/ext/config
+	// Autocomplete is still built-in for now but can be moved to extension later
 	if a.Root.findSubcommand("autocomplete") == nil {
 		a.Root.AddCommand(NewAutocompleteCommand(a))
 	}
@@ -97,6 +101,12 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	a.ensureRootPrepared()
+
+	// Apply extensions before adding default commands (extensions might add commands)
+	if err := a.ApplyExtensions(); err != nil {
+		return err
+	}
+
 	a.AddDefaultCommands()
 
 	if args == nil {
@@ -293,10 +303,10 @@ func (a *App) countUserSubcommands(cmd *Command) int {
 		return 0
 	}
 
-	// Default command names that are added by AddDefaultCommands
+	// Default command names that are added by AddDefaultCommands or extensions
 	defaultCommands := map[string]bool{
 		"help":         true,
-		"config":       true,
+		"config":       true, // Added by config extension if present
 		"autocomplete": true,
 	}
 
