@@ -19,25 +19,34 @@ func (h HelpRenderer) Render(w io.Writer) error {
 		return fmt.Errorf("no command provided")
 	}
 
+	styles := h.App.Styles
+
 	if cmd == h.App.Root {
-		fmt.Fprintf(w, "%s\n", strings.ToUpper(h.App.Name))
+		title := strings.ToUpper(h.App.Name)
+		fmt.Fprintf(w, "%s\n", renderText(styles.AppTitle, title))
 		if h.App.Description != "" {
-			fmt.Fprintf(w, "%s\n\n", h.App.Description)
+			desc := renderText(styles.AppDescription, h.App.Description)
+			fmt.Fprintf(w, "%s\n\n", desc)
 		} else {
 			fmt.Fprintln(w)
 		}
 	} else {
-		fmt.Fprintf(w, "%s\n\n", cmd.Short)
+		short := cmd.Short
+		if short == "" {
+			short = cmd.Long
+		}
+		fmt.Fprintf(w, "%s\n\n", renderText(styles.CommandTitle, short))
 	}
 
 	usage := cmd.Usage
 	if usage == "" {
 		usage = fmt.Sprintf("%s [flags]", cmd.Path())
 	}
-	fmt.Fprintf(w, "USAGE\n  %s\n\n", usage)
+	fmt.Fprintf(w, "%s\n  %s\n\n", renderText(styles.SectionHeading, "USAGE"), renderText(styles.Usage, usage))
 
 	if cmd.Long != "" {
-		fmt.Fprintf(w, "%s\n\n", cmd.Long)
+		long := renderText(styles.CommandTitle, cmd.Long)
+		fmt.Fprintf(w, "%s\n\n", long)
 	}
 
 	h.renderFlags(w, cmd)
@@ -45,7 +54,8 @@ func (h HelpRenderer) Render(w io.Writer) error {
 	h.renderSubcommands(w, cmd)
 
 	if cmd.Example != "" {
-		fmt.Fprintf(w, "EXAMPLES\n  %s\n", strings.ReplaceAll(cmd.Example, "\n", "\n  "))
+		example := strings.ReplaceAll(cmd.Example, "\n", "\n  ")
+		fmt.Fprintf(w, "%s\n  %s\n", renderText(styles.SectionHeading, "EXAMPLES"), renderText(styles.Example, example))
 	}
 
 	return nil
@@ -57,14 +67,16 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 		return
 	}
 
-	fmt.Fprintln(w, "FLAGS")
+	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "FLAGS"))
 	for _, flag := range flags {
 		var names []string
 		if flag.Short != "" {
 			names = append(names, "-"+flag.Short)
 		}
 		names = append(names, "--"+flag.Name)
-		fmt.Fprintf(w, "  %-20s %s\n", strings.Join(names, ", "), flag.Usage)
+		renderedNames := renderText(h.App.Styles.FlagName, strings.Join(names, ", "))
+		usage := renderText(h.App.Styles.FlagUsage, flag.Usage)
+		fmt.Fprintf(w, "  %-20s %s\n", renderedNames, usage)
 	}
 	fmt.Fprintln(w)
 }
@@ -73,13 +85,15 @@ func (h HelpRenderer) renderArguments(w io.Writer, cmd *Command) {
 	if len(cmd.Arguments) == 0 {
 		return
 	}
-	fmt.Fprintln(w, "ARGUMENTS")
+	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "ARGUMENTS"))
 	for _, arg := range cmd.Arguments {
 		marker := "optional"
 		if arg.Required {
 			marker = "required"
 		}
-		fmt.Fprintf(w, "  %-20s %s\n", arg.Name, marker)
+		name := renderText(h.App.Styles.ArgumentName, arg.Name)
+		marker = renderText(h.App.Styles.ArgumentMarker, marker)
+		fmt.Fprintf(w, "  %-20s %s\n", name, marker)
 	}
 	fmt.Fprintln(w)
 }
@@ -89,13 +103,15 @@ func (h HelpRenderer) renderSubcommands(w io.Writer, cmd *Command) {
 	if len(subs) == 0 {
 		return
 	}
-	fmt.Fprintln(w, "SUBCOMMANDS")
+	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "SUBCOMMANDS"))
 	for _, sub := range subs {
 		desc := sub.Short
 		if desc == "" {
 			desc = sub.Long
 		}
-		fmt.Fprintf(w, "  %-20s %s\n", sub.Name, desc)
+		name := renderText(h.App.Styles.SubcommandName, sub.Name)
+		desc = renderText(h.App.Styles.SubcommandDesc, desc)
+		fmt.Fprintf(w, "  %-20s %s\n", name, desc)
 	}
 	fmt.Fprintln(w)
 }

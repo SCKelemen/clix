@@ -27,6 +27,7 @@ type App struct {
 	EnvPrefix   string
 
 	DefaultTheme  PromptTheme
+	Styles        Styles
 	configLoaded  bool
 	configLoadErr error
 	rootPrepared  bool
@@ -47,6 +48,7 @@ func NewApp(name string) *App {
 	app.Config = NewConfigManager(name)
 	app.Prompter = TerminalPrompter{In: app.In, Out: app.Out}
 	app.DefaultTheme = DefaultPromptTheme
+	app.Styles = DefaultStyles
 
 	// Standard global flags.
 	var format = "text"
