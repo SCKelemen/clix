@@ -1,21 +1,68 @@
-package clix
+package autocomplete
 
 import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"clix"
 )
 
-// NewAutocompleteCommand provides shell completion scripts.
+// Extension adds the autocomplete command to a clix app.
+// This provides shell completion script generation:
 //
-// Deprecated: Use clix/ext/autocomplete.Extension instead for optional autocomplete commands.
-// This function is kept for backward compatibility but will be removed in a future version.
-func NewAutocompleteCommand(app *App) *Command {
-	cmd := NewCommand("autocomplete")
+//   - cli autocomplete [bash|zsh|fish] - Generate completion script for the specified shell
+//
+// Usage:
+//
+//	import (
+//		"clix"
+//		"clix/ext/autocomplete"
+//	)
+//
+//	app := clix.NewApp("myapp")
+//	app.AddExtension(autocomplete.Extension{})
+//	// Now your app has: myapp autocomplete [shell]
+type Extension struct{}
+
+// Extend implements clix.Extension.
+func (Extension) Extend(app *clix.App) error {
+	if app.Root == nil {
+		return nil
+	}
+
+	// Only add if not already present
+	if findSubcommand(app.Root, "autocomplete") == nil {
+		app.Root.AddCommand(NewAutocompleteCommand(app))
+	}
+
+	return nil
+}
+
+func findSubcommand(cmd *clix.Command, name string) *clix.Command {
+	for _, sub := range cmd.Subcommands {
+		if sub.Name == name {
+			return sub
+		}
+		if found := findSubcommand(sub, name); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// NewAutocompleteCommand provides shell completion scripts.
+func NewAutocompleteCommand(app *clix.App) *clix.Command {
+	cmd := clix.NewCommand("autocomplete")
 	cmd.Short = "Generate shell completion script"
 	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish]", app.Name)
-	cmd.Arguments = []*Argument{{Name: "shell", Prompt: "Shell", Required: true}}
-	cmd.Run = func(ctx *Context) error {
+	cmd.Arguments = []*clix.Argument{{Name: "shell", Prompt: "Shell", Required: false}}
+	cmd.Run = func(ctx *clix.Context) error {
+		if len(ctx.Args) == 0 || ctx.Args[0] == "" {
+			// Show help if no shell provided
+			helper := clix.HelpRenderer{App: app, Command: cmd}
+			return helper.Render(app.Out)
+		}
 		shell := strings.ToLower(ctx.Args[0])
 		script, err := generateCompletionScript(app, shell)
 		if err != nil {
@@ -27,7 +74,7 @@ func NewAutocompleteCommand(app *App) *Command {
 	return cmd
 }
 
-func generateCompletionScript(app *App, shell string) (string, error) {
+func generateCompletionScript(app *clix.App, shell string) (string, error) {
 	commands := collectCompletionEntries(app.Root)
 	switch shell {
 	case "bash":
@@ -46,10 +93,10 @@ type completionEntry struct {
 	Help  string
 }
 
-func collectCompletionEntries(cmd *Command) []completionEntry {
+func collectCompletionEntries(cmd *clix.Command) []completionEntry {
 	entries := make(map[string]string)
-	var walk func(*Command)
-	walk = func(c *Command) {
+	var walk func(*clix.Command)
+	walk = func(c *clix.Command) {
 		entries[c.Name] = c.Short
 		for _, alias := range c.Aliases {
 			entries[alias] = c.Short

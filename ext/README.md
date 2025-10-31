@@ -15,6 +15,8 @@ This design is inspired by [goldmark's extension system](https://github.com/yuin
 Everything else is opt-in via extensions, including:
 - Command-based help (`cli help`)
 - Config management commands (`cli config`)
+- Shell completion (`cli autocomplete`)
+- Version information (`cli version`)
 - And future extensions...
 
 ## Using Extensions
@@ -24,16 +26,24 @@ Add extensions to your app before calling `Run()`:
 ```go
 import (
 	"clix"
+	"clix/ext/autocomplete"
 	"clix/ext/config"
 	"clix/ext/help"
+	"clix/ext/version"
 )
 
 app := clix.NewApp("myapp")
 app.Root = clix.NewCommand("myapp")
 
 // Add extensions for optional features
-app.AddExtension(help.Extension{})    // Adds: myapp help [command]
-app.AddExtension(config.Extension{}) // Adds: myapp config, myapp config set, etc.
+app.AddExtension(help.Extension{})         // Adds: myapp help [command]
+app.AddExtension(config.Extension{})       // Adds: myapp config, myapp config set, etc.
+app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [shell]
+app.AddExtension(version.Extension{        // Adds: myapp version
+	Version: "1.0.0",
+	Commit:  "abc123",  // optional
+	Date:    "2024-01-01", // optional
+})
 
 // Flag-based help works without extensions: myapp -h, myapp --help
 app.Run(context.Background(), nil)
@@ -57,6 +67,24 @@ Adds configuration management commands:
 - `cli config get <key>` - Get a specific value
 - `cli config set <key> <value>` - Set a value
 - `cli config reset` - Clear all configuration
+
+### Autocomplete Extension (`clix/ext/autocomplete`)
+
+Adds shell completion script generation:
+- `cli autocomplete [bash|zsh|fish]` - Generate completion script for the specified shell
+
+### Version Extension (`clix/ext/version`)
+
+Adds version information:
+- `cli version` - Show version information, including Go version and build info
+
+```go
+app.AddExtension(version.Extension{
+	Version: "1.0.0",
+	Commit:  "abc123",  // optional
+	Date:    "2024-01-01", // optional
+})
+```
 
 **Zero overhead if not imported:** Extensions only add commands when imported and registered. Simple apps that don't import them pay zero cost.
 
