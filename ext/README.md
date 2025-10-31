@@ -144,6 +144,115 @@ func (e Extension) Extend(app *clix.App) error {
 
 Extensions are applied lazily when `Run()` is called, or can be applied early with `ApplyExtensions()`.
 
+### Survey Extension (`clix/ext/survey`)
+
+Enables chaining prompts together in a depth-first traversal pattern, allowing both static and dynamic question flows. Supports all prompt types based on the prompter used:
+- **TextPrompter**: text input and confirm prompts
+- **TerminalPrompter** (from `ext/prompt`): text input, confirm, select, and multi-select prompts
+
+#### Static Survey (Struct-Based, Recommended)
+
+Define surveys as struct literals, similar to `clix.Command`:
+
+```go
+import "clix/ext/survey"
+
+questions := []survey.Question{
+	{
+		ID: "add-child",
+		Request: clix.PromptRequest{
+			Label: "Do you want to add a child?",
+			Options: []clix.SelectOption{
+				{Label: "Yes", Value: "yes"},
+				{Label: "No", Value: "no"},
+			},
+		},
+		Branches: map[string]survey.Branch{
+			"yes": survey.PushQuestion("child-name"),
+			"no":  survey.End(),
+		},
+	},
+	{
+		ID: "child-name",
+		Request: clix.PromptRequest{
+			Label: "Child's name",
+		},
+		Branches: map[string]survey.Branch{
+			"": survey.PushQuestion("add-another"), // Default: always continue
+		},
+	},
+	{
+		ID: "add-another",
+		Request: clix.PromptRequest{
+			Label:   "Add another child?",
+			Confirm: true,
+		},
+		Branches: map[string]survey.Branch{
+			"y": survey.PushQuestion("child-name"), // Loop back
+			"n": survey.End(),
+		},
+	},
+}
+
+s := survey.NewFromQuestions(ctx, app.Prompter, questions, "add-child")
+s.Run()
+```
+
+Helper functions for branches:
+- `survey.PushQuestion(id)` - Push another question to the stack
+- `survey.End()` - End the survey
+- `survey.Handler(fn)` - Execute a custom handler function
+
+You can also add questions programmatically:
+```go
+s := survey.New(ctx, app.Prompter)
+s.AddQuestion(survey.Question{
+	ID: "name",
+	Request: clix.PromptRequest{Label: "Name"},
+	Branches: map[string]survey.Branch{"": survey.End()},
+})
+s.Start("name")
+s.Run()
+```
+
+#### Dynamic Survey (Handler-based)
+
+For dynamic question flows:
+
+```go
+s := survey.New(ctx, app.Prompter)
+s.Ask(clix.PromptRequest{
+    Label: "Do you want to add a child?",
+    Confirm: true,
+}, func(answer string, s *survey.Survey) {
+    if answer == "y" {
+        s.Ask(clix.PromptRequest{Label: "Child's name"}, nil)
+    }
+})
+s.Run()
+```
+
+Questions are processed depth-first, meaning when a question's handler adds new questions, those new questions are immediately processed before returning to other questions at the same level. This enables recursive patterns like "add another child?" loops.
+
+#### Mixed Prompt Types
+
+Surveys automatically use the appropriate prompt type based on the prompter:
+- With `TextPrompter`: text and confirm prompts
+- With `TerminalPrompter`: text, confirm, select, and multi-select prompts
+
+```go
+s := survey.New(ctx, app.Prompter) // Can be TextPrompter or TerminalPrompter
+
+// Text input (works with both)
+s.Question("name", clix.PromptRequest{Label: "Name"}).Then("choose")
+
+// Select (only works with TerminalPrompter)
+s.Question("choose", clix.PromptRequest{
+    Label: "Choose",
+    Options: []clix.SelectOption{{Label: "A", Value: "a"}},
+}).End()
+```
+
 ## Future Extensions
 
 Planned optional extensions:
