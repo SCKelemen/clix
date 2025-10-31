@@ -52,7 +52,8 @@ Adds command-based help similar to man pages:
 ### Config Extension (`clix/ext/config`)
 
 Adds configuration management commands:
-- `cli config` - List all configuration values
+- `cli config` - Show help for config commands
+- `cli config list` - List all configuration values
 - `cli config get <key>` - Get a specific value
 - `cli config set <key> <value>` - Set a value
 - `cli config reset` - Clear all configuration

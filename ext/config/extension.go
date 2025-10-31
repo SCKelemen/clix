@@ -13,7 +13,8 @@ import (
 // Extension adds configuration management commands to a clix app.
 // This is an optional "batteries-included" feature that provides:
 //
-//   - cli config          - List all configuration values
+//   - cli config           - Show help for config commands
+//   - cli config list     - List all configuration values
 //   - cli config get <key> - Get a specific configuration value
 //   - cli config set <key> <value> - Set a configuration value
 //   - cli config reset    - Clear all configuration values
@@ -63,6 +64,19 @@ func NewConfigCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("config")
 	cmd.Short = "Manage CLI configuration"
 	cmd.Usage = fmt.Sprintf("%s config [subcommand]", app.Name)
+	// No Run handler - shows help by default
+
+	cmd.AddCommand(configListCommand(app))
+	cmd.AddCommand(configGetCommand(app))
+	cmd.AddCommand(configSetCommand(app))
+	cmd.AddCommand(configResetCommand(app))
+
+	return cmd
+}
+
+func configListCommand(app *clix.App) *clix.Command {
+	cmd := clix.NewCommand("list")
+	cmd.Short = "List all configuration values"
 	cmd.Run = func(ctx *clix.Context) error {
 		values := app.Config.Values()
 		format := app.OutputFormat()
@@ -84,11 +98,6 @@ func NewConfigCommand(app *clix.App) *clix.Command {
 			return nil
 		}
 	}
-
-	cmd.AddCommand(configGetCommand(app))
-	cmd.AddCommand(configSetCommand(app))
-	cmd.AddCommand(configResetCommand(app))
-
 	return cmd
 }
 

@@ -51,7 +51,32 @@ func TestConfigExtension(t *testing.T) {
 		}
 	})
 
-	t.Run("config command lists values", func(t *testing.T) {
+	t.Run("config command shows help", func(t *testing.T) {
+		app := clix.NewApp("test")
+		root := clix.NewCommand("test")
+		app.Root = root
+
+		var output bytes.Buffer
+		app.Out = &output
+
+		app.AddExtension(Extension{})
+
+		// Run config command - it should show help
+		if err := app.Run(context.Background(), []string{"config"}); err != nil {
+			t.Fatalf("config command failed: %v", err)
+		}
+
+		outputStr := output.String()
+		// Config command should show help by default
+		if !strings.Contains(outputStr, "config") {
+			t.Errorf("config output should contain 'config', got: %s", outputStr)
+		}
+		if !strings.Contains(outputStr, "list") || !strings.Contains(outputStr, "get") {
+			t.Errorf("config help should show subcommands, got: %s", outputStr)
+		}
+	})
+
+	t.Run("config list command lists values", func(t *testing.T) {
 		// Use a temporary home directory for config
 		tempHome := t.TempDir()
 		t.Setenv("HOME", tempHome)
@@ -70,19 +95,19 @@ func TestConfigExtension(t *testing.T) {
 		app.Out = &output
 
 		app.AddExtension(Extension{})
-		
-		// Run config command - it should list values (config loads automatically)
-		if err := app.Run(context.Background(), []string{"config"}); err != nil {
-			t.Fatalf("config command failed: %v", err)
+
+		// Run config list command - it should list values
+		if err := app.Run(context.Background(), []string{"config", "list"}); err != nil {
+			t.Fatalf("config list command failed: %v", err)
 		}
 
 		outputStr := output.String()
-		// Config command lists values by default - check for the keys/values
-		if !strings.Contains(outputStr, "key1") && !strings.Contains(outputStr, "value1") {
-			// If showing help instead, that's also valid behavior - just verify command exists
-			if !strings.Contains(outputStr, "config") {
-				t.Errorf("config output should contain config info, got: %s", outputStr)
-			}
+		// Config list command should show the keys/values
+		if !strings.Contains(outputStr, "key1") || !strings.Contains(outputStr, "value1") {
+			t.Errorf("config list output should contain key1=value1, got: %s", outputStr)
+		}
+		if !strings.Contains(outputStr, "key2") || !strings.Contains(outputStr, "value2") {
+			t.Errorf("config list output should contain key2=value2, got: %s", outputStr)
 		}
 	})
 
