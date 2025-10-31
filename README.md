@@ -137,6 +137,79 @@ whenever they're executed without a subcommand, mirroring tools like `gh auth`.
 The full runnable version of this example (including additional flags and
 configuration usage) can be found in [`examples/basic`](examples/basic).
 
+### Defining commands and subcommands
+
+Every command in a `clix` application is represented by a [`*clix.Command`](command.go).
+`clix.NewCommand` initialises a command with a scoped flag set and a default
+`--help` flag, letting you focus on wiring behaviour:
+
+```go
+import "fmt"
+
+users := clix.NewCommand("users")
+users.Short = "Manage user accounts"
+users.Long = "Create, list, and delete users in the current project"
+users.Run = func(ctx *clix.Context) error {
+        return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+}
+```
+
+Commands can expose execution hooks (`PreRun`, `Run`, `PostRun`), aliases, usage
+strings, and examples. Nested command trees are described declaratively via the
+`Subcommands` field or built programmatically with `AddCommand`:
+
+```go
+create := clix.NewCommand("create")
+create.Short = "Create a user"
+create.Run = func(ctx *clix.Context) error {
+        fmt.Fprintf(ctx.App.Out, "creating %s\n", ctx.Args[0])
+        return nil
+}
+
+delete := clix.NewCommand("delete")
+delete.Short = "Delete a user"
+
+users.Subcommands = []*clix.Command{create, delete}
+```
+
+When the app starts, `clix` prepares the tree so that `users create` resolves to
+the `create` command. Invoking `users` on its own executes the `users.Run`
+handler, which is a good place to render scoped help for that category. Because
+each package exports a fully configured command (including its children), the
+same module can power standalone binaries and larger shared CLIs by importing it
+under multiple roots.
+
+### Working with positional arguments
+
+Commands declare positional inputs with [`*clix.Argument`](argument.go)
+definitions. Each argument describes its `Name`, whether it is `Required`, an
+optional prompt label, a default value, and validation logic:
+
+```go
+import (
+        "fmt"
+        "strings"
+)
+
+create.Arguments = []*clix.Argument{{
+        Name:     "email",
+        Prompt:   "Email address",
+        Required: true,
+        Validate: func(value string) error {
+                if !strings.Contains(value, "@") {
+                        return fmt.Errorf("invalid email")
+                }
+                return nil
+        },
+}}
+```
+
+At runtime `clix` ensures required arguments are provided, prompting the user
+interactively when a value is missing. Prompt labels default to a title-cased
+version of the argument name (for example `project-id` becomes `Project Id`).
+Validation errors surface immediately, letting you guide users toward acceptable
+input before the handler executes.
+
 ### Opting into feature packages
 
 Keeping the executable under `cmd/` lets you choose which internal feature
