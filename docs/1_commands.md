@@ -155,5 +155,7 @@ goodbyeCmd.Description = "Say goodbye"
 
 ## Next Steps
 
-Now that you understand basic commands, learn about [Arguments](2_arguments.md) to handle user input.
+Now that you understand basic commands:
+- Learn about [Styling](1.5_styling.md) to make your CLI beautiful with colors and formatting
+- Or continue with [Arguments](2_arguments.md) to handle user input
 

@@ -5,6 +5,7 @@ Welcome to the CLIX documentation! This guide provides a progressive introductio
 ## Table of Contents
 
 1. [Commands](1_commands.md) - Building your first CLI application
+1.5. [Styling with Lipgloss](1.5_styling.md) - Beautiful terminal styling
 2. [Arguments](2_arguments.md) - Handling command arguments
 3. [Flags](3_flags.md) - Using flags and global flags
 4. [Configuration](4_config.md) - Configuration system (flags, env vars, files)
