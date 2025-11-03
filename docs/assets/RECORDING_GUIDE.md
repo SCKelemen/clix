@@ -34,6 +34,7 @@ Before recording:
 1. **Set terminal size**: 100 columns × 30 rows (or similar consistent size)
 2. **Use clean theme**: High contrast, clear fonts (Menlo, Monaco, JetBrains Mono at 14-16pt)
 3. **Clear terminal**: Use `clear` before each recording
+4. **Minimal prompt** (optional): The recording script automatically sets a minimal prompt (`$ `) to hide username and hostname. If you prefer a custom prompt, you can override it by setting `PS1` (bash) or `PROMPT` (zsh) before running the script.
 
 ## Step 3: Record an Animation
 

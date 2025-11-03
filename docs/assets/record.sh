@@ -19,6 +19,12 @@ WEBP_FILE="${NAME}.webp"
 echo "Recording terminal session..."
 echo "Type your commands, then press Ctrl+D when finished"
 echo ""
+echo "Note: Using minimal prompt to hide username/hostname"
+
+# Set minimal prompt to hide username and hostname
+# This works for both bash (PS1) and zsh (PROMPT)
+export PS1='$ '
+export PROMPT='$ '
 
 # Record with asciinema
 asciinema rec "$CAST_FILE"
