@@ -19,62 +19,68 @@ code/
 
 ## Building and Running
 
-Each example is a standalone Go program. To build and run:
+Each example is a standalone Go program in its own directory. To build and run:
 
 ```bash
 # Navigate to the example directory
-cd docs/code/commands
+cd docs/code/commands/example1_basic
 
 # Build the example
-go build example1_basic.go
+go build
 
 # Run it
 ./example1_basic
 
 # Or run directly
-go run example1_basic.go
+go run main.go
+
+# From the repo root, you can use:
+go run ./docs/code/commands/example1_basic
 ```
 
 ## Examples Index
 
 ### Commands (`commands/`)
-- `example1_basic.go` - Basic command execution
-- `example2_subcommands.go` - Subcommands demonstration
-- `example3_help.go` - Automatic help display
+- `example1_basic/` - Basic command execution
+- `example2_subcommands/` - Subcommands demonstration
+- `example3_help/` - Automatic help display
 
 ### Arguments (`arguments/`)
-- `example1_basic.go` - Basic argument with prompting
-- `example2_multiple.go` - Multiple arguments
+- `example1_basic/` - Basic argument with prompting
+- `example2_multiple/` - Multiple arguments
 
 ### Flags (`flags/`)
-- `example1_basic.go` - Basic flag usage
+- `example1_basic/` - Basic flag usage
 
 ### Config (`config/`)
-- `example1_precedence.go` - Configuration precedence demonstration
+- `example1_precedence/` - Configuration precedence demonstration
 
 ### Text Prompts (`text_prompts/`)
-- `example1_basic.go` - Basic text prompt
-- `example2_default.go` - Default values in prompts
-- `example3_confirm.go` - Confirmation prompt
+- `example1_basic/` - Basic text prompt
+- `example2_default/` - Default values in prompts
+- `example3_confirm/` - Confirmation prompt
 
 ### Validation (`validation/`)
-- `example1_argument.go` - Argument validation
-- `example2_prompt.go` - Prompt validation with re-prompting
+- `example1_argument/` - Argument validation
+- `example2_prompt/` - Prompt validation with re-prompting
 
 ### Terminal Prompts (`terminal_prompts/`)
-- `example1_select.go` - Select prompt with arrow navigation
-- `example2_multiselect.go` - Multi-select prompt
-- `example3_tab_completion.go` - Tab completion in text input
+- `example1_select/` - Select prompt with arrow navigation
+- `example2_multiselect/` - Multi-select prompt
+- `example3_tab_completion/` - Tab completion in text input
 
 ## Recording Animations
 
 Use these examples to record animations for the documentation:
 
-1. Navigate to the example directory
-2. Build/run the example to verify it works
-3. Use the recording tools in `../assets/`:
+1. Navigate to the example directory (e.g., `cd commands/example1_basic`)
+2. Build/run the example to verify it works:
    ```bash
-   cd ../assets
+   go run main.go
+   ```
+3. Use the recording tools in `../../assets/`:
+   ```bash
+   cd ../../assets
    ./record.sh <animation_name>
    ```
 
