@@ -50,14 +50,17 @@ type PromptOption interface {
 //	//     Options: []SelectOption{{Label: "A", Value: "a"}},
 //	// })
 type PromptRequest struct {
-	Label        string
-	Default      string
-	Validate     func(string) error
-	Theme        PromptTheme
-	Options      []SelectOption
-	MultiSelect  bool
-	Confirm      bool
-	ContinueText string
+	Label                string
+	Default              string
+	NoDefaultPlaceholder string
+	Validate             func(string) error
+	Theme                PromptTheme
+	Options              []SelectOption
+	MultiSelect          bool
+	Confirm              bool
+	ContinueText         string
+	CommandHandler       PromptCommandHandler
+	KeyMap               PromptKeyMap
 }
 
 // Apply implements PromptOption so PromptRequest can be used directly.
@@ -68,10 +71,13 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 	if r.Default != "" {
 		cfg.Default = r.Default
 	}
+	if r.NoDefaultPlaceholder != "" {
+		cfg.NoDefaultPlaceholder = r.NoDefaultPlaceholder
+	}
 	if r.Validate != nil {
 		cfg.Validate = r.Validate
 	}
-	if r.Theme.Prefix != "" || r.Theme.PrefixStyle != nil {
+	if r.Theme.isConfigured() {
 		cfg.Theme = r.Theme
 	}
 	if len(r.Options) > 0 {
@@ -86,30 +92,111 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 	if r.ContinueText != "" {
 		cfg.ContinueText = r.ContinueText
 	}
+	if r.CommandHandler != nil {
+		cfg.CommandHandler = r.CommandHandler
+	}
+	if r.KeyMap.isConfigured() {
+		cfg.KeyMap = r.KeyMap
+	}
 }
 
 // PromptConfig holds all prompt configuration internally.
 // Exported so extension packages can implement PromptOption.
 type PromptConfig struct {
-	Label        string
-	Default      string
-	Validate     func(string) error
-	Theme        PromptTheme
-	Options      []SelectOption
-	MultiSelect  bool
-	Confirm      bool
-	ContinueText string
-	// OnEscape is called when the Escape key is pressed.
-	// If it returns an error, that error is returned instead of "cancelled".
-	// Extensions (like survey) can use this to handle custom behavior for the Escape key.
-	// Note: This refers to the keyboard Escape key press, not ANSI escape code sequences.
-	OnEscape func() error
-	// OnFunctionKey is called when any F key (F1-F12) is pressed.
-	// The Key parameter indicates which F key was pressed (KeyF1 through KeyF12).
-	// If it returns an error, that error is returned instead of "cancelled".
-	// Extensions can use this to bind specific F keys to custom actions.
-	// Note: Key type is from clix/ext/prompt package - use prompt.KeyF1, etc.
-	OnFunctionKey func(key interface{}) error
+	Label                string
+	Default              string
+	NoDefaultPlaceholder string
+	Validate             func(string) error
+	Theme                PromptTheme
+	Options              []SelectOption
+	MultiSelect          bool
+	Confirm              bool
+	ContinueText         string
+	CommandHandler       PromptCommandHandler
+	KeyMap               PromptKeyMap
+}
+
+// PromptCommandType identifies a special key command intercepted by interactive prompts.
+type PromptCommandType int
+
+const (
+	// PromptCommandUnknown represents an unclassified key.
+	PromptCommandUnknown PromptCommandType = iota
+	// PromptCommandEscape indicates the escape key was pressed.
+	PromptCommandEscape
+	// PromptCommandTab indicates the tab key was pressed.
+	PromptCommandTab
+	// PromptCommandFunction indicates an F-key (F1-F12) was pressed.
+	PromptCommandFunction
+	// PromptCommandEnter indicates the enter key was pressed.
+	PromptCommandEnter
+)
+
+// PromptCommand describes a high-level command initiated by the user.
+// For function keys, FunctionKey contains the key index (1-12).
+type PromptCommand struct {
+	Type        PromptCommandType
+	FunctionKey int
+}
+
+// PromptCommandAction instructs the prompter how to proceed after a command is handled.
+type PromptCommandAction struct {
+	// Handled indicates the command was consumed and default handling should be skipped.
+	Handled bool
+	// Exit requests the prompter to exit immediately.
+	// If ExitErr is non-nil it will be returned from the prompt.
+	Exit bool
+	// ExitErr is returned from the prompt when Exit is true.
+	ExitErr error
+}
+
+// PromptKeyState describes the prompt state when evaluating key bindings.
+type PromptKeyState struct {
+	Command    PromptCommand
+	Input      string
+	Default    string
+	Suggestion string
+}
+
+// PromptCommandContext provides the handler context when a key binding is invoked.
+type PromptCommandContext struct {
+	PromptKeyState
+	SetInput func(string)
+}
+
+// PromptCommandHandler processes special key commands during an interactive prompt.
+// Returning an action with Exit=true stops the prompt immediately.
+type PromptCommandHandler func(PromptCommandContext) PromptCommandAction
+
+// PromptKeyBinding maps a command to display metadata and optional handling.
+type PromptKeyBinding struct {
+	Command     PromptCommand
+	Description string
+	Handler     PromptCommandHandler
+	Active      func(PromptKeyState) bool
+}
+
+// PromptKeyMap holds the configured key bindings for a prompt.
+type PromptKeyMap struct {
+	Bindings []PromptKeyBinding
+}
+
+func (m PromptKeyMap) isConfigured() bool {
+	return len(m.Bindings) > 0
+}
+
+// BindingFor returns the configured binding for the given command, if any.
+func (m PromptKeyMap) BindingFor(cmd PromptCommand) (PromptKeyBinding, bool) {
+	for _, binding := range m.Bindings {
+		if binding.Command.Type != cmd.Type {
+			continue
+		}
+		if binding.Command.Type == PromptCommandFunction && binding.Command.FunctionKey != cmd.FunctionKey {
+			continue
+		}
+		return binding, true
+	}
+	return PromptKeyBinding{}, false
 }
 
 // TextPromptOption implements PromptOption for basic text prompts.
@@ -131,6 +218,31 @@ func WithLabel(label string) PromptOption {
 func WithDefault(def string) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.Default = def
+	})
+}
+
+// WithCommandHandler registers a handler for special key commands during prompts.
+func WithCommandHandler(handler PromptCommandHandler) PromptOption {
+	return TextPromptOption(func(cfg *PromptConfig) {
+		cfg.CommandHandler = handler
+	})
+}
+
+// WithKeyMap configures the key bindings shown and invoked by the prompt.
+func WithKeyMap(m PromptKeyMap) PromptOption {
+	return TextPromptOption(func(cfg *PromptConfig) {
+		if m.isConfigured() {
+			cfg.KeyMap = m
+		}
+	})
+}
+
+// WithNoDefaultPlaceholder sets the placeholder text shown when no default exists.
+// This is typically used by higher-level workflows (like surveys) to prompt the
+// user that pressing enter will keep their existing value.
+func WithNoDefaultPlaceholder(text string) PromptOption {
+	return TextPromptOption(func(cfg *PromptConfig) {
+		cfg.NoDefaultPlaceholder = text
 	})
 }
 
@@ -174,11 +286,39 @@ type PromptTheme struct {
 	LabelStyle          TextStyle
 	HintStyle           TextStyle
 	DefaultStyle        TextStyle
-	PlaceholderStyle    TextStyle // Style for placeholder/default text
+	PlaceholderStyle    TextStyle // Style for placeholder/default text (e.g., bracketed defaults)
+	SuggestionStyle     TextStyle // Style for inline suggestion/ghost text
 	ErrorStyle          TextStyle
 	ButtonActiveStyle   TextStyle // Style for active button hints
 	ButtonInactiveStyle TextStyle // Style for inactive/grayed-out button hints
 	ButtonHoverStyle    TextStyle // Style for hovered button hints
+	Buttons             PromptButtonStyles
+}
+
+// PromptButtonStyles groups button hint styles together for easier configuration.
+type PromptButtonStyles struct {
+	Active   TextStyle
+	Inactive TextStyle
+	Hover    TextStyle
+}
+
+func (t PromptTheme) isConfigured() bool {
+	return t.Prefix != "" ||
+		t.Hint != "" ||
+		t.Error != "" ||
+		t.PrefixStyle != nil ||
+		t.LabelStyle != nil ||
+		t.HintStyle != nil ||
+		t.DefaultStyle != nil ||
+		t.PlaceholderStyle != nil ||
+		t.SuggestionStyle != nil ||
+		t.ErrorStyle != nil ||
+		t.ButtonActiveStyle != nil ||
+		t.ButtonInactiveStyle != nil ||
+		t.ButtonHoverStyle != nil ||
+		t.Buttons.Active != nil ||
+		t.Buttons.Inactive != nil ||
+		t.Buttons.Hover != nil
 }
 
 // DefaultPromptTheme provides a sensible default for terminal prompts.

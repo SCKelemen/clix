@@ -3,6 +3,7 @@ package survey
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,9 +13,12 @@ import (
 	"clix/ext/prompt"
 )
 
-// ErrGoBack is the error returned by prompts when user wants to go back.
-// Re-exported from prompt package for convenience.
-var ErrGoBack = prompt.ErrGoBack
+// NoDefaultPlaceholder is the message shown when a survey question has no default value.
+// It prompts users that pressing enter will keep the current value.
+const NoDefaultPlaceholder = "press enter for default"
+
+// ErrGoBack signals the survey should return to the previous question.
+var ErrGoBack = errors.New("survey: go back to previous question")
 
 // Question represents a single prompt in a survey.
 // Questions can be defined as struct literals, similar to clix.Command.
@@ -327,17 +331,17 @@ func (s *Survey) pushQuestion(q *Question) {
 	s.stack = append(s.stack, q)
 }
 
-// handleGoBack handles the "go back" command when triggered by Escape/F12 or text "back".
-func (s *Survey) handleGoBack() error {
+// handleGoBack restores the previous question when triggered by Escape/F12 or text "back".
+// The optional current question is re-queued if no history exists.
+func (s *Survey) handleGoBack(current *Question) {
 	if len(s.history) > 0 {
-		// Restore last question from history immediately
 		lastEntry := s.history[len(s.history)-1]
 		s.history = s.history[:len(s.history)-1]
 
-		// Push the previous question to stack so it gets asked next
+		// Re-ask the previous question next
 		s.pushQuestion(lastEntry.question)
 
-		// Remove the last answer since we're going back to edit it
+		// Remove the last saved answer/question id
 		if len(s.answers) > 0 {
 			s.answers = s.answers[:len(s.answers)-1]
 		}
@@ -345,37 +349,13 @@ func (s *Survey) handleGoBack() error {
 			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
 		}
 
-		// Continue running the survey to ask the restored question
-		return s.Run()
+		return
 	}
-	// No history, can't go back - continue normally
-	return nil
-}
 
-// handleGoBackWithQuestion handles "go back" when we still have the current question.
-func (s *Survey) handleGoBackWithQuestion(question *Question) error {
-	if len(s.history) > 0 {
-		// Restore last question from history
-		lastEntry := s.history[len(s.history)-1]
-		s.history = s.history[:len(s.history)-1]
-
-		// Push both the previous and current question to stack
-		s.pushQuestion(lastEntry.question)
-
-		// Remove the last answer since we're going back to edit it
-		if len(s.answers) > 0 {
-			s.answers = s.answers[:len(s.answers)-1]
-		}
-		if len(s.questionIDs) > 0 {
-			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
-		}
-
-		// Continue running the survey to ask the restored question
-		return s.Run()
+	if current != nil {
+		// No history yet - re-ask the current question
+		s.pushQuestion(current)
 	}
-	// No history, can't go back - ask current question again
-	s.pushQuestion(question)
-	return s.Run()
 }
 
 // Run executes all questions in the survey using depth-first traversal.
@@ -391,11 +371,25 @@ func (s *Survey) Run() error {
 		// But wait one iteration if undo is enabled to allow "back" command
 		if len(s.stack) == 0 {
 			// If undo is enabled and we just processed something, allow one more iteration for "back"
-			if !s.withUndoStack || len(s.history) == 0 {
-				break
+			if s.withUndoStack && len(s.history) > 0 && s.isTextPrompter && s.reader != nil {
+				if peek, err := s.reader.Peek(1); err == nil {
+					if peek[0] == 'b' || peek[0] == 'B' {
+						line, readErr := s.reader.ReadString('\n')
+						if readErr != nil && !errors.Is(readErr, io.EOF) {
+							return fmt.Errorf("failed to read undo command: %w", readErr)
+						}
+
+						if strings.EqualFold(strings.TrimSpace(line), "back") {
+							s.handleGoBack(nil)
+							continue
+						}
+
+						// Not a back command - put the line back for later processing
+						s.reader = bufio.NewReader(io.MultiReader(strings.NewReader(line), s.reader))
+					}
+				}
 			}
-			// If there's history but stack is empty, we can't prompt - we're done
-			// (This case is for when End() cleared the stack but user might want to go back)
+
 			break
 		}
 
@@ -406,6 +400,9 @@ func (s *Survey) Run() error {
 
 		// Ensure theme is set if not already provided
 		req := question.Request
+		if req.NoDefaultPlaceholder == "" {
+			req.NoDefaultPlaceholder = NoDefaultPlaceholder
+		}
 
 		if req.Theme.Prefix == "" && req.Theme.Error == "" && req.Theme.PrefixStyle == nil {
 			req.Theme = clix.DefaultPromptTheme
@@ -434,27 +431,66 @@ func (s *Survey) Run() error {
 		// Prepare options - add undo handlers if enabled
 		var options []clix.PromptOption
 		canGoBack := s.withUndoStack && !isFromHistory && len(s.history) > 0
-		if canGoBack {
-			// Add undo handlers for Escape and F12
-			undoOption := clix.TextPromptOption(func(cfg *clix.PromptConfig) {
-				cfg.OnEscape = func() error {
-					return ErrGoBack
+		keyBindings := append([]clix.PromptKeyBinding{}, req.KeyMap.Bindings...)
+
+		ensureBinding := func(binding clix.PromptKeyBinding) {
+			for _, existing := range keyBindings {
+				if existing.Command.Type != binding.Command.Type {
+					continue
 				}
-				cfg.OnFunctionKey = func(key interface{}) error {
-					// Check if it's F12 (or we could allow any F key)
-					// The key is from prompt package, so we need to compare by code
-					// For now, accept F12 for "back" functionality
-					promptKey, ok := key.(prompt.Key)
-					if ok && promptKey == prompt.KeyF12 {
-						return ErrGoBack
-					}
-					return nil // Other F keys don't trigger undo by default
+				if existing.Command.Type == clix.PromptCommandFunction && existing.Command.FunctionKey != binding.Command.FunctionKey {
+					continue
 				}
-			})
-			options = []clix.PromptOption{req, undoOption}
-		} else {
-			options = []clix.PromptOption{req}
+				return
+			}
+			keyBindings = append(keyBindings, binding)
 		}
+
+		isTextPrompt := len(req.Options) == 0 && !req.MultiSelect && !req.Confirm
+		if isTextPrompt {
+			ensureBinding(clix.PromptKeyBinding{
+				Command:     clix.PromptCommand{Type: clix.PromptCommandTab},
+				Description: "Autocomplete",
+				Active: func(state clix.PromptKeyState) bool {
+					return state.Default != "" && state.Suggestion != ""
+				},
+			})
+			ensureBinding(clix.PromptKeyBinding{
+				Command:     clix.PromptCommand{Type: clix.PromptCommandEnter},
+				Description: "Submit",
+			})
+		}
+
+		if s.withUndoStack {
+			goBackBinding := clix.PromptKeyBinding{
+				Command:     clix.PromptCommand{Type: clix.PromptCommandEscape},
+				Description: "Back",
+				Handler: func(ctx clix.PromptCommandContext) clix.PromptCommandAction {
+					if !canGoBack {
+						return clix.PromptCommandAction{Handled: true}
+					}
+					return clix.PromptCommandAction{Handled: true, Exit: true, ExitErr: ErrGoBack}
+				},
+				Active: func(clix.PromptKeyState) bool {
+					return canGoBack
+				},
+			}
+			ensureBinding(goBackBinding)
+			ensureBinding(clix.PromptKeyBinding{
+				Command:     clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: 12},
+				Description: "Back",
+				Handler:     goBackBinding.Handler,
+				Active: func(clix.PromptKeyState) bool {
+					return canGoBack
+				},
+			})
+		}
+
+		if len(keyBindings) > 0 {
+			req.KeyMap = clix.PromptKeyMap{Bindings: keyBindings}
+		}
+
+		options = []clix.PromptOption{req}
 
 		// Use shared reader wrapper to avoid bufio.Reader buffering issues
 		if s.reader != nil {
@@ -480,7 +516,8 @@ func (s *Survey) Run() error {
 		if err != nil {
 			// Check if error is "go back" signal
 			if s.withUndoStack && err == ErrGoBack {
-				return s.handleGoBack()
+				s.handleGoBack(question)
+				continue
 			}
 			return fmt.Errorf("prompt failed: %w", err)
 		}
@@ -585,6 +622,10 @@ func (s *Survey) showEndCard() error {
 		}
 	}
 
+	if promptReq.NoDefaultPlaceholder == "" {
+		promptReq.NoDefaultPlaceholder = NoDefaultPlaceholder
+	}
+
 	var answer string
 	var err error
 	if s.reader != nil {
@@ -612,39 +653,13 @@ func (s *Survey) showEndCard() error {
 
 	// If undo is enabled and user typed "back", restore from history
 	if s.withUndoStack && answer == "back" && len(s.history) > 0 {
-		// Restore last question from history
-		lastEntry := s.history[len(s.history)-1]
-		s.history = s.history[:len(s.history)-1]
-		s.pushQuestion(lastEntry.question)
-
-		// Remove last answer
-		if len(s.answers) > 0 {
-			s.answers = s.answers[:len(s.answers)-1]
-		}
-		if len(s.questionIDs) > 0 {
-			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
-		}
-
-		// Continue running the survey
+		s.handleGoBack(nil)
 		return s.Run()
 	}
 
 	// If user said no (not satisfied), go back if undo is enabled
 	if (answer == "n" || answer == "no") && s.withUndoStack && len(s.history) > 0 {
-		// Restore last question from history
-		lastEntry := s.history[len(s.history)-1]
-		s.history = s.history[:len(s.history)-1]
-		s.pushQuestion(lastEntry.question)
-
-		// Remove last answer
-		if len(s.answers) > 0 {
-			s.answers = s.answers[:len(s.answers)-1]
-		}
-		if len(s.questionIDs) > 0 {
-			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
-		}
-
-		// Continue running the survey
+		s.handleGoBack(nil)
 		return s.Run()
 	}
 
