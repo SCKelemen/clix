@@ -86,9 +86,21 @@ Use these examples to record animations for the documentation:
 
 See `../assets/RECORDING_CHECKLIST.md` for specific commands to run for each animation.
 
+## Setup
+
+Before running examples, set up their `go.mod` files:
+
+```bash
+cd docs/code
+make setup
+```
+
+This creates a `go.mod` file in each example directory with the correct `replace` directive to point to the clix repository.
+
 ## Notes
 
-- All examples use relative imports assuming they're run from within the clix repository
+- Each example has its own `go.mod` file with a replace directive
+- Examples can be run independently from their directories
 - Some examples require extensions (like `terminal_prompts/`) - they will show how to enable them
 - Examples are minimal and focused on demonstrating specific features
 
