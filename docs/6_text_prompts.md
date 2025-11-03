@@ -54,6 +54,8 @@ What is your name?: Alice
 Hello, Alice!
 ```
 
+![Basic text prompt](assets/text_prompts_0.webp)
+
 ## Prompt Options
 
 The `PromptRequest` struct provides several options:
@@ -85,6 +87,8 @@ Port number [8080]:  # Press Enter to accept default
 # or type a different value
 Port number [8080]: 9000
 ```
+
+![Default values in prompts](assets/text_prompts_1.webp)
 
 ## Functional Options API
 
@@ -130,6 +134,8 @@ $ go run main.go
 Continue? [Y/n]: y
 Proceeding...
 ```
+
+![Confirmation prompt](assets/text_prompts_2.webp)
 
 Confirmation prompts accept: `y`, `yes`, `n`, `no` (case-insensitive).
 

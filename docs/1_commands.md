@@ -44,6 +44,8 @@ $ go run main.go
 Hello, World!
 ```
 
+![Basic command execution](assets/commands_0.webp)
+
 ## Command Execution Flow
 
 When you run `app.Run()`, CLIX:
@@ -118,6 +120,8 @@ $ go run main.go goodbye
 Goodbye!
 ```
 
+![Subcommands demonstration](assets/commands_1.webp)
+
 ## Command Context
 
 The `Context` passed to `Run` provides access to:
@@ -139,6 +143,8 @@ Commands:
 
 Use "greet <command> --help" for more information about a command.
 ```
+
+![Automatic help display](assets/commands_2.webp)
 
 You can add descriptions to commands:
 

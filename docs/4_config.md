@@ -83,6 +83,8 @@ API Key: flag-override
 Port: 7000
 ```
 
+![Configuration precedence](assets/config_0.webp)
+
 ## Config Files
 
 CLIX automatically loads configuration from `~/.config/<app-name>/config.yaml`. Create a config file:

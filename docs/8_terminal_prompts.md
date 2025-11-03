@@ -88,6 +88,8 @@ Choose an option:
     Option C
 ```
 
+![Select prompt with arrow navigation](assets/terminal_prompts_0.webp)
+
 ## Multi-Select Prompts
 
 Multi-select prompts allow selecting multiple options:
@@ -124,6 +126,8 @@ Select languages:
   [Continue]
 ```
 
+![Multi-select prompt](assets/terminal_prompts_1.webp)
+
 Result is a comma-separated list: `"go,js"`
 
 ## Enhanced Text Input
@@ -148,6 +152,8 @@ Name: John D|oe
       ^^^^^^^
       (press Tab to complete, or type to replace)
 ```
+
+![Tab completion in text input](assets/terminal_prompts_2.webp)
 
 ## Functional Options API
 

@@ -60,6 +60,8 @@ What is your name? Alice
 Hello, Alice!
 ```
 
+![Interactive argument prompting](assets/arguments_0.webp)
+
 ## Multiple Arguments
 
 Commands can accept multiple arguments:
@@ -92,6 +94,8 @@ greetCmd.Run = func(ctx *clix.Context) error {
 $ go run main.go greet John Doe
 Hello, John Doe!
 ```
+
+![Multiple arguments](assets/arguments_1.webp)
 
 ## Optional Arguments
 

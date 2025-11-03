@@ -61,6 +61,8 @@ $ go run main.go greet -n Bob -a 25
 Hello, Bob! You are 25 years old.
 ```
 
+![Flag usage demonstration](assets/flags_0.webp)
+
 ## Flag Types
 
 CLIX supports various flag types:

@@ -72,6 +72,8 @@ $ go run main.go age -5
 Error: age cannot be negative
 ```
 
+![Argument validation](assets/validation_0.webp)
+
 ## Prompt Validation
 
 Validation also works with prompts:
@@ -98,6 +100,8 @@ Error: email must contain @
 Email address: user@example.com
 # Continues...
 ```
+
+![Prompt validation with re-prompting](assets/validation_1.webp)
 
 ## Validation Extension
 
