@@ -58,7 +58,11 @@ Hello, Alice!
 
 ## Prompt Options
 
-The `PromptRequest` struct provides several options:
+CLIX provides two API styles for prompts: **struct-based** (primary) and **functional options** (convenience).
+
+### Struct-Based API (Primary)
+
+The `PromptRequest` struct is the primary API, consistent with the rest of the codebase (similar to `StringVarOptions`, `BoolVarOptions`, etc.):
 
 ```go
 name, err := ctx.App.Prompter.Prompt(context.Background(), clix.PromptRequest{
@@ -90,9 +94,9 @@ Port number [8080]: 9000
 
 ![Default values in prompts](assets/text_prompts_1.webp)
 
-## Functional Options API
+### Functional Options API (Convenience)
 
-For convenience, CLIX also provides functional options:
+For convenience, CLIX also provides functional options that can be used instead of or alongside `PromptRequest`:
 
 ```go
 import "clix"
@@ -104,7 +108,20 @@ name, err := ctx.App.Prompter.Prompt(context.Background(),
 )
 ```
 
-Both APIs can be mixed (since `PromptRequest` implements `PromptOption`).
+**Both APIs can be mixed** - since `PromptRequest` implements `PromptOption`, you can combine them:
+
+```go
+// Mix struct and functional options
+name, err := ctx.App.Prompter.Prompt(context.Background(),
+    clix.PromptRequest{
+        Label: "Name",
+        Default: "Guest",
+    },
+    clix.WithTheme(customTheme),  // Override theme with functional option
+)
+```
+
+**Note:** The struct-based API (`PromptRequest`) is recommended as it's consistent with the rest of the CLIX codebase, but functional options can be more convenient for simple cases or when mixing with other options.
 
 ## Confirmation Prompts
 

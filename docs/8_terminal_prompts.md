@@ -155,9 +155,40 @@ Name: John D|oe
 
 ![Tab completion in text input](assets/terminal_prompts_2.webp)
 
-## Functional Options API
+## API Styles
 
-Use functional options for convenience:
+Both struct-based and functional options APIs are supported for terminal prompts.
+
+### Struct-Based API (Primary)
+
+The struct-based API using `PromptRequest` is consistent with the rest of CLIX:
+
+```go
+// Select prompt
+choice, err := ctx.App.Prompter.Prompt(context.Background(), clix.PromptRequest{
+    Label: "Choose an option",
+    Options: []clix.SelectOption{
+        {Label: "Option A", Value: "a"},
+        {Label: "Option B", Value: "b"},
+    },
+    Theme: ctx.App.DefaultTheme,
+})
+
+// Multi-select prompt
+choices, err := ctx.App.Prompter.Prompt(context.Background(), clix.PromptRequest{
+    Label: "Select languages",
+    Options: []clix.SelectOption{
+        {Label: "Go", Value: "go"},
+        {Label: "Python", Value: "python"},
+    },
+    MultiSelect: true,
+    Theme: ctx.App.DefaultTheme,
+})
+```
+
+### Functional Options API (Convenience)
+
+For convenience, use functional options (especially useful for select/multi-select):
 
 ```go
 import "clix/ext/prompt"
@@ -186,6 +217,8 @@ confirmed, err := ctx.App.Prompter.Prompt(context.Background(),
     prompt.Confirm(),
 )
 ```
+
+**Both APIs can be mixed** - `PromptRequest` implements `PromptOption`, so you can combine them as needed.
 
 ## Fallback Behavior
 

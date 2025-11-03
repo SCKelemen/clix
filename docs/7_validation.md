@@ -76,8 +76,9 @@ Error: age cannot be negative
 
 ## Prompt Validation
 
-Validation also works with prompts:
+Validation also works with prompts. You can use either API style:
 
+**Struct-based API:**
 ```go
 email, err := ctx.App.Prompter.Prompt(context.Background(), clix.PromptRequest{
     Label: "Email address",
@@ -89,6 +90,25 @@ email, err := ctx.App.Prompter.Prompt(context.Background(), clix.PromptRequest{
     },
     Theme: ctx.App.DefaultTheme,
 })
+```
+
+**Functional options API:**
+```go
+import "clix"
+
+// Note: Validation is typically used with PromptRequest for clarity
+// But you can use PromptRequest with functional options mixed in:
+email, err := ctx.App.Prompter.Prompt(context.Background(),
+    clix.PromptRequest{
+        Label: "Email address",
+        Validate: func(value string) error {
+            if !strings.Contains(value, "@") {
+                return errors.New("email must contain @")
+            }
+            return nil
+        },
+    },
+)
 ```
 
 The prompt will re-prompt if validation fails:
