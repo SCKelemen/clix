@@ -36,8 +36,7 @@ func main() {
 	}
 
 	// Add subcommands to root
-	rootCmd.AddSubcommand(helloCmd)
-	rootCmd.AddSubcommand(goodbyeCmd)
+	rootCmd.Subcommands = []*clix.Command{helloCmd, goodbyeCmd}
 
 	app.Root = rootCmd
 
