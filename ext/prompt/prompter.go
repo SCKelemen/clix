@@ -70,10 +70,8 @@ func suggestionText(cfg *clix.PromptConfig, currentInput string) string {
 		return ""
 	}
 
-	if currentInput == "" {
-		return cfg.NoDefaultPlaceholder
-	}
-
+	// No default - don't show any suggestion text
+	// (Users can just press Enter, which is a common CLI pattern)
 	return ""
 }
 
