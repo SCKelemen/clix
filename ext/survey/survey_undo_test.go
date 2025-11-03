@@ -7,19 +7,54 @@ import (
 	"testing"
 )
 
+// mockPrompterWithEscape simulates a prompter that returns ErrGoBack when requested
+type mockPrompterWithEscape struct {
+	callCount int
+	answers   []string
+	escapeAt  int // Call number at which to return ErrGoBack (0 = never)
+}
+
+func (m *mockPrompterWithEscape) Prompt(ctx context.Context, opts ...clix.PromptOption) (string, error) {
+	m.callCount++
+	// Return ErrGoBack if we're at the escape point
+	if m.escapeAt > 0 && m.callCount == m.escapeAt {
+		return "", ErrGoBack
+	}
+	// Otherwise return next answer
+	if len(m.answers) > 0 {
+		answer := m.answers[0]
+		m.answers = m.answers[1:]
+		return answer, nil
+	}
+	return "", nil
+}
+
 func TestSurveyUndo(t *testing.T) {
 	t.Run("undo allows going back to previous question", func(t *testing.T) {
-		in := bytes.NewBufferString("Alice\nback\nBob\n")
-		out := &bytes.Buffer{}
-
-		prompter := clix.TextPrompter{In: in, Out: out}
+		// Flow: Two questions, answer "Alice" to first, answer "Bob" to second, then Escape
+		// Expected: After escape, second question is re-asked, answer "Charlie" replaces "Bob"
+		// So final answers should be ["Alice", "Charlie"]
+		prompter := &mockPrompterWithEscape{
+			answers:  []string{"Alice", "Bob", "Charlie"},
+			escapeAt: 3, // Return ErrGoBack on third call (after answering "Bob" to second question)
+		}
 		ctx := context.Background()
 
 		questions := []Question{
 			{
-				ID: "name",
+				ID: "first",
 				Request: clix.PromptRequest{
-					Label: "Name",
+					Label: "First name",
+					Theme: clix.DefaultPromptTheme,
+				},
+				Branches: map[string]Branch{
+					"": PushQuestion("second"),
+				},
+			},
+			{
+				ID: "second",
+				Request: clix.PromptRequest{
+					Label: "Last name",
 					Theme: clix.DefaultPromptTheme,
 				},
 				Branches: map[string]Branch{
@@ -28,25 +63,32 @@ func TestSurveyUndo(t *testing.T) {
 			},
 		}
 
-		s := NewFromQuestions(ctx, prompter, questions, "name", WithUndoStack())
+		s := NewFromQuestions(ctx, prompter, questions, "first", WithUndoStack())
 
 		if err := s.Run(); err != nil {
 			t.Fatalf("survey failed: %v", err)
 		}
 
 		answers := s.Answers()
-		if len(answers) != 1 || answers[0] != "Bob" {
-			t.Fatalf("expected ['Bob'] (after undo and re-answer), got %v", answers)
+		// After undo of "Bob", we should have "Alice" and "Charlie"
+		if len(answers) != 2 {
+			t.Fatalf("expected 2 answers, got %d: %v", len(answers), answers)
+		}
+		if answers[0] != "Alice" {
+			t.Fatalf("expected first answer 'Alice', got %q", answers[0])
+		}
+		if answers[1] != "Charlie" {
+			t.Fatalf("expected second answer 'Charlie' (after undo of Bob), got %q. Full answers: %v", answers[1], answers)
 		}
 	})
 
 	t.Run("undo with multiple questions", func(t *testing.T) {
-		// Flow: first question -> answer "Alice" -> last question -> answer "Bob" -> back -> answer "Charlie"
+		// Flow: first question -> answer "Alice" -> last question -> answer "Bob" -> Escape -> answer "Charlie"
 		// Expected: ["Alice", "Charlie"] (Bob was undone)
-		in := bytes.NewBufferString("Alice\nBob\nback\nCharlie\n")
-		out := &bytes.Buffer{}
-
-		prompter := clix.TextPrompter{In: in, Out: out}
+		prompter := &mockPrompterWithEscape{
+			answers:  []string{"Alice", "Bob", "Charlie"},
+			escapeAt: 3, // Return ErrGoBack on third call (after "Bob")
+		}
 		ctx := context.Background()
 
 		questions := []Question{
@@ -82,25 +124,21 @@ func TestSurveyUndo(t *testing.T) {
 		if len(answers) != 2 {
 			t.Fatalf("expected 2 answers, got %d: %v", len(answers), answers)
 		}
-		// The undo should have removed "Bob" and replaced it with "Charlie"
-		// But the current implementation might keep "Bob" and add "Charlie"
-		// Let's check what actually happens and adjust the test
 		if answers[0] != "Alice" {
 			t.Fatalf("expected first answer 'Alice', got %q", answers[0])
 		}
-		// After undo and re-answer, we should have Charlie, not Bob
 		if answers[1] != "Charlie" {
 			t.Fatalf("expected second answer 'Charlie' (after undo of Bob), got %q. Full answers: %v", answers[1], answers)
 		}
 	})
 
 	t.Run("undo at first question has no effect", func(t *testing.T) {
-		// At first question, typing "back" with no history should just ask again
-		// Input: first prompt shows, user types "back", question asked again, user types "Alice"
-		in := bytes.NewBufferString("back\nAlice\n")
-		out := &bytes.Buffer{}
-
-		prompter := clix.TextPrompter{In: in, Out: out}
+		// At first question, Escape with no history should just ask again
+		// Input: first prompt shows, user presses Escape, question asked again, user types "Alice"
+		prompter := &mockPrompterWithEscape{
+			answers:  []string{"Alice"},
+			escapeAt: 1, // Return ErrGoBack on first call (no history yet)
+		}
 		ctx := context.Background()
 
 		questions := []Question{
@@ -123,7 +161,7 @@ func TestSurveyUndo(t *testing.T) {
 		}
 
 		answers := s.Answers()
-		// "back" is not saved as an answer, so we should only have "Alice"
+		// Escape with no history should just re-ask, so we should only have "Alice"
 		if len(answers) != 1 || answers[0] != "Alice" {
 			t.Fatalf("expected ['Alice'], got %v", answers)
 		}
@@ -164,7 +202,9 @@ func TestSurveyEndCard(t *testing.T) {
 	})
 
 	t.Run("end card with undo allows going back", func(t *testing.T) {
-		in := bytes.NewBufferString("Alice\nback\nBob\ny\n")
+		// This test requires TextPrompter for the end card, so we use a different approach
+		// We'll test that "no" in the end card triggers go back
+		in := bytes.NewBufferString("Alice\nno\nBob\ny\n")
 		out := &bytes.Buffer{}
 
 		prompter := clix.TextPrompter{In: in, Out: out}
