@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -21,7 +22,8 @@ func main() {
 
 	app.Root = greetCmd
 
-	if err := app.Run(); err != nil {
+	ctx := context.Background()
+	if err := app.Run(ctx, nil); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

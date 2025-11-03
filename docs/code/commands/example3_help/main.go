@@ -41,7 +41,7 @@ func main() {
 
 	app.Root = rootCmd
 
-	if err := app.Run(); err != nil {
+	if err := app.Run(context.Background(), nil); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
