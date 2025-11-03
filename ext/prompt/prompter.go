@@ -600,6 +600,8 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 				prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
 				label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 				fmt.Fprintf(p.Out, "%s%s: %s\n", prefix, label, cfg.Options[selectedIdx].Label)
+				// Ensure cursor is at column 0 for next prompt
+				fmt.Fprint(p.Out, "\r")
 			}
 			ShowCursor(p.Out)
 			if len(cfg.Options) > 0 {
