@@ -25,16 +25,26 @@ echo "Note: Using minimal prompt to hide username/hostname"
 # This bypasses .zshrc/.bashrc which would override the prompt
 SHELL_NAME=$(basename "$SHELL" 2>/dev/null || echo "bash")
 
+# Check if user already set a custom PROMPT/PS1 - if so, use it
+if [ -n "$PROMPT" ]; then
+    USER_PROMPT="$PROMPT"
+elif [ -n "$PS1" ]; then
+    USER_PROMPT="$PS1"
+else
+    USER_PROMPT='$ '
+fi
+
 if [ "$SHELL_NAME" = "zsh" ]; then
-    # For zsh: use -f to skip .zshrc, set PROMPT inline, then exec zsh
-    asciinema rec -c "zsh -f -c 'PROMPT=\"\$ \" exec zsh'" "$CAST_FILE"
+    # For zsh: use -f to skip .zshrc completely, set PROMPT, then start interactive zsh
+    # We need to export it so it persists in the shell session
+    asciinema rec -c "zsh -f -c 'export PROMPT=\"$USER_PROMPT\" && exec zsh'" "$CAST_FILE"
 elif [ "$SHELL_NAME" = "bash" ]; then
-    # For bash: use --norc to skip .bashrc, set PS1 inline, then exec bash
-    asciinema rec -c "bash --norc -c 'PS1=\"\$ \" exec bash'" "$CAST_FILE"
+    # For bash: use --norc to skip .bashrc, set PS1, then start interactive bash
+    asciinema rec -c "bash --norc -c 'export PS1=\"$USER_PROMPT\" && exec bash'" "$CAST_FILE"
 else
     # Fallback: try environment variables (may not work)
-    export PS1='$ '
-    export PROMPT='$ '
+    export PS1="$USER_PROMPT"
+    export PROMPT="$USER_PROMPT"
     asciinema rec "$CAST_FILE"
 fi
 
