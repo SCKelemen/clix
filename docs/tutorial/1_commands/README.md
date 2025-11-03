@@ -44,7 +44,7 @@ $ go run main.go
 Hello, World!
 ```
 
-![Basic command execution](../assets/commands_0.webp)
+![Basic command execution(commands_0.webp)
 
 ## Command Execution Flow
 
@@ -120,7 +120,7 @@ $ go run main.go goodbye
 Goodbye!
 ```
 
-![Subcommands demonstration](../assets/commands_1.webp)
+![Subcommands demonstration(commands_1.webp)
 
 ## Command Context
 
@@ -144,7 +144,7 @@ Commands:
 Use "greet <command> --help" for more information about a command.
 ```
 
-![Automatic help display](../assets/commands_2.webp)
+![Automatic help display(commands_2.webp)
 
 You can add descriptions to commands:
 
