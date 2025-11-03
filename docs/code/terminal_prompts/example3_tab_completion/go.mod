@@ -1,5 +1,5 @@
 module example3_tab_completion
 
 go 1.24.2
-replace clix => ../../..
+replace clix => ../../../../..
 require clix v0.0.0

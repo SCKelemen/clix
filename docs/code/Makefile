@@ -9,7 +9,7 @@ setup:
 		if [ ! -f "$$dir/go.mod" ]; then \
 			cd "$$dir" && \
 			go mod init $$(basename "$$dir") 2>/dev/null || true && \
-			echo "replace clix => ../../.." >> go.mod && \
+			echo "replace clix => ../../../../.." >> go.mod && \
 			echo "require clix v0.0.0" >> go.mod && \
 			cd - > /dev/null && \
 			echo "✓ Created go.mod for $$dir"; \
