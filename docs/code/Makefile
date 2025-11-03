@@ -9,9 +9,9 @@ setup:
 		if [ ! -f "$$dir/go.mod" ]; then \
 			cd "$$dir" && \
 			go mod init $$(basename "$$dir") 2>/dev/null || true && \
-			depth=$$(echo "$$dir" | tr -cd '/' | wc -c | tr -d ' '); \
-			depth=$$((depth + 1)); \
-			path=$$(printf '../%.0s' $$(seq 1 $$depth)); \
+			# Calculate depth: commands/example1 = 1, code/commands/example1 = 2, docs/code/commands/example1 = 3
+			# Need 4 levels: example1 -> commands -> code -> docs -> root
+			path="../../../../"; \
 			echo "replace clix => $$path" >> go.mod && \
 			echo "require clix v0.0.0" >> go.mod && \
 			cd - > /dev/null && \
