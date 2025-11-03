@@ -44,7 +44,7 @@ $ go run main.go
 Hello, World!
 ```
 
-![Basic command execution](assets/commands_0.webp)
+![Basic command execution](../assets/commands_0.webp)
 
 ## Command Execution Flow
 
@@ -120,14 +120,14 @@ $ go run main.go goodbye
 Goodbye!
 ```
 
-![Subcommands demonstration](assets/commands_1.webp)
+![Subcommands demonstration](../assets/commands_1.webp)
 
 ## Command Context
 
 The `Context` passed to `Run` provides access to:
 - `Context.App` - The application instance
 - `Context.Command` - The current command being executed
-- `Context.Args` - Parsed command-line arguments (covered in [Arguments](2_arguments.md))
+- `Context.Args` - Parsed command-line arguments (covered in [Arguments](../arguments/README.md))
 
 ## Command Help
 
@@ -144,7 +144,7 @@ Commands:
 Use "greet <command> --help" for more information about a command.
 ```
 
-![Automatic help display](assets/commands_2.webp)
+![Automatic help display](../assets/commands_2.webp)
 
 You can add descriptions to commands:
 
@@ -156,6 +156,6 @@ goodbyeCmd.Description = "Say goodbye"
 ## Next Steps
 
 Now that you understand basic commands:
-- Learn about [Styling](1.5_styling.md) to make your CLI beautiful with colors and formatting
-- Or continue with [Arguments](2_arguments.md) to handle user input
+- Learn about [Styling](../styling/README.md) to make your CLI beautiful with colors and formatting
+- Or continue with [Arguments](../arguments/README.md) to handle user input
 

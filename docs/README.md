@@ -4,17 +4,17 @@ Welcome to the CLIX documentation! This guide provides a progressive introductio
 
 ## Table of Contents
 
-1. [Commands](1_commands.md) - Building your first CLI application
-1.5. [Styling with Lipgloss](1.5_styling.md) - Beautiful terminal styling
-2. [Arguments](2_arguments.md) - Handling command arguments
-3. [Flags](3_flags.md) - Using flags and global flags
-4. [Configuration](4_config.md) - Configuration system (flags, env vars, files)
-5. [Help System](5_help.md) - Built-in help rendering
-6. [Text Prompts](6_text_prompts.md) - Basic interactive prompting
-7. [Validation](7_validation.md) - Input validation
-8. [Terminal Prompts](8_terminal_prompts.md) - Advanced prompts (select, multi-select, confirm)
-9. [Surveys](9_surveys.md) - Chaining prompts together
-10. [Extensions](10_extensions.md) - Extension system architecture
+1. [Commands](tutorial/1_commands/README.md) - Building your first CLI application
+1.5. [Styling with Lipgloss](tutorial/1.5_styling/README.md) - Beautiful terminal styling
+2. [Arguments](tutorial/2_arguments/README.md) - Handling command arguments
+3. [Flags](tutorial/3_flags/README.md) - Using flags and global flags
+4. [Configuration](tutorial/4_config/README.md) - Configuration system (flags, env vars, files)
+5. [Help System](tutorial/5_help/README.md) - Built-in help rendering
+6. [Text Prompts](tutorial/6_text_prompts/README.md) - Basic interactive prompting
+7. [Validation](tutorial/7_validation/README.md) - Input validation
+8. [Terminal Prompts](tutorial/8_terminal_prompts/README.md) - Advanced prompts (select, multi-select, confirm)
+9. [Surveys](tutorial/9_surveys/README.md) - Chaining prompts together
+10. [Extensions](tutorial/10_extensions/README.md) - Extension system architecture
 
 ## How to Use This Documentation
 
@@ -27,12 +27,19 @@ This documentation is designed to be read sequentially. Each chapter builds on t
 - **Discover Surveys** to create complex interactive flows
 - **Understand Extensions** to customize and extend CLIX
 
-## Examples
+## Running Examples
 
-Each section includes working code examples that you can copy and run. Examples are designed to be:
-- **Self-contained** - Run them independently
-- **Progressive** - Each builds on previous concepts
-- **Practical** - Show real-world usage patterns
+Each tutorial section includes working code examples. To run an example:
+
+```bash
+cd docs/tutorial/1_commands
+go run main.go
+```
+
+Each tutorial directory contains:
+- `README.md` - The documentation
+- `main.go` - The example code
+- `go.mod` - Go module configuration
 
 ## Prerequisites
 
@@ -40,5 +47,4 @@ Each section includes working code examples that you can copy and run. Examples 
 - Basic understanding of Go programming
 - Familiarity with command-line interfaces
 
-Let's get started with [Commands](1_commands.md)!
-
+Let's get started with [Commands](tutorial/1_commands/README.md)!
