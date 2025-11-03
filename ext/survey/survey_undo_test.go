@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"clix"
 	"context"
+	"io"
 	"testing"
 )
 
@@ -11,7 +12,8 @@ import (
 type mockPrompterWithEscape struct {
 	callCount int
 	answers   []string
-	escapeAt  int // Call number at which to return ErrGoBack (0 = never)
+	escapeAt  int       // Call number at which to return ErrGoBack (0 = never)
+	out       io.Writer // Output writer for end card
 }
 
 func (m *mockPrompterWithEscape) Prompt(ctx context.Context, opts ...clix.PromptOption) (string, error) {
@@ -29,14 +31,23 @@ func (m *mockPrompterWithEscape) Prompt(ctx context.Context, opts ...clix.Prompt
 	return "", nil
 }
 
+// Out returns the output writer (for compatibility with getOut)
+func (m *mockPrompterWithEscape) Out() io.Writer {
+	return m.out
+}
+
 func TestSurveyUndo(t *testing.T) {
 	t.Run("undo allows going back to previous question", func(t *testing.T) {
-		// Flow: Two questions, answer "Alice" to first, answer "Bob" to second, then Escape
-		// Expected: After escape, second question is re-asked, answer "Charlie" replaces "Bob"
+		// Flow: Two questions, answer "Alice" to first, answer "Bob" to second
+		// Since EndBranch clears the stack immediately after "Bob", the survey ends
+		// We test undo from the end card instead: answer "Alice", "Bob", then escape from end card, then "Charlie"
+		// Expected: After escape from end card, second question is re-asked, answer "Charlie" replaces "Bob"
 		// So final answers should be ["Alice", "Charlie"]
+		out := &bytes.Buffer{}
 		prompter := &mockPrompterWithEscape{
-			answers:  []string{"Alice", "Bob", "Charlie"},
-			escapeAt: 3, // Return ErrGoBack on third call (after answering "Bob" to second question)
+			answers:  []string{"Alice", "Bob", "Charlie", "y"}, // y to confirm after end card
+			escapeAt: 3,                                        // Return ErrGoBack on third call (from end card prompt, should undo "Bob")
+			out:      out,
 		}
 		ctx := context.Background()
 
@@ -63,14 +74,14 @@ func TestSurveyUndo(t *testing.T) {
 			},
 		}
 
-		s := NewFromQuestions(ctx, prompter, questions, "first", WithUndoStack())
+		s := NewFromQuestions(ctx, prompter, questions, "first", WithUndoStack(), WithEndCard())
 
 		if err := s.Run(); err != nil {
 			t.Fatalf("survey failed: %v", err)
 		}
 
 		answers := s.Answers()
-		// After undo of "Bob", we should have "Alice" and "Charlie"
+		// After undo of "Bob" from end card, we should have "Alice" and "Charlie"
 		if len(answers) != 2 {
 			t.Fatalf("expected 2 answers, got %d: %v", len(answers), answers)
 		}
@@ -83,11 +94,13 @@ func TestSurveyUndo(t *testing.T) {
 	})
 
 	t.Run("undo with multiple questions", func(t *testing.T) {
-		// Flow: first question -> answer "Alice" -> last question -> answer "Bob" -> Escape -> answer "Charlie"
-		// Expected: ["Alice", "Charlie"] (Bob was undone)
+		// Flow: first question -> answer "Alice" -> last question -> answer "Bob" -> end card -> Escape -> answer "Charlie"
+		// Expected: ["Alice", "Charlie"] (Bob was undone from end card)
+		out := &bytes.Buffer{}
 		prompter := &mockPrompterWithEscape{
-			answers:  []string{"Alice", "Bob", "Charlie"},
-			escapeAt: 3, // Return ErrGoBack on third call (after "Bob")
+			answers:  []string{"Alice", "Bob", "Charlie", "y"}, // y to confirm after end card
+			escapeAt: 3,                                        // Return ErrGoBack on third call (from end card, should undo "Bob")
+			out:      out,
 		}
 		ctx := context.Background()
 
@@ -114,7 +127,7 @@ func TestSurveyUndo(t *testing.T) {
 			},
 		}
 
-		s := NewFromQuestions(ctx, prompter, questions, "first", WithUndoStack())
+		s := NewFromQuestions(ctx, prompter, questions, "first", WithUndoStack(), WithEndCard())
 
 		if err := s.Run(); err != nil {
 			t.Fatalf("survey failed: %v", err)

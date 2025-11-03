@@ -731,6 +731,11 @@ func renderText(style clix.TextStyle, value string) string {
 	return style.Render(value)
 }
 
+// prompterWithOut interface for getting output writer from any prompter
+type prompterWithOut interface {
+	Out() io.Writer
+}
+
 // getOut returns the output writer from the prompter
 func (s *Survey) getOut() io.Writer {
 	if tp, ok := s.prompter.(clix.TextPrompter); ok {
@@ -738,6 +743,10 @@ func (s *Survey) getOut() io.Writer {
 	}
 	if tp, ok := s.prompter.(prompt.TerminalPrompter); ok {
 		return tp.Out
+	}
+	// Try to get Out from mock prompter or any prompter with Out() method
+	if pw, ok := s.prompter.(prompterWithOut); ok {
+		return pw.Out()
 	}
 	return nil
 }
