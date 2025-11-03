@@ -902,6 +902,8 @@ func (p TerminalPrompter) promptConfirm(ctx context.Context, cfg *clix.PromptCon
 	}
 
 	for {
+		// Ensure cursor is at column 0 (in case previous prompt left it elsewhere)
+		fmt.Fprint(p.Out, "\r")
 		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
 		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
