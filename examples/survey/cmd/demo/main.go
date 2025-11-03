@@ -157,8 +157,6 @@ func runSimpleSurvey(ctx *clix.Context) error {
 	fmt.Println(titleStyle.Render("Welcome to the Simple Survey Demo!"))
 	fmt.Println(subtitleStyle.Render("This survey uses TextPrompter (text + confirm only)"))
 	fmt.Println()
-	fmt.Println(subtitleStyle.Render("💡 Tip: Try using Tab to auto-complete default values!"))
-	fmt.Println()
 
 	if err := s.Run(); err != nil {
 		return fmt.Errorf("survey failed: %w", err)

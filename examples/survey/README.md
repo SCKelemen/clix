@@ -8,9 +8,7 @@ This example demonstrates the `survey` extension with two different surveys:
 - Demonstrates:
   - Basic survey structure
   - Input validation (name, email)
-  - **Autocomplete with defaults** (country field with default "United States")
-  - **Tab completion** - Press Tab to auto-complete default values
-  - **Suggestions** - Type part of a default value to see suggestions
+  - **Default values** - Press Enter to accept default values (common CLI pattern)
   - Undo/back functionality
   - End card with styled summary
 
@@ -29,8 +27,8 @@ This example demonstrates the `survey` extension with two different surveys:
 
 Both surveys demonstrate:
 - **Static survey definitions** using struct-based API
-- **Autocomplete features**:
-  - Default values that can be accepted by pressing Enter
+- **Default values** - Press Enter to accept default values (works in both modes)
+- **Autocomplete features** (advanced mode only with TerminalPrompter):
   - Tab key to auto-complete default values
   - Inline suggestions that appear as you type (if your input matches the start of a default)
 - **Undo/back functionality** - Press Escape or F12 to undo previous answers
@@ -58,12 +56,11 @@ Run the advanced survey (text + select + multiselect + confirm, requires Termina
 
 ## Features Demonstrated
 
-1. **Autocomplete & Defaults**:
+1. **Default Values**:
    - Set default values with the `Default` field
-   - Press **Tab** to auto-complete to the default value
-   - Type part of a default value to see inline suggestions appear
-   - Press **Enter** with empty input to accept the default
-   - Key hints show `[ Tab ] Autocomplete` when a default is available
+   - Press **Enter** with empty input to accept the default (works in both TextPrompter and TerminalPrompter)
+   - **Advanced mode only (TerminalPrompter)**: Press **Tab** to auto-complete, or type part of a default to see inline suggestions
+   - Key hints show `[ Tab ] Autocomplete` when a default is available (advanced mode only)
 
 2. **Undo Stack**: Press **Escape** or **F12** at any prompt to return to the previous question
 
@@ -78,9 +75,8 @@ Run the advanced survey (text + select + multiselect + confirm, requires Termina
 1. Enter your name (validated: minimum 2 characters)
 2. Enter your email (validated: must be a valid email address)
 3. Enter your country (default: "United States")
-   - Press **Tab** to auto-complete to "United States"
-   - Or type part of the default (e.g., "United") to see suggestions
-   - Press **Enter** to accept the default or your typed value
+   - Press **Enter** to accept the default value
+   - Or type a different value
 4. Confirm newsletter subscription (yes/no)
 5. Review the summary in the end card
 6. Confirm or go back to edit answers
@@ -102,9 +98,9 @@ Run the advanced survey (text + select + multiselect + confirm, requires Termina
 9. Review the summary in the end card
 10. Confirm or go back to edit answers
 
-Try these autocomplete features:
-- Press **Tab** to auto-complete default values
-- Type part of a default (e.g., "United" when default is "United States") to see suggestions
+Try these features:
+- **Simple mode**: Press **Enter** to accept default values
+- **Advanced mode**: Press **Tab** to auto-complete, or type part of a default to see inline suggestions
 - Press **Escape** or **F12** at any prompt to undo and go back to previous questions
 
 ## Validation Features
