@@ -69,7 +69,6 @@ type EndBranch struct{}
 func (b EndBranch) Execute(answer string, s *Survey) {
 	// Clear the stack so the survey loop will exit after this question
 	// The loop will check the stack at the start of the next iteration
-	// If undo is enabled, user can still type "back" before the loop exits
 	s.stack = s.stack[:0]
 }
 
@@ -331,7 +330,7 @@ func (s *Survey) pushQuestion(q *Question) {
 	s.stack = append(s.stack, q)
 }
 
-// handleGoBack restores the previous question when triggered by Escape/F12 or text "back".
+// handleGoBack restores the previous question when triggered by Escape/F12 key bindings.
 // The optional current question is re-queued if no history exists.
 func (s *Survey) handleGoBack(current *Question) {
 	if len(s.history) > 0 {
@@ -361,35 +360,14 @@ func (s *Survey) handleGoBack(current *Question) {
 // Run executes all questions in the survey using depth-first traversal.
 // Questions are processed from the top of the stack, and new questions
 // added by branches are immediately processed before continuing.
-// If undo is enabled, users can type "back" to return to previous questions.
+// If undo is enabled, users can press Escape or F12 to return to previous questions.
 func (s *Survey) Run() error {
 	for {
 		var question *Question
 		var isFromHistory bool
 
 		// Check if we're done (no more questions in stack)
-		// But wait one iteration if undo is enabled to allow "back" command
 		if len(s.stack) == 0 {
-			// If undo is enabled and we just processed something, allow one more iteration for "back"
-			if s.withUndoStack && len(s.history) > 0 && s.isTextPrompter && s.reader != nil {
-				if peek, err := s.reader.Peek(1); err == nil {
-					if peek[0] == 'b' || peek[0] == 'B' {
-						line, readErr := s.reader.ReadString('\n')
-						if readErr != nil && !errors.Is(readErr, io.EOF) {
-							return fmt.Errorf("failed to read undo command: %w", readErr)
-						}
-
-						if strings.EqualFold(strings.TrimSpace(line), "back") {
-							s.handleGoBack(nil)
-							continue
-						}
-
-						// Not a back command - put the line back for later processing
-						s.reader = bufio.NewReader(io.MultiReader(strings.NewReader(line), s.reader))
-					}
-				}
-			}
-
 			break
 		}
 
@@ -522,34 +500,7 @@ func (s *Survey) Run() error {
 			return fmt.Errorf("prompt failed: %w", err)
 		}
 
-		// Handle undo command BEFORE saving answer (legacy text "back" - deprecated)
-		if s.withUndoStack && strings.ToLower(strings.TrimSpace(answer)) == "back" {
-			// User wants to go back - restore from history
-			if len(s.history) > 0 {
-				// Restore last question from history immediately
-				lastEntry := s.history[len(s.history)-1]
-				s.history = s.history[:len(s.history)-1]
-
-				// Push the previous question to stack so it gets asked next
-				s.pushQuestion(lastEntry.question)
-
-				// Remove the last answer since we're going back to edit it
-				if len(s.answers) > 0 {
-					s.answers = s.answers[:len(s.answers)-1]
-				}
-				if len(s.questionIDs) > 0 {
-					s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
-				}
-
-				// Continue loop to ask the restored question (depth-first: last pushed is asked first)
-				continue
-			}
-			// No history, can't go back - ask current question again
-			s.pushQuestion(question)
-			continue
-		}
-
-		// Save answer and question ID (only if not "back")
+		// Save answer and question ID
 		s.answers = append(s.answers, answer)
 		s.questionIDs = append(s.questionIDs, question.ID)
 
@@ -564,15 +515,12 @@ func (s *Survey) Run() error {
 
 		// Execute branch based on answer
 		// First try exact match, then fallback to empty string (always branch)
-		// Note: Don't execute branch if answer was "back" (already handled above)
-		if strings.ToLower(strings.TrimSpace(answer)) != "back" {
-			branch, ok := question.Branches[answer]
-			if !ok {
-				branch, ok = question.Branches[""]
-			}
-			if ok && branch != nil {
-				branch.Execute(answer, s)
-			}
+		branch, ok := question.Branches[answer]
+		if !ok {
+			branch, ok = question.Branches[""]
+		}
+		if ok && branch != nil {
+			branch.Execute(answer, s)
 		}
 	}
 
@@ -606,12 +554,39 @@ func (s *Survey) showEndCard() error {
 		theme = clix.DefaultPromptTheme
 	}
 
+	// Set up key bindings for end card prompt
+	keyBindings := []clix.PromptKeyBinding{}
+
+	canGoBack := s.withUndoStack && len(s.history) > 0
+	if canGoBack {
+		goBackBinding := clix.PromptKeyBinding{
+			Command:     clix.PromptCommand{Type: clix.PromptCommandEscape},
+			Description: "Back",
+			Handler: func(ctx clix.PromptCommandContext) clix.PromptCommandAction {
+				return clix.PromptCommandAction{Handled: true, Exit: true, ExitErr: ErrGoBack}
+			},
+			Active: func(clix.PromptKeyState) bool {
+				return true
+			},
+		}
+		keyBindings = append(keyBindings, goBackBinding)
+		keyBindings = append(keyBindings, clix.PromptKeyBinding{
+			Command:     clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: 12},
+			Description: "Back",
+			Handler:     goBackBinding.Handler,
+			Active: func(clix.PromptKeyState) bool {
+				return true
+			},
+		})
+	}
+
 	var promptReq clix.PromptRequest
 	if s.withUndoStack && len(s.history) > 0 {
-		// Use text prompt so user can type "back" or "yes"/"no"
+		// Use text prompt so user can type "yes"/"no" or use Escape/F12 to go back
 		promptReq = clix.PromptRequest{
-			Label: label + " (yes/no/back)",
-			Theme: theme,
+			Label:  label,
+			Theme:  theme,
+			KeyMap: clix.PromptKeyMap{Bindings: keyBindings},
 		}
 	} else {
 		// Use confirm prompt for simple yes/no
@@ -646,16 +621,15 @@ func (s *Survey) showEndCard() error {
 	}
 
 	if err != nil {
+		// Check if error is "go back" signal (from key binding)
+		if err == ErrGoBack {
+			s.handleGoBack(nil)
+			return s.Run()
+		}
 		return err
 	}
 
 	answer = strings.ToLower(strings.TrimSpace(answer))
-
-	// If undo is enabled and user typed "back", restore from history
-	if s.withUndoStack && answer == "back" && len(s.history) > 0 {
-		s.handleGoBack(nil)
-		return s.Run()
-	}
 
 	// If user said no (not satisfied), go back if undo is enabled
 	if (answer == "n" || answer == "no") && s.withUndoStack && len(s.history) > 0 {
