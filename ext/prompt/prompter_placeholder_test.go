@@ -34,10 +34,10 @@ func TestSuggestionText(t *testing.T) {
 			want:  "",
 		},
 		{
-			name:  "no default placeholder",
+			name:  "no default placeholder - returns empty in interactive mode",
 			cfg:   &clix.PromptConfig{NoDefaultPlaceholder: "press enter for default", Theme: theme},
 			input: "",
-			want:  "press enter for default",
+			want:  "", // No suggestion text when there's no default (users can just press Enter)
 		},
 		{
 			name:  "no suggestion when input present",
