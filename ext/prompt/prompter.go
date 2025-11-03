@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"unicode/utf8"
 
 	"clix"
 
@@ -320,9 +321,10 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
 		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 
-		// Calculate actual text lengths (without ANSI codes) for cursor positioning
-		prefixTextLen := len(cfg.Theme.Prefix)
-		labelTextLen := len(cfg.Label)
+		// Calculate visual text lengths (runes, not bytes) for cursor positioning
+		// This handles multi-byte characters correctly (e.g., emoji in prefix)
+		prefixTextLen := utf8.RuneCountInString(cfg.Theme.Prefix)
+		labelTextLen := utf8.RuneCountInString(cfg.Label)
 
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
@@ -352,17 +354,19 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		// Move cursor back up to input line and position at end
 		MoveCursorUp(p.Out, 1)
 
-		// Position cursor at end of input
+		// Position cursor at end of input (after currentInput, not after suggestion)
 		fmt.Fprint(p.Out, "\r")
-		// Calculate position: prefix + label + ": " + input length (using actual text lengths)
-		inputLen := len(currentInput)
+		// Calculate position: prefix + label + ": " + input length (using visual rune counts)
+		// Note: We position after the input text, not after the suggestion (suggestion is just visual)
+		// Use utf8.RuneCountInString for multi-byte character support
+		inputLen := utf8.RuneCountInString(currentInput)
 		totalPos := prefixTextLen + labelTextLen + 2 + inputLen // +2 for ": "
 
 		// Move cursor to position (we're already at start, so just move right)
-		// Note: We need to account for rendered styles which may include ANSI codes,
-		// but the cursor positioning should be based on actual character count
+		// Note: ANSI escape codes in styled text don't count as visual columns,
+		// and \033[%dC moves by visual character positions (runes), so this should be accurate
 		if totalPos > 0 {
-			// Use ANSI to move right - this moves by character count, not byte count
+			// Use ANSI to move right - this moves by visual character count
 			fmt.Fprintf(p.Out, "\033[%dC", totalPos)
 		}
 
