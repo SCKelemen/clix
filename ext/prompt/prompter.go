@@ -18,6 +18,69 @@ import (
 // This can be triggered by Escape or F12 keys when undo is enabled in surveys.
 var ErrGoBack = errors.New("go back to previous question")
 
+func buttonActiveStyle(theme clix.PromptTheme) clix.TextStyle {
+	if theme.Buttons.Active != nil {
+		return theme.Buttons.Active
+	}
+	return theme.ButtonActiveStyle
+}
+
+func buttonInactiveStyle(theme clix.PromptTheme) clix.TextStyle {
+	if theme.Buttons.Inactive != nil {
+		return theme.Buttons.Inactive
+	}
+	return theme.ButtonInactiveStyle
+}
+
+func buttonHoverStyle(theme clix.PromptTheme) clix.TextStyle {
+	if theme.Buttons.Hover != nil {
+		return theme.Buttons.Hover
+	}
+	return theme.ButtonHoverStyle
+}
+
+func placeholderStyle(theme clix.PromptTheme) clix.TextStyle {
+	if theme.PlaceholderStyle != nil {
+		return theme.PlaceholderStyle
+	}
+	return theme.DefaultStyle
+}
+
+func suggestionStyle(theme clix.PromptTheme) clix.TextStyle {
+	if theme.SuggestionStyle != nil {
+		return theme.SuggestionStyle
+	}
+	if theme.PlaceholderStyle != nil {
+		return theme.PlaceholderStyle
+	}
+	return theme.DefaultStyle
+}
+
+func placeholderText(cfg *clix.PromptConfig) string {
+	if cfg.Default != "" {
+		return cfg.Default
+	}
+	return cfg.NoDefaultPlaceholder
+}
+
+func suggestionText(cfg *clix.PromptConfig, currentInput string) string {
+	if cfg.Default != "" {
+		if currentInput == "" {
+			return cfg.Default
+		}
+		if strings.HasPrefix(cfg.Default, currentInput) {
+			return cfg.Default[len(currentInput):]
+		}
+		return ""
+	}
+
+	if currentInput == "" {
+		return cfg.NoDefaultPlaceholder
+	}
+
+	return ""
+}
+
 // TerminalPrompter implements Prompter with full support for text, select,
 // multi-select, and confirm prompts, including raw terminal mode for interactive navigation.
 type TerminalPrompter struct {
@@ -90,8 +153,8 @@ func (p TerminalPrompter) promptTextLineBased(ctx context.Context, cfg *clix.Pro
 		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
-		if cfg.Default != "" {
-			def := renderText(cfg.Theme.DefaultStyle, cfg.Default)
+		if placeholder := placeholderText(cfg); placeholder != "" {
+			def := renderText(placeholderStyle(cfg.Theme), placeholder)
 			fmt.Fprintf(p.Out, " [%s]", def)
 		}
 
@@ -153,20 +216,13 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 
 		// Show input value or placeholder with inline default
 		fmt.Fprint(p.Out, ": ")
-		if currentInput == "" {
-			// Show default in low contrast inline if no input and default exists
-			if cfg.Default != "" {
-				// Use PlaceholderStyle if available, otherwise DefaultStyle
-				style := cfg.Theme.PlaceholderStyle
-				if style == nil {
-					style = cfg.Theme.DefaultStyle
-				}
-				def := renderText(style, cfg.Default)
-				fmt.Fprint(p.Out, def)
-			}
-		} else {
-			// Show user's input
+		if currentInput != "" {
 			fmt.Fprint(p.Out, currentInput)
+		}
+
+		if suggestion := suggestionText(cfg, currentInput); suggestion != "" {
+			def := renderText(suggestionStyle(cfg.Theme), suggestion)
+			fmt.Fprint(p.Out, def)
 		}
 
 		// Move to next line for key hints
@@ -180,14 +236,14 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		hasDefault := cfg.Default != ""
 		if hasDefault {
 			hint := "[ Tab ] Autocomplete"
-			if cfg.Theme.ButtonActiveStyle != nil {
-				hint = renderText(cfg.Theme.ButtonActiveStyle, hint)
+			if style := buttonActiveStyle(cfg.Theme); style != nil {
+				hint = renderText(style, hint)
 			}
 			hints = append(hints, hint)
 		} else {
 			hint := "[ Tab ] Autocomplete"
-			if cfg.Theme.ButtonInactiveStyle != nil {
-				hint = renderText(cfg.Theme.ButtonInactiveStyle, hint)
+			if style := buttonInactiveStyle(cfg.Theme); style != nil {
+				hint = renderText(style, hint)
 			}
 			hints = append(hints, hint)
 		}
@@ -196,22 +252,22 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		hasBack := cfg.OnEscape != nil
 		if hasBack {
 			hint := "[ ESC ] Back"
-			if cfg.Theme.ButtonActiveStyle != nil {
-				hint = renderText(cfg.Theme.ButtonActiveStyle, hint)
+			if style := buttonActiveStyle(cfg.Theme); style != nil {
+				hint = renderText(style, hint)
 			}
 			hints = append(hints, hint)
 		} else {
 			hint := "[ ESC ] Back"
-			if cfg.Theme.ButtonInactiveStyle != nil {
-				hint = renderText(cfg.Theme.ButtonInactiveStyle, hint)
+			if style := buttonInactiveStyle(cfg.Theme); style != nil {
+				hint = renderText(style, hint)
 			}
 			hints = append(hints, hint)
 		}
 
 		// Enter / Submit (always available)
 		hint := "[ Enter ] Submit"
-		if cfg.Theme.ButtonActiveStyle != nil {
-			hint = renderText(cfg.Theme.ButtonActiveStyle, hint)
+		if style := buttonActiveStyle(cfg.Theme); style != nil {
+			hint = renderText(style, hint)
 		}
 		hints = append(hints, hint)
 
@@ -230,10 +286,6 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		fmt.Fprint(p.Out, "\r")
 		// Calculate position: prefix + label + ": " + input length (using actual text lengths)
 		inputLen := len(currentInput)
-		if currentInput == "" && cfg.Default != "" {
-			// When showing default, cursor should be at end of default
-			inputLen = len(cfg.Default)
-		}
 		totalPos := prefixTextLen + labelTextLen + 2 + inputLen // +2 for ": "
 
 		// Move cursor to position (we're already at start, so just move right)

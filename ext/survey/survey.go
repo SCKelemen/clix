@@ -12,6 +12,10 @@ import (
 	"clix/ext/prompt"
 )
 
+// NoDefaultPlaceholder is the message shown when a survey question has no default value.
+// It prompts users that pressing enter will keep the current value.
+const NoDefaultPlaceholder = "press enter for default"
+
 // ErrGoBack is the error returned by prompts when user wants to go back.
 // Re-exported from prompt package for convenience.
 var ErrGoBack = prompt.ErrGoBack
@@ -406,6 +410,9 @@ func (s *Survey) Run() error {
 
 		// Ensure theme is set if not already provided
 		req := question.Request
+		if req.NoDefaultPlaceholder == "" {
+			req.NoDefaultPlaceholder = NoDefaultPlaceholder
+		}
 
 		if req.Theme.Prefix == "" && req.Theme.Error == "" && req.Theme.PrefixStyle == nil {
 			req.Theme = clix.DefaultPromptTheme
@@ -583,6 +590,10 @@ func (s *Survey) showEndCard() error {
 			Confirm: true,
 			Theme:   theme,
 		}
+	}
+
+	if promptReq.NoDefaultPlaceholder == "" {
+		promptReq.NoDefaultPlaceholder = NoDefaultPlaceholder
 	}
 
 	var answer string

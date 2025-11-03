@@ -50,14 +50,15 @@ type PromptOption interface {
 //	//     Options: []SelectOption{{Label: "A", Value: "a"}},
 //	// })
 type PromptRequest struct {
-	Label        string
-	Default      string
-	Validate     func(string) error
-	Theme        PromptTheme
-	Options      []SelectOption
-	MultiSelect  bool
-	Confirm      bool
-	ContinueText string
+	Label                string
+	Default              string
+	NoDefaultPlaceholder string
+	Validate             func(string) error
+	Theme                PromptTheme
+	Options              []SelectOption
+	MultiSelect          bool
+	Confirm              bool
+	ContinueText         string
 }
 
 // Apply implements PromptOption so PromptRequest can be used directly.
@@ -68,10 +69,13 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 	if r.Default != "" {
 		cfg.Default = r.Default
 	}
+	if r.NoDefaultPlaceholder != "" {
+		cfg.NoDefaultPlaceholder = r.NoDefaultPlaceholder
+	}
 	if r.Validate != nil {
 		cfg.Validate = r.Validate
 	}
-	if r.Theme.Prefix != "" || r.Theme.PrefixStyle != nil {
+	if r.Theme.isConfigured() {
 		cfg.Theme = r.Theme
 	}
 	if len(r.Options) > 0 {
@@ -91,14 +95,15 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 // PromptConfig holds all prompt configuration internally.
 // Exported so extension packages can implement PromptOption.
 type PromptConfig struct {
-	Label        string
-	Default      string
-	Validate     func(string) error
-	Theme        PromptTheme
-	Options      []SelectOption
-	MultiSelect  bool
-	Confirm      bool
-	ContinueText string
+	Label                string
+	Default              string
+	NoDefaultPlaceholder string
+	Validate             func(string) error
+	Theme                PromptTheme
+	Options              []SelectOption
+	MultiSelect          bool
+	Confirm              bool
+	ContinueText         string
 	// OnEscape is called when the Escape key is pressed.
 	// If it returns an error, that error is returned instead of "cancelled".
 	// Extensions (like survey) can use this to handle custom behavior for the Escape key.
@@ -131,6 +136,15 @@ func WithLabel(label string) PromptOption {
 func WithDefault(def string) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.Default = def
+	})
+}
+
+// WithNoDefaultPlaceholder sets the placeholder text shown when no default exists.
+// This is typically used by higher-level workflows (like surveys) to prompt the
+// user that pressing enter will keep their existing value.
+func WithNoDefaultPlaceholder(text string) PromptOption {
+	return TextPromptOption(func(cfg *PromptConfig) {
+		cfg.NoDefaultPlaceholder = text
 	})
 }
 
@@ -174,11 +188,39 @@ type PromptTheme struct {
 	LabelStyle          TextStyle
 	HintStyle           TextStyle
 	DefaultStyle        TextStyle
-	PlaceholderStyle    TextStyle // Style for placeholder/default text
+	PlaceholderStyle    TextStyle // Style for placeholder/default text (e.g., bracketed defaults)
+	SuggestionStyle     TextStyle // Style for inline suggestion/ghost text
 	ErrorStyle          TextStyle
 	ButtonActiveStyle   TextStyle // Style for active button hints
 	ButtonInactiveStyle TextStyle // Style for inactive/grayed-out button hints
 	ButtonHoverStyle    TextStyle // Style for hovered button hints
+	Buttons             PromptButtonStyles
+}
+
+// PromptButtonStyles groups button hint styles together for easier configuration.
+type PromptButtonStyles struct {
+	Active   TextStyle
+	Inactive TextStyle
+	Hover    TextStyle
+}
+
+func (t PromptTheme) isConfigured() bool {
+	return t.Prefix != "" ||
+		t.Hint != "" ||
+		t.Error != "" ||
+		t.PrefixStyle != nil ||
+		t.LabelStyle != nil ||
+		t.HintStyle != nil ||
+		t.DefaultStyle != nil ||
+		t.PlaceholderStyle != nil ||
+		t.SuggestionStyle != nil ||
+		t.ErrorStyle != nil ||
+		t.ButtonActiveStyle != nil ||
+		t.ButtonInactiveStyle != nil ||
+		t.ButtonHoverStyle != nil ||
+		t.Buttons.Active != nil ||
+		t.Buttons.Inactive != nil ||
+		t.Buttons.Hover != nil
 }
 
 // DefaultPromptTheme provides a sensible default for terminal prompts.
