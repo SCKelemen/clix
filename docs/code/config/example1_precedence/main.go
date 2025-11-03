@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -20,14 +21,16 @@ func main() {
 		Name:   "api-key",
 		Usage:  "API key for authentication",
 		EnvVar: "MYAPP_API_KEY", // Reads from environment
-	}, &apiKey)
+		Value:  &apiKey,
+	})
 
 	cmd.Flags.IntVar(&clix.IntVarOptions{
 		Name:    "port",
 		Usage:   "Server port",
 		Default: "8080",
 		EnvVar:  "MYAPP_PORT",
-	}, &port)
+		Value:   &port,
+	})
 
 	cmd.Run = func(ctx *clix.Context) error {
 		fmt.Fprintf(ctx.App.Out, "API Key: %s\n", apiKey)

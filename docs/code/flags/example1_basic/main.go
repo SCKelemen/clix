@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -20,13 +21,15 @@ func main() {
 		Name:  "name",
 		Short: "n",
 		Usage: "Your name",
-	}, &name)
+		Value: &name,
+	})
 
 	greetCmd.Flags.IntVar(&clix.IntVarOptions{
 		Name:  "age",
 		Short: "a",
 		Usage: "Your age",
-	}, &age)
+		Value: &age,
+	})
 
 	greetCmd.Run = func(ctx *clix.Context) error {
 		fmt.Fprintf(ctx.App.Out, "Hello, %s! You are %d years old.\n", name, age)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -21,7 +22,7 @@ func main() {
 
 	// Subcommand: greet hello
 	helloCmd := clix.NewCommand("hello")
-	helloCmd.Description = "Say hello"
+	helloCmd.Short = "Say hello"
 	helloCmd.Run = func(ctx *clix.Context) error {
 		fmt.Fprintln(ctx.App.Out, "Hello!")
 		return nil
@@ -29,7 +30,7 @@ func main() {
 
 	// Subcommand: greet goodbye
 	goodbyeCmd := clix.NewCommand("goodbye")
-	goodbyeCmd.Description = "Say goodbye"
+	goodbyeCmd.Short = "Say goodbye"
 	goodbyeCmd.Run = func(ctx *clix.Context) error {
 		fmt.Fprintln(ctx.App.Out, "Goodbye!")
 		return nil
