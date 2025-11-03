@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"clix"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -45,4 +46,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-
