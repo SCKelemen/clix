@@ -14,10 +14,6 @@ import (
 	"golang.org/x/term"
 )
 
-// ErrGoBack is returned by prompts when the user wants to go back to a previous question.
-// This can be triggered by Escape or F12 keys when undo is enabled in surveys.
-var ErrGoBack = errors.New("go back to previous question")
-
 func buttonActiveStyle(theme clix.PromptTheme) clix.TextStyle {
 	if theme.Buttons.Active != nil {
 		return theme.Buttons.Active
@@ -79,6 +75,44 @@ func suggestionText(cfg *clix.PromptConfig, currentInput string) string {
 	}
 
 	return ""
+}
+
+func dispatchCommand(cfg *clix.PromptConfig, cmd clix.PromptCommand) clix.PromptCommandAction {
+	if cfg.CommandHandler == nil {
+		return clix.PromptCommandAction{}
+	}
+	return cfg.CommandHandler(cmd)
+}
+
+func functionKeyNumber(key Key) int {
+	switch key {
+	case KeyF1:
+		return 1
+	case KeyF2:
+		return 2
+	case KeyF3:
+		return 3
+	case KeyF4:
+		return 4
+	case KeyF5:
+		return 5
+	case KeyF6:
+		return 6
+	case KeyF7:
+		return 7
+	case KeyF8:
+		return 8
+	case KeyF9:
+		return 9
+	case KeyF10:
+		return 10
+	case KeyF11:
+		return 11
+	case KeyF12:
+		return 12
+	default:
+		return 0
+	}
 }
 
 // TerminalPrompter implements Prompter with full support for text, select,
@@ -248,8 +282,8 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 			hints = append(hints, hint)
 		}
 
-		// ESC / Back (only if OnEscape is set)
-		hasBack := cfg.OnEscape != nil
+		// ESC / Back (only if consumer enabled a back command)
+		hasBack := cfg.BackCommandEnabled
 		if hasBack {
 			hint := "[ ESC ] Back"
 			if style := buttonActiveStyle(cfg.Theme); style != nil {
@@ -336,39 +370,50 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 				currentInput = currentInput[:len(currentInput)-1]
 			}
 		case KeyTab:
+			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandTab})
+			if action.Exit {
+				HideCursor(p.Out)
+				fmt.Fprint(p.Out, "\n")
+				fmt.Fprint(p.Out, "\r\033[K")
+				ShowCursor(p.Out)
+				return "", action.ExitErr
+			}
+			if action.Handled {
+				continue
+			}
 			// Tab completion to default
 			if cfg.Default != "" {
 				currentInput = cfg.Default
 			}
 		case KeyCtrlC:
-			// Check if extension wants to handle Escape key
-			if cfg.OnEscape != nil {
-				if err := cfg.OnEscape(); err != nil {
-					return "", err
-				}
-			}
 			fmt.Fprint(p.Out, "\n")
 			fmt.Fprint(p.Out, "\r\033[K")
 			return "", errors.New("cancelled")
 		case KeyEscape:
-			// Check if extension wants to handle Escape key
-			if cfg.OnEscape != nil {
-				if err := cfg.OnEscape(); err != nil {
-					fmt.Fprint(p.Out, "\n")
-					fmt.Fprint(p.Out, "\r\033[K")
-					return "", err
-				}
+			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandEscape})
+			if action.Exit {
+				HideCursor(p.Out)
+				fmt.Fprint(p.Out, "\n")
+				fmt.Fprint(p.Out, "\r\033[K")
+				ShowCursor(p.Out)
+				return "", action.ExitErr
+			}
+			if action.Handled {
+				continue
 			}
 			// Default: clear input
 			currentInput = ""
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
-			// Check if extension wants to handle F keys
-			if cfg.OnFunctionKey != nil {
-				if err := cfg.OnFunctionKey(key); err != nil {
-					fmt.Fprint(p.Out, "\n")
-					fmt.Fprint(p.Out, "\r\033[K")
-					return "", err
-				}
+			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)})
+			if action.Exit {
+				HideCursor(p.Out)
+				fmt.Fprint(p.Out, "\n")
+				fmt.Fprint(p.Out, "\r\033[K")
+				ShowCursor(p.Out)
+				return "", action.ExitErr
+			}
+			if action.Handled {
+				continue
 			}
 		default:
 			// Regular printable character
@@ -499,7 +544,26 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			ShowCursor(p.Out)
 			return "", errors.New("cancelled")
 		case KeyEscape:
-			// Clear all prompt lines first
+			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandEscape})
+			if action.Exit {
+				MoveCursorUp(p.Out, linesToRender)
+				for i := 0; i < linesToRender; i++ {
+					fmt.Fprint(p.Out, "\r\033[K")
+					if i < linesToRender-1 {
+						MoveCursorDown(p.Out, 1)
+					}
+				}
+				MoveCursorUp(p.Out, linesToRender-1)
+				fmt.Fprint(p.Out, "\r\033[K")
+				ShowCursor(p.Out)
+				return "", action.ExitErr
+			}
+			if action.Handled {
+				MoveCursorUp(p.Out, linesToRender)
+				p.renderSelectPrompt(cfg, selectedIdx)
+				continue
+			}
+			// Default: treat as cancel
 			MoveCursorUp(p.Out, linesToRender)
 			for i := 0; i < linesToRender; i++ {
 				fmt.Fprint(p.Out, "\r\033[K")
@@ -510,16 +574,28 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			// Check if extension wants to handle Escape key
-			if cfg.OnEscape != nil {
-				if err := cfg.OnEscape(); err != nil {
-					return "", err
-				}
-			}
-			// Default: treat as cancel
 			return "", errors.New("cancelled")
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
-			// Clear all prompt lines first
+			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)})
+			if action.Exit {
+				MoveCursorUp(p.Out, linesToRender)
+				for i := 0; i < linesToRender; i++ {
+					fmt.Fprint(p.Out, "\r\033[K")
+					if i < linesToRender-1 {
+						MoveCursorDown(p.Out, 1)
+					}
+				}
+				MoveCursorUp(p.Out, linesToRender-1)
+				fmt.Fprint(p.Out, "\r\033[K")
+				ShowCursor(p.Out)
+				return "", action.ExitErr
+			}
+			if action.Handled {
+				MoveCursorUp(p.Out, linesToRender)
+				p.renderSelectPrompt(cfg, selectedIdx)
+				continue
+			}
+			// Default: treat as cancel
 			MoveCursorUp(p.Out, linesToRender)
 			for i := 0; i < linesToRender; i++ {
 				fmt.Fprint(p.Out, "\r\033[K")
@@ -530,13 +606,6 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			// Check if extension wants to handle F keys
-			if cfg.OnFunctionKey != nil {
-				if err := cfg.OnFunctionKey(key); err != nil {
-					return "", err
-				}
-			}
-			// Default: treat as cancel
 			return "", errors.New("cancelled")
 		case KeyHome:
 			selectedIdx = 0
@@ -955,7 +1024,26 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			ShowCursor(p.Out)
 			return "", errors.New("cancelled")
 		case KeyEscape:
-			// Clear all prompt lines first
+			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandEscape})
+			if action.Exit {
+				MoveCursorUp(p.Out, linesToRender)
+				for i := 0; i < linesToRender; i++ {
+					fmt.Fprint(p.Out, "\r\033[K")
+					if i < linesToRender-1 {
+						MoveCursorDown(p.Out, 1)
+					}
+				}
+				MoveCursorUp(p.Out, linesToRender-1)
+				fmt.Fprint(p.Out, "\r\033[K")
+				ShowCursor(p.Out)
+				return "", action.ExitErr
+			}
+			if action.Handled {
+				MoveCursorUp(p.Out, linesToRender)
+				p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
+				continue
+			}
+			// Default: treat as cancel
 			MoveCursorUp(p.Out, linesToRender)
 			for i := 0; i < linesToRender; i++ {
 				fmt.Fprint(p.Out, "\r\033[K")
@@ -966,16 +1054,28 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			// Check if extension wants to handle Escape key
-			if cfg.OnEscape != nil {
-				if err := cfg.OnEscape(); err != nil {
-					return "", err
-				}
-			}
-			// Default: treat as cancel
 			return "", errors.New("cancelled")
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
-			// Clear all prompt lines first
+			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)})
+			if action.Exit {
+				MoveCursorUp(p.Out, linesToRender)
+				for i := 0; i < linesToRender; i++ {
+					fmt.Fprint(p.Out, "\r\033[K")
+					if i < linesToRender-1 {
+						MoveCursorDown(p.Out, 1)
+					}
+				}
+				MoveCursorUp(p.Out, linesToRender-1)
+				fmt.Fprint(p.Out, "\r\033[K")
+				ShowCursor(p.Out)
+				return "", action.ExitErr
+			}
+			if action.Handled {
+				MoveCursorUp(p.Out, linesToRender)
+				p.renderMultiSelectPrompt(cfg, selected, currentIdx, onContinueButton)
+				continue
+			}
+			// Default: treat as cancel
 			MoveCursorUp(p.Out, linesToRender)
 			for i := 0; i < linesToRender; i++ {
 				fmt.Fprint(p.Out, "\r\033[K")
@@ -986,13 +1086,6 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			// Check if extension wants to handle F keys
-			if cfg.OnFunctionKey != nil {
-				if err := cfg.OnFunctionKey(key); err != nil {
-					return "", err
-				}
-			}
-			// Default: treat as cancel
 			return "", errors.New("cancelled")
 		case KeyHome:
 			onContinueButton = false

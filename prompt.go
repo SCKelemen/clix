@@ -59,6 +59,8 @@ type PromptRequest struct {
 	MultiSelect          bool
 	Confirm              bool
 	ContinueText         string
+	CommandHandler       PromptCommandHandler
+	BackCommandEnabled   bool
 }
 
 // Apply implements PromptOption so PromptRequest can be used directly.
@@ -90,6 +92,12 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 	if r.ContinueText != "" {
 		cfg.ContinueText = r.ContinueText
 	}
+	if r.CommandHandler != nil {
+		cfg.CommandHandler = r.CommandHandler
+	}
+	if r.BackCommandEnabled {
+		cfg.BackCommandEnabled = true
+	}
 }
 
 // PromptConfig holds all prompt configuration internally.
@@ -104,18 +112,45 @@ type PromptConfig struct {
 	MultiSelect          bool
 	Confirm              bool
 	ContinueText         string
-	// OnEscape is called when the Escape key is pressed.
-	// If it returns an error, that error is returned instead of "cancelled".
-	// Extensions (like survey) can use this to handle custom behavior for the Escape key.
-	// Note: This refers to the keyboard Escape key press, not ANSI escape code sequences.
-	OnEscape func() error
-	// OnFunctionKey is called when any F key (F1-F12) is pressed.
-	// The Key parameter indicates which F key was pressed (KeyF1 through KeyF12).
-	// If it returns an error, that error is returned instead of "cancelled".
-	// Extensions can use this to bind specific F keys to custom actions.
-	// Note: Key type is from clix/ext/prompt package - use prompt.KeyF1, etc.
-	OnFunctionKey func(key interface{}) error
+	CommandHandler       PromptCommandHandler
+	BackCommandEnabled   bool
 }
+
+// PromptCommandType identifies a special key command intercepted by interactive prompts.
+type PromptCommandType int
+
+const (
+	// PromptCommandUnknown represents an unclassified key.
+	PromptCommandUnknown PromptCommandType = iota
+	// PromptCommandEscape indicates the escape key was pressed.
+	PromptCommandEscape
+	// PromptCommandTab indicates the tab key was pressed.
+	PromptCommandTab
+	// PromptCommandFunction indicates an F-key (F1-F12) was pressed.
+	PromptCommandFunction
+)
+
+// PromptCommand describes a high-level command initiated by the user.
+// For function keys, FunctionKey contains the key index (1-12).
+type PromptCommand struct {
+	Type        PromptCommandType
+	FunctionKey int
+}
+
+// PromptCommandAction instructs the prompter how to proceed after a command is handled.
+type PromptCommandAction struct {
+	// Handled indicates the command was consumed and default handling should be skipped.
+	Handled bool
+	// Exit requests the prompter to exit immediately.
+	// If ExitErr is non-nil it will be returned from the prompt.
+	Exit bool
+	// ExitErr is returned from the prompt when Exit is true.
+	ExitErr error
+}
+
+// PromptCommandHandler processes special key commands during an interactive prompt.
+// Returning an action with Exit=true stops the prompt immediately.
+type PromptCommandHandler func(PromptCommand) PromptCommandAction
 
 // TextPromptOption implements PromptOption for basic text prompts.
 // These options work with all prompters.
@@ -136,6 +171,13 @@ func WithLabel(label string) PromptOption {
 func WithDefault(def string) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.Default = def
+	})
+}
+
+// WithCommandHandler registers a handler for special key commands during prompts.
+func WithCommandHandler(handler PromptCommandHandler) PromptOption {
+	return TextPromptOption(func(cfg *PromptConfig) {
+		cfg.CommandHandler = handler
 	})
 }
 
