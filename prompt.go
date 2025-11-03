@@ -60,7 +60,7 @@ type PromptRequest struct {
 	Confirm              bool
 	ContinueText         string
 	CommandHandler       PromptCommandHandler
-	BackCommandEnabled   bool
+	KeyMap               PromptKeyMap
 }
 
 // Apply implements PromptOption so PromptRequest can be used directly.
@@ -95,8 +95,8 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 	if r.CommandHandler != nil {
 		cfg.CommandHandler = r.CommandHandler
 	}
-	if r.BackCommandEnabled {
-		cfg.BackCommandEnabled = true
+	if r.KeyMap.isConfigured() {
+		cfg.KeyMap = r.KeyMap
 	}
 }
 
@@ -113,7 +113,7 @@ type PromptConfig struct {
 	Confirm              bool
 	ContinueText         string
 	CommandHandler       PromptCommandHandler
-	BackCommandEnabled   bool
+	KeyMap               PromptKeyMap
 }
 
 // PromptCommandType identifies a special key command intercepted by interactive prompts.
@@ -128,6 +128,8 @@ const (
 	PromptCommandTab
 	// PromptCommandFunction indicates an F-key (F1-F12) was pressed.
 	PromptCommandFunction
+	// PromptCommandEnter indicates the enter key was pressed.
+	PromptCommandEnter
 )
 
 // PromptCommand describes a high-level command initiated by the user.
@@ -148,9 +150,54 @@ type PromptCommandAction struct {
 	ExitErr error
 }
 
+// PromptKeyState describes the prompt state when evaluating key bindings.
+type PromptKeyState struct {
+	Command    PromptCommand
+	Input      string
+	Default    string
+	Suggestion string
+}
+
+// PromptCommandContext provides the handler context when a key binding is invoked.
+type PromptCommandContext struct {
+	PromptKeyState
+	SetInput func(string)
+}
+
 // PromptCommandHandler processes special key commands during an interactive prompt.
 // Returning an action with Exit=true stops the prompt immediately.
-type PromptCommandHandler func(PromptCommand) PromptCommandAction
+type PromptCommandHandler func(PromptCommandContext) PromptCommandAction
+
+// PromptKeyBinding maps a command to display metadata and optional handling.
+type PromptKeyBinding struct {
+	Command     PromptCommand
+	Description string
+	Handler     PromptCommandHandler
+	Active      func(PromptKeyState) bool
+}
+
+// PromptKeyMap holds the configured key bindings for a prompt.
+type PromptKeyMap struct {
+	Bindings []PromptKeyBinding
+}
+
+func (m PromptKeyMap) isConfigured() bool {
+	return len(m.Bindings) > 0
+}
+
+// BindingFor returns the configured binding for the given command, if any.
+func (m PromptKeyMap) BindingFor(cmd PromptCommand) (PromptKeyBinding, bool) {
+	for _, binding := range m.Bindings {
+		if binding.Command.Type != cmd.Type {
+			continue
+		}
+		if binding.Command.Type == PromptCommandFunction && binding.Command.FunctionKey != cmd.FunctionKey {
+			continue
+		}
+		return binding, true
+	}
+	return PromptKeyBinding{}, false
+}
 
 // TextPromptOption implements PromptOption for basic text prompts.
 // These options work with all prompters.
@@ -178,6 +225,15 @@ func WithDefault(def string) PromptOption {
 func WithCommandHandler(handler PromptCommandHandler) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.CommandHandler = handler
+	})
+}
+
+// WithKeyMap configures the key bindings shown and invoked by the prompt.
+func WithKeyMap(m PromptKeyMap) PromptOption {
+	return TextPromptOption(func(cfg *PromptConfig) {
+		if m.isConfigured() {
+			cfg.KeyMap = m
+		}
 	})
 }
 

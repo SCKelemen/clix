@@ -431,34 +431,66 @@ func (s *Survey) Run() error {
 		// Prepare options - add undo handlers if enabled
 		var options []clix.PromptOption
 		canGoBack := s.withUndoStack && !isFromHistory && len(s.history) > 0
-		if canGoBack {
-			// Add undo handlers for Escape and F12
-			undoOption := clix.TextPromptOption(func(cfg *clix.PromptConfig) {
-				existing := cfg.CommandHandler
-				cfg.BackCommandEnabled = true
-				cfg.CommandHandler = func(cmd clix.PromptCommand) clix.PromptCommandAction {
-					if existing != nil {
-						if action := existing(cmd); action.Exit || action.Handled {
-							return action
-						}
-					}
+		keyBindings := append([]clix.PromptKeyBinding{}, req.KeyMap.Bindings...)
 
-					switch cmd.Type {
-					case clix.PromptCommandEscape:
-						return clix.PromptCommandAction{Handled: true, Exit: true, ExitErr: ErrGoBack}
-					case clix.PromptCommandFunction:
-						if cmd.FunctionKey == 12 {
-							return clix.PromptCommandAction{Handled: true, Exit: true, ExitErr: ErrGoBack}
-						}
-					}
-
-					return clix.PromptCommandAction{}
+		ensureBinding := func(binding clix.PromptKeyBinding) {
+			for _, existing := range keyBindings {
+				if existing.Command.Type != binding.Command.Type {
+					continue
 				}
-			})
-			options = []clix.PromptOption{req, undoOption}
-		} else {
-			options = []clix.PromptOption{req}
+				if existing.Command.Type == clix.PromptCommandFunction && existing.Command.FunctionKey != binding.Command.FunctionKey {
+					continue
+				}
+				return
+			}
+			keyBindings = append(keyBindings, binding)
 		}
+
+		isTextPrompt := len(req.Options) == 0 && !req.MultiSelect && !req.Confirm
+		if isTextPrompt {
+			ensureBinding(clix.PromptKeyBinding{
+				Command:     clix.PromptCommand{Type: clix.PromptCommandTab},
+				Description: "Autocomplete",
+				Active: func(state clix.PromptKeyState) bool {
+					return state.Default != "" && state.Suggestion != ""
+				},
+			})
+			ensureBinding(clix.PromptKeyBinding{
+				Command:     clix.PromptCommand{Type: clix.PromptCommandEnter},
+				Description: "Submit",
+			})
+		}
+
+		if s.withUndoStack {
+			goBackBinding := clix.PromptKeyBinding{
+				Command:     clix.PromptCommand{Type: clix.PromptCommandEscape},
+				Description: "Back",
+				Handler: func(ctx clix.PromptCommandContext) clix.PromptCommandAction {
+					if !canGoBack {
+						return clix.PromptCommandAction{Handled: true}
+					}
+					return clix.PromptCommandAction{Handled: true, Exit: true, ExitErr: ErrGoBack}
+				},
+				Active: func(clix.PromptKeyState) bool {
+					return canGoBack
+				},
+			}
+			ensureBinding(goBackBinding)
+			ensureBinding(clix.PromptKeyBinding{
+				Command:     clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: 12},
+				Description: "Back",
+				Handler:     goBackBinding.Handler,
+				Active: func(clix.PromptKeyState) bool {
+					return canGoBack
+				},
+			})
+		}
+
+		if len(keyBindings) > 0 {
+			req.KeyMap = clix.PromptKeyMap{Bindings: keyBindings}
+		}
+
+		options = []clix.PromptOption{req}
 
 		// Use shared reader wrapper to avoid bufio.Reader buffering issues
 		if s.reader != nil {

@@ -77,11 +77,32 @@ func suggestionText(cfg *clix.PromptConfig, currentInput string) string {
 	return ""
 }
 
-func dispatchCommand(cfg *clix.PromptConfig, cmd clix.PromptCommand) clix.PromptCommandAction {
-	if cfg.CommandHandler == nil {
-		return clix.PromptCommandAction{}
+func dispatchCommand(cfg *clix.PromptConfig, state clix.PromptKeyState, setInput func(string)) clix.PromptCommandAction {
+	if setInput == nil {
+		setInput = func(string) {}
 	}
-	return cfg.CommandHandler(cmd)
+	ctx := clix.PromptCommandContext{
+		PromptKeyState: state,
+		SetInput:       setInput,
+	}
+
+	if binding, ok := cfg.KeyMap.BindingFor(state.Command); ok {
+		if binding.Active != nil && !binding.Active(state) {
+			return clix.PromptCommandAction{Handled: true}
+		}
+		if binding.Handler != nil {
+			action := binding.Handler(ctx)
+			if action.Exit || action.Handled {
+				return action
+			}
+		}
+	}
+
+	if cfg.CommandHandler != nil {
+		return cfg.CommandHandler(ctx)
+	}
+
+	return clix.PromptCommandAction{}
 }
 
 func functionKeyNumber(key Key) int {
@@ -113,6 +134,65 @@ func functionKeyNumber(key Key) int {
 	default:
 		return 0
 	}
+}
+
+func commandLabel(cmd clix.PromptCommand) string {
+	switch cmd.Type {
+	case clix.PromptCommandEscape:
+		return "ESC"
+	case clix.PromptCommandTab:
+		return "Tab"
+	case clix.PromptCommandEnter:
+		return "Enter"
+	case clix.PromptCommandFunction:
+		if cmd.FunctionKey > 0 {
+			return fmt.Sprintf("F%d", cmd.FunctionKey)
+		}
+	}
+	return ""
+}
+
+func renderHintLine(cfg *clix.PromptConfig, baseState clix.PromptKeyState) string {
+	if len(cfg.KeyMap.Bindings) == 0 {
+		return ""
+	}
+
+	var hints []string
+	for _, binding := range cfg.KeyMap.Bindings {
+		label := commandLabel(binding.Command)
+		if label == "" {
+			continue
+		}
+
+		state := baseState
+		state.Command = binding.Command
+
+		active := true
+		if binding.Active != nil {
+			active = binding.Active(state)
+		}
+
+		hint := fmt.Sprintf("[ %s ] %s", label, binding.Description)
+		style := buttonActiveStyle(cfg.Theme)
+		if !active {
+			style = buttonInactiveStyle(cfg.Theme)
+		}
+		if style != nil {
+			hint = renderText(style, hint)
+		}
+		hints = append(hints, hint)
+	}
+
+	if len(hints) == 0 {
+		return ""
+	}
+
+	hintText := strings.Join(hints, "    ")
+	if cfg.Theme.HintStyle != nil {
+		hintText = renderText(cfg.Theme.HintStyle, hintText)
+	}
+
+	return hintText
 }
 
 // TerminalPrompter implements Prompter with full support for text, select,
@@ -254,7 +334,8 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 			fmt.Fprint(p.Out, currentInput)
 		}
 
-		if suggestion := suggestionText(cfg, currentInput); suggestion != "" {
+		suggestion := suggestionText(cfg, currentInput)
+		if suggestion != "" {
 			def := renderText(suggestionStyle(cfg.Theme), suggestion)
 			fmt.Fprint(p.Out, def)
 		}
@@ -263,54 +344,11 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		fmt.Fprint(p.Out, "\n")
 		fmt.Fprint(p.Out, "\r\033[K")
 
-		// Show key hints: [ Tab ] Autocomplete [ ESC ] Back [ Enter ] Submit
-		var hints []string
-
-		// Tab / Autocomplete (only if default exists)
-		hasDefault := cfg.Default != ""
-		if hasDefault {
-			hint := "[ Tab ] Autocomplete"
-			if style := buttonActiveStyle(cfg.Theme); style != nil {
-				hint = renderText(style, hint)
-			}
-			hints = append(hints, hint)
-		} else {
-			hint := "[ Tab ] Autocomplete"
-			if style := buttonInactiveStyle(cfg.Theme); style != nil {
-				hint = renderText(style, hint)
-			}
-			hints = append(hints, hint)
-		}
-
-		// ESC / Back (only if consumer enabled a back command)
-		hasBack := cfg.BackCommandEnabled
-		if hasBack {
-			hint := "[ ESC ] Back"
-			if style := buttonActiveStyle(cfg.Theme); style != nil {
-				hint = renderText(style, hint)
-			}
-			hints = append(hints, hint)
-		} else {
-			hint := "[ ESC ] Back"
-			if style := buttonInactiveStyle(cfg.Theme); style != nil {
-				hint = renderText(style, hint)
-			}
-			hints = append(hints, hint)
-		}
-
-		// Enter / Submit (always available)
-		hint := "[ Enter ] Submit"
-		if style := buttonActiveStyle(cfg.Theme); style != nil {
-			hint = renderText(style, hint)
-		}
-		hints = append(hints, hint)
-
-		// Join hints with spaces
-		hintText := strings.Join(hints, "    ")
-		if cfg.Theme.HintStyle != nil {
-			// Apply hint style to the whole line
-			hintText = renderText(cfg.Theme.HintStyle, hintText)
-		}
+		hintText := renderHintLine(cfg, clix.PromptKeyState{
+			Input:      currentInput,
+			Default:    cfg.Default,
+			Suggestion: suggestion,
+		})
 		fmt.Fprint(p.Out, hintText)
 
 		// Move cursor back up to input line and position at end
@@ -340,6 +378,22 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 
 		switch key {
 		case KeyEnter:
+			state := clix.PromptKeyState{
+				Command:    clix.PromptCommand{Type: clix.PromptCommandEnter},
+				Input:      currentInput,
+				Default:    cfg.Default,
+				Suggestion: suggestion,
+			}
+			if action := dispatchCommand(cfg, state, func(v string) { currentInput = v }); action.Exit || action.Handled {
+				if action.Exit {
+					HideCursor(p.Out)
+					fmt.Fprint(p.Out, "\n")
+					fmt.Fprint(p.Out, "\r\033[K")
+					ShowCursor(p.Out)
+					return "", action.ExitErr
+				}
+				continue
+			}
 			// Finished input - clear hint line and return
 			HideCursor(p.Out)
 			fmt.Fprint(p.Out, "\n")
@@ -370,7 +424,13 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 				currentInput = currentInput[:len(currentInput)-1]
 			}
 		case KeyTab:
-			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandTab})
+			state := clix.PromptKeyState{
+				Command:    clix.PromptCommand{Type: clix.PromptCommandTab},
+				Input:      currentInput,
+				Default:    cfg.Default,
+				Suggestion: suggestion,
+			}
+			action := dispatchCommand(cfg, state, func(v string) { currentInput = v })
 			if action.Exit {
 				HideCursor(p.Out)
 				fmt.Fprint(p.Out, "\n")
@@ -390,7 +450,13 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 			fmt.Fprint(p.Out, "\r\033[K")
 			return "", errors.New("cancelled")
 		case KeyEscape:
-			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandEscape})
+			state := clix.PromptKeyState{
+				Command:    clix.PromptCommand{Type: clix.PromptCommandEscape},
+				Input:      currentInput,
+				Default:    cfg.Default,
+				Suggestion: suggestion,
+			}
+			action := dispatchCommand(cfg, state, func(v string) { currentInput = v })
 			if action.Exit {
 				HideCursor(p.Out)
 				fmt.Fprint(p.Out, "\n")
@@ -404,7 +470,16 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 			// Default: clear input
 			currentInput = ""
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
-			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)})
+			state := clix.PromptKeyState{
+				Command: clix.PromptCommand{
+					Type:        clix.PromptCommandFunction,
+					FunctionKey: functionKeyNumber(key),
+				},
+				Input:      currentInput,
+				Default:    cfg.Default,
+				Suggestion: suggestion,
+			}
+			action := dispatchCommand(cfg, state, func(v string) { currentInput = v })
 			if action.Exit {
 				HideCursor(p.Out)
 				fmt.Fprint(p.Out, "\n")
@@ -544,7 +619,8 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			ShowCursor(p.Out)
 			return "", errors.New("cancelled")
 		case KeyEscape:
-			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandEscape})
+			state := clix.PromptKeyState{Command: clix.PromptCommand{Type: clix.PromptCommandEscape}, Default: cfg.Default}
+			action := dispatchCommand(cfg, state, nil)
 			if action.Exit {
 				MoveCursorUp(p.Out, linesToRender)
 				for i := 0; i < linesToRender; i++ {
@@ -576,7 +652,11 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			ShowCursor(p.Out)
 			return "", errors.New("cancelled")
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
-			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)})
+			state := clix.PromptKeyState{
+				Command: clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)},
+				Default: cfg.Default,
+			}
+			action := dispatchCommand(cfg, state, nil)
 			if action.Exit {
 				MoveCursorUp(p.Out, linesToRender)
 				for i := 0; i < linesToRender; i++ {
@@ -1024,7 +1104,8 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			ShowCursor(p.Out)
 			return "", errors.New("cancelled")
 		case KeyEscape:
-			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandEscape})
+			state := clix.PromptKeyState{Command: clix.PromptCommand{Type: clix.PromptCommandEscape}, Default: cfg.Default}
+			action := dispatchCommand(cfg, state, nil)
 			if action.Exit {
 				MoveCursorUp(p.Out, linesToRender)
 				for i := 0; i < linesToRender; i++ {
@@ -1056,7 +1137,11 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			ShowCursor(p.Out)
 			return "", errors.New("cancelled")
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
-			action := dispatchCommand(cfg, clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)})
+			state := clix.PromptKeyState{
+				Command: clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)},
+				Default: cfg.Default,
+			}
+			action := dispatchCommand(cfg, state, nil)
 			if action.Exit {
 				MoveCursorUp(p.Out, linesToRender)
 				for i := 0; i < linesToRender; i++ {
@@ -1169,20 +1254,19 @@ func (p TerminalPrompter) renderMultiSelectPrompt(cfg *clix.PromptConfig, select
 	}
 }
 
-// formatSelectedValues formats selected options into a tag-style string.
-// Returns labels formatted as " label1 ,  label2 " (space-comma-space separated with leading/trailing spaces).
+// formatSelectedValues formats selected options into a comma-delimited string of values.
 func (p TerminalPrompter) formatSelectedValues(options []clix.SelectOption, selected map[int]bool) string {
-	var labels []string
+	var values []string
 	for i, opt := range options {
 		if selected[i] {
-			labels = append(labels, opt.Label)
+			if opt.Value != "" {
+				values = append(values, opt.Value)
+				continue
+			}
+			values = append(values, opt.Label)
 		}
 	}
-	// Format as " label1 ,  label2 " (old tag style)
-	if len(labels) == 0 {
-		return ""
-	}
-	return " " + strings.Join(labels, " ,  ") + " "
+	return strings.Join(values, ",")
 }
 
 // parseIndices parses a string containing indices (supports comma, space, or comma-space separated).
