@@ -316,10 +316,10 @@ func (a *App) applyConfigToFlags(flags *FlagSet, reset bool) {
 		if !reset && flag.set {
 			continue
 		}
-		
+
 		// Reset flag state before applying precedence
 		flag.set = false
-		
+
 		if flag.EnvVar != "" {
 			if val, ok := os.LookupEnv(flag.EnvVar); ok {
 				flag.Value.Set(val)
