@@ -21,20 +21,67 @@ type Hook func(ctx *Context) error
 //   - A Command with Children: has both a Run handler and children
 //     (executes Run handler when called without args, or routes to child commands
 //     when a child name is provided)
+//
+// Example:
+//
+//	// Create a group (organizes child commands)
+//	projectGroup := clix.NewGroup("project", "Manage projects",
+//		clix.NewCommand("list", "List projects", listProjects),
+//		clix.NewCommand("get", "Get a project", getProject),
+//	)
+//
+//	// Create a command (executable)
+//	helloCmd := clix.NewCommand("hello")
+//	helloCmd.Short = "Say hello"
+//	helloCmd.Run = func(ctx *clix.Context) error {
+//		fmt.Println("Hello!")
+//		return nil
+//	}
 type Command struct {
-	Name      string
-	Aliases   []string
-	Short     string
-	Long      string
-	Usage     string
-	Example   string
-	Hidden    bool
-	Flags     *FlagSet
-	Arguments []*Argument
-	Children  []*Command // Children of this command (groups or commands)
+	// Name is the command name, used for matching and in help output.
+	Name string
 
-	Run     Handler
-	PreRun  Hook
+	// Aliases are alternative names for the command (e.g., ["ls", "list"]).
+	Aliases []string
+
+	// Short is a brief one-line description shown in command lists.
+	Short string
+
+	// Long is a detailed multi-line description shown in command help.
+	Long string
+
+	// Usage is a usage string shown in help output (e.g., "myapp cmd [flags] [args]").
+	// If empty, a default usage string is generated.
+	Usage string
+
+	// Example shows example usage in help output.
+	Example string
+
+	// Hidden hides the command from help output and autocomplete.
+	Hidden bool
+
+	// Flags is the flag set for this command. Flags defined here are scoped to this command.
+	// Use app.Flags() for flags that apply to all commands.
+	Flags *FlagSet
+
+	// Arguments defines the positional arguments this command accepts.
+	// Arguments can be required or optional, and can prompt for missing values.
+	Arguments []*Argument
+
+	// Children are the child commands or groups of this command.
+	// Use NewGroup() to create groups, NewCommand() to create executable commands.
+	Children []*Command
+
+	// Run is the handler executed when this command is invoked.
+	// If the command has children and no Run handler, it shows help (group behavior).
+	// If the command has both children and a Run handler, the Run handler executes
+	// when called without matching child commands.
+	Run Handler
+
+	// PreRun is executed before Run. Useful for setup or validation.
+	PreRun Hook
+
+	// PostRun is executed after Run. Useful for cleanup or finalization.
 	PostRun Hook
 
 	parent *Command

@@ -13,21 +13,64 @@ import (
 
 // App represents a runnable CLI application. It wires together the root
 // command, global flag set, configuration manager and prompting behaviour.
+//
+// Example:
+//
+//	app := clix.NewApp("myapp")
+//	app.Description = "A sample CLI application"
+//	app.Root = clix.NewGroup("myapp", "Main command",
+//		clix.NewCommand("hello", "Say hello", func(ctx *clix.Context) error {
+//			fmt.Println("Hello, World!")
+//			return nil
+//		}),
+//	)
+//	app.Run(context.Background(), nil)
 type App struct {
-	Name        string
-	Version     string
+	// Name is the application name, used in help output and configuration paths.
+	Name string
+
+	// Version is the application version, typically set by the version extension.
+	// Can be accessed via --version flag when the version extension is enabled.
+	Version string
+
+	// Description is a brief description of the application, shown in help output.
 	Description string
 
-	Root      *Command
-	Config    *ConfigManager
-	Prompter  Prompter
-	Out       io.Writer
-	Err       io.Writer
-	In        io.Reader
+	// Root is the root command of the application. Flags defined on the root
+	// command are accessible to all commands (via app.Flags()).
+	// NewApp automatically creates a minimal root command, but you can replace it.
+	Root *Command
+
+	// Config manages application configuration from YAML files and environment variables.
+	// Configuration values are automatically loaded and available via Context getters.
+	Config *ConfigManager
+
+	// Prompter handles interactive user input. Defaults to TextPrompter.
+	// Use the prompt extension to enable advanced prompts (select, multi-select).
+	Prompter Prompter
+
+	// Out is the writer for standard output (defaults to os.Stdout).
+	Out io.Writer
+
+	// Err is the writer for error output (defaults to os.Stderr).
+	Err io.Writer
+
+	// In is the reader for user input (defaults to os.Stdin).
+	In io.Reader
+
+	// EnvPrefix is the prefix for environment variable names.
+	// Defaults to the app name in uppercase with hyphens replaced by underscores.
+	// For example, "my-app" becomes "MY_APP".
 	EnvPrefix string
 
-	DefaultTheme  PromptTheme
-	Styles        Styles
+	// DefaultTheme configures the default styling for prompts.
+	// Can be overridden per-prompt via PromptRequest.Theme.
+	DefaultTheme PromptTheme
+
+	// Styles configures text styling for help output and other CLI text.
+	// Use lipgloss-compatible styles or custom TextStyle implementations.
+	Styles Styles
+
 	configLoaded  bool
 	configLoadErr error
 	rootPrepared  bool
@@ -416,11 +459,48 @@ func (a *App) countUserChildren(cmd *Command) int {
 
 // Context is passed to command handlers and provides convenient access to the
 // resolved command, arguments, configuration and flags.
+// Context provides CLI-specific context for command execution.
+// It embeds context.Context for cancellation and deadlines, and adds
+// CLI-specific data like the active command, arguments, and app instance.
+//
+// Context is passed to all command handlers (Run, PreRun, PostRun) and
+// provides access to flags, arguments, and configuration via type-specific
+// getters that respect precedence: command flags > app flags > env > config > defaults.
+//
+// Example:
+//
+//	cmd.Run = func(ctx *clix.Context) error {
+//		// Access flags with precedence
+//		if project, ok := ctx.String("project"); ok {
+//			fmt.Printf("Using project: %s\n", project)
+//		}
+//
+//		// Access arguments
+//		if name, ok := ctx.ArgNamed("name"); ok {
+//			fmt.Printf("Hello, %s!\n", name)
+//		}
+//
+//		// Use context.Context for cancellation
+//		select {
+//		case <-ctx.Done():
+//			return ctx.Err()
+//		default:
+//			// Continue execution
+//		}
+//		return nil
+//	}
 type Context struct {
-	context.Context
-	App     *App
+	context.Context // Embedded for cancellation, deadlines, and context values
+
+	// App is the application instance executing this command.
+	App *App
+
+	// Command is the currently executing command.
 	Command *Command
-	Args    []string // Direct access to positional arguments
+
+	// Args contains positional arguments passed to the command.
+	// Use Arg(index) or ArgNamed(name) for safer access with bounds checking.
+	Args []string
 }
 
 // ConfigDir returns the absolute path to the application's configuration

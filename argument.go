@@ -3,11 +3,42 @@ package clix
 import "strings"
 
 // Argument describes a positional argument for a command.
+//
+// Example:
+//
+//	cmd.Arguments = []*clix.Argument{
+//		{
+//			Name:     "name",
+//			Prompt:   "Enter your name",
+//			Required: true,
+//			Validate: validation.NotEmpty,
+//		},
+//		{
+//			Name:    "email",
+//			Prompt:  "Enter your email",
+//			Default: "user@example.com",
+//			Validate: validation.Email,
+//		},
+//	}
 type Argument struct {
-	Name     string
-	Prompt   string
-	Default  string
+	// Name is the argument name, used for named argument access (key=value format)
+	// and for accessing via ctx.ArgNamed(name).
+	Name string
+
+	// Prompt is the text shown when prompting for this argument if it's missing.
+	// If empty, a default prompt is generated from the Name field.
+	Prompt string
+
+	// Default is the default value if the argument is not provided.
+	// Only used if Required is false.
+	Default string
+
+	// Required indicates whether this argument must be provided.
+	// Missing required arguments trigger interactive prompts (if available).
 	Required bool
+
+	// Validate is an optional validation function called when the argument is provided.
+	// Return an error if the value is invalid.
 	Validate func(string) error
 }
 

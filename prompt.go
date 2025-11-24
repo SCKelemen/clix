@@ -38,29 +38,69 @@ type PromptOption interface {
 // PromptRequest is the struct-based API for prompts, consistent with the rest of the codebase.
 // This is the primary API - functional options are a convenience layer.
 //
+// Example:
+//
 //	// Basic text prompt
-//	prompter.Prompt(ctx, PromptRequest{
-//		Label: "Name",
+//	result, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
+//		Label:   "Name",
 //		Default: "unknown",
+//		Validate: validation.NotEmpty,
 //	})
 //
-//	// Advanced prompts (require prompt extension):
-//	// prompter.Prompt(ctx, PromptRequest{
-//	//     Label: "Choose",
-//	//     Options: []SelectOption{{Label: "A", Value: "a"}},
-//	// })
+//	// Select prompt (requires prompt extension)
+//	result, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
+//		Label: "Choose an option",
+//		Options: []clix.SelectOption{
+//			{Label: "Option A", Value: "a"},
+//			{Label: "Option B", Value: "b"},
+//		},
+//	})
+//
+//	// Confirm prompt
+//	result, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
+//		Label:   "Continue?",
+//		Confirm: true,
+//	})
 type PromptRequest struct {
-	Label                string
-	Default              string
+	// Label is the prompt text shown to the user.
+	Label string
+
+	// Default is the default value shown in the prompt.
+	// For text prompts, this appears as placeholder text.
+	Default string
+
+	// NoDefaultPlaceholder is custom placeholder text when Default is empty.
 	NoDefaultPlaceholder string
-	Validate             func(string) error
-	Theme                PromptTheme
-	Options              []SelectOption
-	MultiSelect          bool
-	Confirm              bool
-	ContinueText         string
-	CommandHandler       PromptCommandHandler
-	KeyMap               PromptKeyMap
+
+	// Validate is an optional validation function called when the user submits input.
+	// Return an error if the value is invalid.
+	Validate func(string) error
+
+	// Theme configures the styling for this prompt.
+	// If not set, uses app.DefaultTheme.
+	Theme PromptTheme
+
+	// Options are the choices for select/multi-select prompts.
+	// Requires the prompt extension for advanced prompt types.
+	Options []SelectOption
+
+	// MultiSelect enables multi-select mode (user can choose multiple options).
+	// Requires the prompt extension.
+	MultiSelect bool
+
+	// Confirm enables confirm mode (yes/no prompt).
+	// Returns "y" or "n" (or "yes"/"no").
+	Confirm bool
+
+	// ContinueText is the text shown for the continue button in select prompts.
+	ContinueText string
+
+	// CommandHandler allows custom command handling during prompts.
+	// Users can type commands that are processed by this handler.
+	CommandHandler PromptCommandHandler
+
+	// KeyMap configures keyboard shortcuts for the prompt.
+	KeyMap PromptKeyMap
 }
 
 // Apply implements PromptOption so PromptRequest can be used directly.
@@ -268,38 +308,99 @@ func WithConfirm() PromptOption {
 	})
 }
 
-// SelectOption represents a single option in a select prompt.
-// Used by prompt extension.
+// SelectOption represents a choice in a select or multi-select prompt.
+//
+// Example:
+//
+//	result, err := prompter.Prompt(ctx, clix.PromptRequest{
+//		Label: "Choose an option",
+//		Options: []clix.SelectOption{
+//			{Label: "Option A", Value: "a", Description: "First option"},
+//			{Label: "Option B", Value: "b", Description: "Second option"},
+//		},
+//	})
 type SelectOption struct {
-	Label       string // Display label
-	Value       string // Return value when selected
-	Description string // Optional description shown below label
+	// Label is the text displayed to the user for this option.
+	Label string
+
+	// Value is the value returned when this option is selected.
+	Value string
+
+	// Description is optional additional text shown below the label.
+	Description string
 }
 
-// PromptTheme defines how prompts are styled.
+// PromptTheme configures the visual appearance of prompts.
+// Themes control the prefix, hint, error indicators, and styling for all prompt elements.
+//
+// Example:
+//
+//	theme := clix.PromptTheme{
+//		Prefix: "> ",
+//		Hint:   "(press Enter to confirm)",
+//		Error:  "✗ ",
+//		LabelStyle: lipgloss.NewStyle().Bold(true),
+//		ErrorStyle: lipgloss.NewStyle().Foreground(lipgloss.Color("9")),
+//	}
+//	result, err := prompter.Prompt(ctx, clix.PromptRequest{
+//		Label: "Name",
+//		Theme: theme,
+//	})
 type PromptTheme struct {
+	// Prefix is the text shown before the prompt label (e.g., "? ", "> ").
 	Prefix string
-	Hint   string
-	Error  string
 
-	PrefixStyle         TextStyle
-	LabelStyle          TextStyle
-	HintStyle           TextStyle
-	DefaultStyle        TextStyle
-	PlaceholderStyle    TextStyle // Style for placeholder/default text (e.g., bracketed defaults)
-	SuggestionStyle     TextStyle // Style for inline suggestion/ghost text
-	ErrorStyle          TextStyle
-	ButtonActiveStyle   TextStyle // Style for active button hints
-	ButtonInactiveStyle TextStyle // Style for inactive/grayed-out button hints
-	ButtonHoverStyle    TextStyle // Style for hovered button hints
-	Buttons             PromptButtonStyles
+	// Hint is the text shown as a hint below the prompt (e.g., "(optional)").
+	Hint string
+
+	// Error is the text shown before error messages (e.g., "! ", "✗ ").
+	Error string
+
+	// PrefixStyle styles the prefix text.
+	PrefixStyle TextStyle
+
+	// LabelStyle styles the prompt label text.
+	LabelStyle TextStyle
+
+	// HintStyle styles the hint text.
+	HintStyle TextStyle
+
+	// DefaultStyle styles the default value text.
+	DefaultStyle TextStyle
+
+	// PlaceholderStyle styles placeholder/default text (e.g., bracketed defaults).
+	PlaceholderStyle TextStyle
+
+	// SuggestionStyle styles inline suggestion/ghost text.
+	SuggestionStyle TextStyle
+
+	// ErrorStyle styles error messages.
+	ErrorStyle TextStyle
+
+	// ButtonActiveStyle styles active button hints.
+	ButtonActiveStyle TextStyle
+
+	// ButtonInactiveStyle styles inactive/grayed-out button hints.
+	ButtonInactiveStyle TextStyle
+
+	// ButtonHoverStyle styles hovered button hints.
+	ButtonHoverStyle TextStyle
+
+	// Buttons groups button hint styles together for easier configuration.
+	Buttons PromptButtonStyles
 }
 
 // PromptButtonStyles groups button hint styles together for easier configuration.
+// These styles are used for keyboard shortcut hints in prompts.
 type PromptButtonStyles struct {
-	Active   TextStyle
+	// Active styles active button hints.
+	Active TextStyle
+
+	// Inactive styles inactive/grayed-out button hints.
 	Inactive TextStyle
-	Hover    TextStyle
+
+	// Hover styles hovered button hints.
+	Hover TextStyle
 }
 
 func (t PromptTheme) isConfigured() bool {
@@ -332,8 +433,22 @@ var DefaultPromptTheme = PromptTheme{
 // This is the default prompter in core - it only handles text prompts.
 // Advanced prompt options (Select, MultiSelect, Confirm) are rejected at runtime
 // with clear error messages directing users to the prompt extension.
+// TextPrompter is the default prompt implementation.
+// It supports basic text input and confirm prompts.
+// For advanced prompts (select, multi-select), use the prompt extension
+// which provides TerminalPrompter.
+//
+// Example:
+//
+//	app.Prompter = clix.TextPrompter{
+//		In:  os.Stdin,
+//		Out: os.Stdout,
+//	}
 type TextPrompter struct {
-	In  io.Reader
+	// In is the reader for user input (typically os.Stdin).
+	In io.Reader
+
+	// Out is the writer for prompt output (typically os.Stdout).
 	Out io.Writer
 }
 

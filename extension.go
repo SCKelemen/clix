@@ -6,6 +6,21 @@ package clix
 //
 // This design is inspired by goldmark's extension system:
 // https://github.com/yuin/goldmark
+//
+// Example:
+//
+//	type MyExtension struct{}
+//
+//	func (e MyExtension) Extend(app *clix.App) error {
+//		if app.Root != nil {
+//			cmd := clix.NewCommand("custom")
+//			cmd.Short = "Custom command"
+//			app.Root.AddCommand(cmd)
+//		}
+//		return nil
+//	}
+//
+//	app.AddExtension(MyExtension{})
 type Extension interface {
 	// Extend is called during app initialization to register commands, hooks,
 	// or modify app behavior. Extensions are applied in the order they are added.

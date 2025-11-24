@@ -11,7 +11,20 @@ import (
 )
 
 // ConfigManager loads and stores configuration from YAML files and environment
-// variables.
+// variables. Configuration values are automatically loaded when App.Run is called
+// and are accessible via Context getters with precedence: command flags > app flags > env > config > defaults.
+//
+// Example:
+//
+//	app := clix.NewApp("myapp")
+//	// Config is automatically created and loaded
+//	// Access values via context:
+//	cmd.Run = func(ctx *clix.Context) error {
+//		if value, ok := ctx.String("key"); ok {
+//			// Value from config file, env var, or default
+//		}
+//		return nil
+//	}
 type ConfigManager struct {
 	values map[string]string
 }

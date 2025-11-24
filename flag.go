@@ -8,6 +8,32 @@ import (
 )
 
 // FlagSet stores a collection of flags for a command or scope.
+// Flags defined on the root command (via app.Flags()) apply to all commands.
+// Flags defined on a command are scoped to that command.
+//
+// Example:
+//
+//	// App-level flags (global)
+//	app.Flags().StringVar(clix.StringVarOptions{
+//		FlagOptions: clix.FlagOptions{
+//			Name:  "project",
+//			Short: "p",
+//			Usage: "Project to operate on",
+//			EnvVar: "MYAPP_PROJECT",
+//		},
+//		Default: "default-project",
+//		Value: &project,
+//	})
+//
+//	// Command-level flags
+//	cmd.Flags.BoolVar(clix.BoolVarOptions{
+//		FlagOptions: clix.FlagOptions{
+//			Name:  "verbose",
+//			Short: "v",
+//			Usage: "Enable verbose output",
+//		},
+//		Value: &verbose,
+//	})
 type FlagSet struct {
 	name  string
 	flags []*Flag
@@ -20,14 +46,28 @@ func NewFlagSet(name string) *FlagSet {
 }
 
 // Flag describes a single CLI flag.
+// Flags are created via FlagSet methods (StringVar, BoolVar, etc.).
 type Flag struct {
-	Name    string
-	Short   string
-	Usage   string
-	EnvVar  string
+	// Name is the long flag name (e.g., "project" for --project).
+	Name string
+
+	// Short is the shorthand flag name (e.g., "p" for -p).
+	Short string
+
+	// Usage is the help text shown for this flag.
+	Usage string
+
+	// EnvVar is the environment variable name for this flag.
+	// If empty, defaults to APP_KEY format based on EnvPrefix.
+	EnvVar string
+
+	// Default is the default value for this flag (as a string).
 	Default string
-	Value   Value
-	set     bool
+
+	// Value is the flag value implementation.
+	Value Value
+
+	set bool // Internal: tracks if flag was explicitly set
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.
@@ -42,53 +82,150 @@ type boolFlag interface {
 }
 
 // FlagOptions contains common configuration for all flag types.
+// This struct is embedded in all *VarOptions types to provide a unified API.
 type FlagOptions struct {
-	Name    string   // long flag name: "project"
-	Short   string   // optional shorthand: "p"
-	Usage   string   // help text
-	EnvVar  string   // environment variable name
-	EnvVars []string // optional additional environment variable aliases
+	// Name is the long flag name (e.g., "project" for --project).
+	Name string
+
+	// Short is the optional shorthand flag name (e.g., "p" for -p).
+	Short string
+
+	// Usage is the help text shown for this flag.
+	Usage string
+
+	// EnvVar is the environment variable name for this flag.
+	// If empty, defaults to APP_KEY format based on the app's EnvPrefix.
+	EnvVar string
+
+	// EnvVars are optional additional environment variable aliases.
+	// All listed environment variables are checked in order.
+	EnvVars []string
 }
 
 // StringVarOptions describes the configuration for adding a string flag.
+//
+// Example:
+//
+//	var project string
+//	app.Flags().StringVar(clix.StringVarOptions{
+//		FlagOptions: clix.FlagOptions{
+//			Name:  "project",
+//			Short: "p",
+//			Usage: "Project to operate on",
+//			EnvVar: "MYAPP_PROJECT",
+//		},
+//		Default: "default-project",
+//		Value: &project,
+//	})
 type StringVarOptions struct {
 	FlagOptions
+	// Default is the default value if the flag is not provided.
 	Default string
-	Value   *string
+	// Value is a pointer to the variable that will store the flag value.
+	Value *string
 }
 
 // BoolVarOptions describes the configuration for adding a bool flag.
+//
+// Example:
+//
+//	var verbose bool
+//	cmd.Flags.BoolVar(clix.BoolVarOptions{
+//		FlagOptions: clix.FlagOptions{
+//			Name:  "verbose",
+//			Short: "v",
+//			Usage: "Enable verbose output",
+//		},
+//		Value: &verbose,
+//	})
 type BoolVarOptions struct {
 	FlagOptions
+	// Value is a pointer to the variable that will store the flag value.
 	Value *bool
 }
 
 // DurationVarOptions describes the configuration for adding a duration flag.
+//
+// Example:
+//
+//	var timeout time.Duration
+//	cmd.Flags.DurationVar(clix.DurationVarOptions{
+//		FlagOptions: clix.FlagOptions{
+//			Name:  "timeout",
+//			Usage: "Operation timeout",
+//		},
+//		Default: "30s",
+//		Value: &timeout,
+//	})
 type DurationVarOptions struct {
 	FlagOptions
+	// Default is the default value as a duration string (e.g., "30s", "5m").
 	Default string
-	Value   *time.Duration
+	// Value is a pointer to the variable that will store the flag value.
+	Value *time.Duration
 }
 
 // IntVarOptions describes the configuration for adding an int flag.
+//
+// Example:
+//
+//	var port int
+//	cmd.Flags.IntVar(clix.IntVarOptions{
+//		FlagOptions: clix.FlagOptions{
+//			Name:  "port",
+//			Usage: "Server port",
+//		},
+//		Default: "8080",
+//		Value: &port,
+//	})
 type IntVarOptions struct {
 	FlagOptions
+	// Default is the default value as a string (e.g., "8080").
 	Default string
-	Value   *int
+	// Value is a pointer to the variable that will store the flag value.
+	Value *int
 }
 
 // Int64VarOptions describes the configuration for adding an int64 flag.
+//
+// Example:
+//
+//	var size int64
+//	cmd.Flags.Int64Var(clix.Int64VarOptions{
+//		FlagOptions: clix.FlagOptions{
+//			Name:  "size",
+//			Usage: "Size in bytes",
+//		},
+//		Default: "1024",
+//		Value: &size,
+//	})
 type Int64VarOptions struct {
 	FlagOptions
+	// Default is the default value as a string (e.g., "1024").
 	Default string
-	Value   *int64
+	// Value is a pointer to the variable that will store the flag value.
+	Value *int64
 }
 
 // Float64VarOptions describes the configuration for adding a float64 flag.
+//
+// Example:
+//
+//	var ratio float64
+//	cmd.Flags.Float64Var(clix.Float64VarOptions{
+//		FlagOptions: clix.FlagOptions{
+//			Name:  "ratio",
+//			Usage: "Compression ratio",
+//		},
+//		Default: "0.5",
+//		Value: &ratio,
+//	})
 type Float64VarOptions struct {
 	FlagOptions
+	// Default is the default value as a string (e.g., "0.5").
 	Default string
-	Value   *float64
+	// Value is a pointer to the variable that will store the flag value.
+	Value *float64
 }
 
 // StringVar registers a string flag.
