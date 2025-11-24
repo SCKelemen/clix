@@ -106,7 +106,6 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		args = os.Args[1:]
 	}
 
-	ctx = context.WithValue(ctx, appContextKey{}, a)
 
 	if err := a.ensureConfigLoaded(ctx); err != nil {
 		return err
@@ -205,18 +204,20 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		// Has Run handler, will execute it below
 	}
 
-	// If command has no user-defined children and required args are missing, prompt for them
-	if len(resultArgs) < cmd.RequiredArgs() {
-		if err := a.promptForArguments(ctx, cmd, &resultArgs); err != nil {
-			return err
-		}
-	}
-
 	runCtx := &Context{
 		Context: ctx,
 		App:     a,
 		Command: cmd,
 		Args:    resultArgs,
+	}
+
+	// If command has no user-defined children and required args are missing, prompt for them
+	if len(resultArgs) < cmd.RequiredArgs() {
+		if err := a.promptForArguments(runCtx, cmd, &resultArgs); err != nil {
+			return err
+		}
+		// Update args in context after prompting
+		runCtx.Args = resultArgs
 	}
 
 	if cmd.PreRun != nil {
@@ -310,7 +311,7 @@ func (a *App) applyConfig(cmd *Command) {
 	}
 }
 
-func (a *App) promptForArguments(ctx context.Context, cmd *Command, args *[]string) error {
+func (a *App) promptForArguments(ctx *Context, cmd *Command, args *[]string) error {
 	missing := cmd.RequiredArgs() - len(*args)
 	if missing <= 0 {
 		return nil
@@ -323,11 +324,12 @@ func (a *App) promptForArguments(ctx context.Context, cmd *Command, args *[]stri
 		}
 
 		// Use struct-based API for consistency with rest of codebase
-		value, err := a.Prompter.Prompt(ctx, PromptRequest{
+		// Pass ctx directly (it embeds context.Context) - no need for ctx.Context
+		value, err := ctx.App.Prompter.Prompt(ctx, PromptRequest{
 			Label:    arg.PromptLabel(),
 			Default:  arg.Default,
 			Validate: arg.Validate,
-			Theme:    a.DefaultTheme,
+			Theme:    ctx.App.DefaultTheme,
 		})
 		if err != nil {
 			return err
@@ -477,11 +479,3 @@ func (ctx *Context) GetBool(key string) (bool, bool) {
 	return false, false
 }
 
-// appContextKey is used to provide the current App via context values.
-type appContextKey struct{}
-
-// FromContext fetches the App associated with the context, if present.
-func FromContext(ctx context.Context) (*App, bool) {
-	app, ok := ctx.Value(appContextKey{}).(*App)
-	return app, ok
-}

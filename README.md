@@ -345,17 +345,34 @@ Command handlers receive a `*clix.Context` that embeds `context.Context` and pro
 - Application instance and configuration
 - Hydrated flag/config values via helper methods
 - Standard output/error streams
+- Standard context.Context functionality (cancellation, deadlines, values)
+
+**Context Layering:**
+
+- `App.Run(ctx context.Context, ...)` accepts a standard `context.Context` for process-level cancellation and deadlines
+- For each command execution, clix builds a `*clix.Context` that embeds the original `context.Context` and adds CLI-specific data
+- Within handlers, pass `*clix.Context` directly to functions that accept `context.Context` (like `Prompter.Prompt`) - no need to use `ctx.Context`
 
 ```go
 cmd.Run = func(ctx *clix.Context) error {
+        // Access CLI-specific data
         if project, ok := ctx.GetString("project"); ok {
                 fmt.Fprintf(ctx.App.Out, "Using project %s\n", project)
         }
 
+        // Use context.Context functionality (cancellation, deadlines)
         select {
         case <-ctx.Done():
                 return ctx.Err()
         default:
+        }
+
+        // Pass ctx directly to Prompter (it embeds context.Context)
+        value, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
+                Label: "Enter value",
+        })
+        if err != nil {
+                return err
         }
 
         return nil
