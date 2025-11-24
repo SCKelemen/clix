@@ -157,6 +157,21 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return fmt.Errorf("unknown command: %s", strings.Join(remaining, " "))
 	}
 
+	// Check if we tried to match a child but it doesn't exist
+	// (i.e., we have remaining args that look like a command name but didn't match)
+	// Only show error if the command has no Run handler (it's a pure group)
+	if len(rest) > 0 && len(cmd.Children) > 0 && cmd.Run == nil {
+		// Check if the first remaining arg looks like it could be a child command
+		// (not a flag and not already matched)
+		firstArg := rest[0]
+		if !strings.HasPrefix(firstArg, "-") {
+			// This looks like a command name but didn't match - show error
+			parentPath := cmd.Path()
+			return fmt.Errorf("unknown command: %s %s", parentPath, firstArg)
+		}
+	}
+	// If the command has a Run handler, we'll let it handle the args (even if they don't match a child)
+
 	// Ensure defaults and env/config values are applied prior to parsing.
 	a.applyConfig(cmd)
 
@@ -174,18 +189,23 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.printCommandHelp(cmd, resultArgs)
 	}
 
-	// Count user-defined subcommands (excluding default commands like help, config, autocomplete)
-	userSubcommands := a.countUserSubcommands(cmd)
+	// Count user-defined children (groups or commands, excluding default commands like help, config, autocomplete)
+	userChildren := a.countUserChildren(cmd)
 
-	// If command has user-defined subcommands, show help (don't execute Run handler)
-	// The only exception is if there are positional arguments, which means the user
-	// might want to execute the command with those args (though this is generally
-	// not recommended for commands with subcommands)
-	if userSubcommands > 0 {
-		return a.printCommandHelp(cmd, resultArgs)
+	// If command has user-defined children and no positional arguments were provided:
+	// - If it has a Run handler, execute it (command with children can have default behavior)
+	// - If it has no Run handler, show help (group behavior)
+	// If positional arguments are provided, we'll execute the Run handler.
+	// If a child command was matched, we would have already routed to it in matchCommand.
+	if userChildren > 0 && len(resultArgs) == 0 {
+		if cmd.Run == nil {
+			// No Run handler, show help (group behavior)
+			return a.printCommandHelp(cmd, resultArgs)
+		}
+		// Has Run handler, will execute it below
 	}
 
-	// If command has no user-defined subcommands and required args are missing, prompt for them
+	// If command has no user-defined children and required args are missing, prompt for them
 	if len(resultArgs) < cmd.RequiredArgs() {
 		if err := a.promptForArguments(ctx, cmd, &resultArgs); err != nil {
 			return err
@@ -226,7 +246,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 // the root command name appears in the arguments.
 func (a *App) matchCommand(args []string) (*Command, []string) {
 	// If the first argument matches the root command name, skip it
-	// (this happens when the binary is invoked as "app-name root-command subcommand")
+	// (this happens when the binary is invoked as "app-name root-command child")
 	if len(args) > 0 && strings.EqualFold(args[0], a.Root.Name) {
 		return a.Root.match(args[1:])
 	}
@@ -323,9 +343,9 @@ func (a *App) printCommandHelp(cmd *Command, args []string) error {
 	return helper.Render(a.Out)
 }
 
-// countUserSubcommands returns the count of subcommands that are not default built-in commands.
-func (a *App) countUserSubcommands(cmd *Command) int {
-	if cmd == nil || len(cmd.Subcommands) == 0 {
+// countUserChildren returns the count of child commands/groups that are not default built-in commands.
+func (a *App) countUserChildren(cmd *Command) int {
+	if cmd == nil || len(cmd.Children) == 0 {
 		return 0
 	}
 
@@ -338,8 +358,8 @@ func (a *App) countUserSubcommands(cmd *Command) int {
 	}
 
 	count := 0
-	for _, sub := range cmd.Subcommands {
-		if !defaultCommands[sub.Name] {
+	for _, child := range cmd.Children {
+		if !defaultCommands[child.Name] {
 			count++
 		}
 	}

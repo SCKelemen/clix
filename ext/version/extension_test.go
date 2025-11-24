@@ -23,7 +23,7 @@ func TestVersionExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		versionCmd := findSubcommandInTest(root, "version")
+		versionCmd := findChildInTest(root, "version")
 		if versionCmd == nil {
 			t.Fatal("version command should exist with extension")
 		}
@@ -36,7 +36,7 @@ func TestVersionExtension(t *testing.T) {
 
 		// Don't add extension
 
-		versionCmd := findSubcommandInTest(root, "version")
+		versionCmd := findChildInTest(root, "version")
 		if versionCmd != nil {
 			t.Fatal("version command should not exist without extension")
 		}
@@ -235,12 +235,12 @@ func TestVersionExtension(t *testing.T) {
 	})
 }
 
-func findSubcommandInTest(cmd *clix.Command, name string) *clix.Command {
-	for _, sub := range cmd.Subcommands {
-		if sub.Name == name {
-			return sub
+func findChildInTest(cmd *clix.Command, name string) *clix.Command {
+	for _, child := range cmd.Children {
+		if child.Name == name {
+			return child
 		}
-		if found := findSubcommandInTest(sub, name); found != nil {
+		if found := findChildInTest(child, name); found != nil {
 			return found
 		}
 	}

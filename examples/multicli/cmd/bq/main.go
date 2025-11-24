@@ -16,13 +16,13 @@ func main() {
 	root := clix.NewCommand("bq")
 	root.Short = "BigQuery operations"
 
-	// For the standalone bq CLI, we mount bigquery subcommands directly
+	// For the standalone bq CLI, we mount bigquery children directly
 	// This gives us: bq dataset list, bq v1beta dataset list, etc.
 	bqCmd := bigquery.NewBigQueryCommand()
 	
-	// Mount all subcommands (dataset, v1alpha, v1beta, v1)
-	for _, subcmd := range bqCmd.Subcommands {
-		root.AddCommand(subcmd)
+	// Mount all children (dataset, v1alpha, v1beta, v1)
+	for _, child := range bqCmd.Children {
+		root.AddCommand(child)
 	}
 
 	app.Root = root

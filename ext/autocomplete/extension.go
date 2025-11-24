@@ -32,19 +32,19 @@ func (Extension) Extend(app *clix.App) error {
 	}
 
 	// Only add if not already present
-	if findSubcommand(app.Root, "autocomplete") == nil {
+	if findChild(app.Root, "autocomplete") == nil {
 		app.Root.AddCommand(NewAutocompleteCommand(app))
 	}
 
 	return nil
 }
 
-func findSubcommand(cmd *clix.Command, name string) *clix.Command {
-	for _, sub := range cmd.Subcommands {
-		if sub.Name == name {
-			return sub
+func findChild(cmd *clix.Command, name string) *clix.Command {
+	for _, child := range cmd.Children {
+		if child.Name == name {
+			return child
 		}
-		if found := findSubcommand(sub, name); found != nil {
+		if found := findChild(child, name); found != nil {
 			return found
 		}
 	}
@@ -107,8 +107,8 @@ func collectCompletionEntries(cmd *clix.Command) []completionEntry {
 				entries["-"+flag.Short] = flag.Usage
 			}
 		}
-		for _, sub := range c.Subcommands {
-			walk(sub)
+		for _, child := range c.Children {
+			walk(child)
 		}
 	}
 	walk(cmd)

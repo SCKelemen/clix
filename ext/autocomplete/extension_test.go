@@ -21,7 +21,7 @@ func TestAutocompleteExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		autocompleteCmd := findSubcommandInTest(root, "autocomplete")
+		autocompleteCmd := findChildInTest(root, "autocomplete")
 		if autocompleteCmd == nil {
 			t.Fatal("autocomplete command should exist with extension")
 		}
@@ -34,7 +34,7 @@ func TestAutocompleteExtension(t *testing.T) {
 
 		// Don't add extension
 
-		autocompleteCmd := findSubcommandInTest(root, "autocomplete")
+		autocompleteCmd := findChildInTest(root, "autocomplete")
 		if autocompleteCmd != nil {
 			t.Fatal("autocomplete command should not exist without extension")
 		}
@@ -143,12 +143,12 @@ func TestAutocompleteExtension(t *testing.T) {
 	})
 }
 
-func findSubcommandInTest(cmd *clix.Command, name string) *clix.Command {
-	for _, sub := range cmd.Subcommands {
-		if sub.Name == name {
-			return sub
+func findChildInTest(cmd *clix.Command, name string) *clix.Command {
+	for _, child := range cmd.Children {
+		if child.Name == name {
+			return child
 		}
-		if found := findSubcommandInTest(sub, name); found != nil {
+		if found := findChildInTest(child, name); found != nil {
 			return found
 		}
 	}

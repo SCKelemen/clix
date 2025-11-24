@@ -51,7 +51,7 @@ func (h HelpRenderer) Render(w io.Writer) error {
 
 	h.renderFlags(w, cmd)
 	h.renderArguments(w, cmd)
-	h.renderSubcommands(w, cmd)
+	h.renderChildren(w, cmd)
 
 	if cmd.Example != "" {
 		example := strings.ReplaceAll(cmd.Example, "\n", "\n  ")
@@ -98,20 +98,52 @@ func (h HelpRenderer) renderArguments(w io.Writer, cmd *Command) {
 	fmt.Fprintln(w)
 }
 
-func (h HelpRenderer) renderSubcommands(w io.Writer, cmd *Command) {
-	subs := cmd.VisibleSubcommands()
-	if len(subs) == 0 {
+// renderChildren renders both groups and commands, showing them in separate sections.
+func (h HelpRenderer) renderChildren(w io.Writer, cmd *Command) {
+	visible := cmd.VisibleChildren()
+	if len(visible) == 0 {
 		return
 	}
-	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "SUBCOMMANDS"))
-	for _, sub := range subs {
-		desc := sub.Short
-		if desc == "" {
-			desc = sub.Long
+
+	// Separate into groups and commands
+	var groups, commands []*Command
+	for _, child := range visible {
+		if child.IsGroup() {
+			groups = append(groups, child)
+		} else {
+			// Include all non-groups (both leaf commands and commands without Run handlers)
+			commands = append(commands, child)
 		}
-		name := renderText(h.App.Styles.SubcommandName, sub.Name)
-		desc = renderText(h.App.Styles.SubcommandDesc, desc)
-		fmt.Fprintf(w, "  %-20s %s\n", name, desc)
 	}
-	fmt.Fprintln(w)
+
+	// Render groups first
+	if len(groups) > 0 {
+		fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "GROUPS"))
+		for _, group := range groups {
+			desc := group.Short
+			if desc == "" {
+				desc = group.Long
+			}
+			name := renderText(h.App.Styles.SubcommandName, group.Name)
+			desc = renderText(h.App.Styles.SubcommandDesc, desc)
+			fmt.Fprintf(w, "  %-20s %s\n", name, desc)
+		}
+		fmt.Fprintln(w)
+	}
+
+	// Render commands
+	if len(commands) > 0 {
+		fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "COMMANDS"))
+		for _, child := range commands {
+			desc := child.Short
+			if desc == "" {
+				desc = child.Long
+			}
+			name := renderText(h.App.Styles.SubcommandName, child.Name)
+			desc = renderText(h.App.Styles.SubcommandDesc, desc)
+			fmt.Fprintf(w, "  %-20s %s\n", name, desc)
+		}
+		fmt.Fprintln(w)
+	}
 }
+

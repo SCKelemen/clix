@@ -21,8 +21,8 @@ func main() {
 	// Mount using the "vulns" alias for shorter commands
 	vulnsAlias := clix.NewCommand("vulns")
 	vulnsAlias.Short = vulnsCmd.Short
-	for _, subcmd := range vulnsCmd.Subcommands {
-		vulnsAlias.AddCommand(subcmd)
+	for _, child := range vulnsCmd.Children {
+		vulnsAlias.AddCommand(child)
 	}
 	root.AddCommand(vulnsAlias)
 

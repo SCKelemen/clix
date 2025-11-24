@@ -24,7 +24,7 @@ func TestHelpExtension(t *testing.T) {
 		}
 
 		// Check that help command was added
-		helpCmd := findSubcommand(root, "help")
+		helpCmd := findChild(root, "help")
 		if helpCmd == nil {
 			t.Fatal("help command was not added")
 		}
@@ -43,7 +43,7 @@ func TestHelpExtension(t *testing.T) {
 		// No default commands needed - extensions are opt-in
 
 		// Check that help command was NOT added
-		helpCmd := findSubcommand(root, "help")
+		helpCmd := findChild(root, "help")
 		if helpCmd != nil {
 			t.Fatal("help command should not exist without extension")
 		}
@@ -74,31 +74,31 @@ func TestHelpExtension(t *testing.T) {
 		}
 	})
 
-	t.Run("help command with subcommand works", func(t *testing.T) {
+	t.Run("help command with child works", func(t *testing.T) {
 		app := clix.NewApp("test")
 		root := clix.NewCommand("test")
 		app.Root = root
 
-		subCmd := clix.NewCommand("subcommand")
-		subCmd.Short = "A subcommand"
-		root.AddCommand(subCmd)
+		childCmd := clix.NewCommand("child")
+		childCmd.Short = "A child command"
+		root.AddCommand(childCmd)
 
 		var output bytes.Buffer
 		app.Out = &output
 
 		app.AddExtension(Extension{})
 
-		// Run help for subcommand
-		if err := app.Run(context.Background(), []string{"help", "subcommand"}); err != nil {
-			t.Fatalf("help subcommand failed: %v", err)
+		// Run help for child command
+		if err := app.Run(context.Background(), []string{"help", "child"}); err != nil {
+			t.Fatalf("help child command failed: %v", err)
 		}
 
 		outputStr := output.String()
-		if !strings.Contains(outputStr, "subcommand") {
-			t.Errorf("help output should contain 'subcommand', got: %s", outputStr)
+		if !strings.Contains(outputStr, "child") {
+			t.Errorf("help output should contain 'child', got: %s", outputStr)
 		}
-		if !strings.Contains(outputStr, "A subcommand") {
-			t.Errorf("help output should contain 'A subcommand', got: %s", outputStr)
+		if !strings.Contains(outputStr, "A child command") {
+			t.Errorf("help output should contain 'A child command', got: %s", outputStr)
 		}
 	})
 

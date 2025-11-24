@@ -36,9 +36,9 @@ func TestCommandMatchingAndVisibility(t *testing.T) {
 		t.Fatalf("expected nil for missing command, got %v", resolved)
 	}
 
-	visible := root.VisibleSubcommands()
+	visible := root.VisibleChildren()
 	if len(visible) != 2 {
-		t.Fatalf("expected 2 visible subcommands, got %d", len(visible))
+		t.Fatalf("expected 2 visible children, got %d", len(visible))
 	}
 	if visible[0] != child || visible[1] != other {
 		t.Fatalf("unexpected visible order: %v", visible)
@@ -49,9 +49,9 @@ func TestPrepareStaticCommandTree(t *testing.T) {
 	app := NewApp("demo")
 	app.Root = &Command{
 		Name: "root",
-		Subcommands: []*Command{{
+		Children: []*Command{{
 			Name: "child",
-			Subcommands: []*Command{{
+			Children: []*Command{{
 				Name: "grand",
 			}},
 		}},
@@ -66,10 +66,10 @@ func TestPrepareStaticCommandTree(t *testing.T) {
 		t.Fatalf("expected root help flag to be registered")
 	}
 
-	if len(app.Root.Subcommands) != 1 {
-		t.Fatalf("expected 1 child command, got %d", len(app.Root.Subcommands))
+	if len(app.Root.Children) != 1 {
+		t.Fatalf("expected 1 child command, got %d", len(app.Root.Children))
 	}
-	child := app.Root.Subcommands[0]
+	child := app.Root.Children[0]
 	if child.parent != app.Root {
 		t.Fatalf("expected child parent to be root")
 	}
@@ -80,10 +80,10 @@ func TestPrepareStaticCommandTree(t *testing.T) {
 		t.Fatalf("expected child help flag to be registered")
 	}
 
-	if len(child.Subcommands) != 1 {
-		t.Fatalf("expected 1 grandchild command, got %d", len(child.Subcommands))
+	if len(child.Children) != 1 {
+		t.Fatalf("expected 1 grandchild command, got %d", len(child.Children))
 	}
-	grand := child.Subcommands[0]
+	grand := child.Children[0]
 	if grand.parent != child {
 		t.Fatalf("expected grandchild parent to be child")
 	}

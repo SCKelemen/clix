@@ -54,19 +54,19 @@ func (e Extension) Extend(app *clix.App) error {
 	// This keeps --version simple and consistent with common CLI patterns
 
 	// Only add command if not already present
-	if findSubcommand(app.Root, "version") == nil {
+	if findChild(app.Root, "version") == nil {
 		app.Root.AddCommand(NewVersionCommand(app, e.Version, e.Commit, e.Date))
 	}
 
 	return nil
 }
 
-func findSubcommand(cmd *clix.Command, name string) *clix.Command {
-	for _, sub := range cmd.Subcommands {
-		if sub.Name == name {
-			return sub
+func findChild(cmd *clix.Command, name string) *clix.Command {
+	for _, child := range cmd.Children {
+		if child.Name == name {
+			return child
 		}
-		if found := findSubcommand(sub, name); found != nil {
+		if found := findChild(child, name); found != nil {
 			return found
 		}
 	}

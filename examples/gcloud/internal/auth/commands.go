@@ -49,7 +49,7 @@ func NewCommand() *clix.Command {
 		return nil
 	}
 
-	cmd.Subcommands = []*clix.Command{
+	cmd.Children = []*clix.Command{
 		login,
 		activate,
 	}

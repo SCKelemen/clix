@@ -54,7 +54,7 @@ gh pr checkout 321`)
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
 
-	root.Subcommands = []*clix.Command{
+	root.Children = []*clix.Command{
 		authcmd.NewCommand(),
 		simplecmd.NewCommand("browse", "Open repositories, issues, pull requests, and more in the browser"),
 		simplecmd.NewCommand("codespace", "Connect to and manage codespaces"),

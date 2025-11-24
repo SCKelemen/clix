@@ -99,7 +99,7 @@ func newApp() *clix.App {
 		}
 	}
 
-	root.Subcommands = subcommands
+	root.Children = subcommands
 
 	app.Root = root
 	return app

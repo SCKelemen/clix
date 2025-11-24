@@ -38,21 +38,21 @@ func (Extension) Extend(app *clix.App) error {
 	}
 
 	// Only add if not already present
-	if findSubcommand(app.Root, "config") == nil {
+	if findChild(app.Root, "config") == nil {
 		app.Root.AddCommand(NewConfigCommand(app))
 	}
 
 	return nil
 }
 
-func findSubcommand(cmd *clix.Command, name string) *clix.Command {
-	for _, sub := range cmd.Subcommands {
-		if sub.Name == name {
-			return sub
+func findChild(cmd *clix.Command, name string) *clix.Command {
+	for _, child := range cmd.Children {
+		if child.Name == name {
+			return child
 		}
-		for _, alias := range sub.Aliases {
+		for _, alias := range child.Aliases {
 			if alias == name {
-				return sub
+				return child
 			}
 		}
 	}
@@ -63,7 +63,7 @@ func findSubcommand(cmd *clix.Command, name string) *clix.Command {
 func NewConfigCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("config")
 	cmd.Short = "Manage CLI configuration"
-	cmd.Usage = fmt.Sprintf("%s config [subcommand]", app.Name)
+	cmd.Usage = fmt.Sprintf("%s config [command]", app.Name)
 	// No Run handler - shows help by default
 
 	cmd.AddCommand(configListCommand(app))

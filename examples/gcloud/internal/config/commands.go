@@ -39,7 +39,7 @@ func NewCommand(project *string) *clix.Command {
 		fmt.Fprintf(ctx.App.Out, "%s is not set\n", ctx.Args[0])
 		return nil
 	}
-	cmd.Subcommands = []*clix.Command{
+	cmd.Children = []*clix.Command{
 		set,
 		get,
 	}

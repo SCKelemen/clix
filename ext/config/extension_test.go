@@ -26,7 +26,7 @@ func TestConfigExtension(t *testing.T) {
 		}
 
 		// Check that config command was added
-		configCmd := findSubcommand(root, "config")
+		configCmd := findChild(root, "config")
 		if configCmd == nil {
 			t.Fatal("config command was not added")
 		}
@@ -45,7 +45,7 @@ func TestConfigExtension(t *testing.T) {
 		// No default commands needed - extensions are opt-in
 
 		// Check that config command was NOT added
-		configCmd := findSubcommand(root, "config")
+		configCmd := findChild(root, "config")
 		if configCmd != nil {
 			t.Fatal("config command should not exist without extension")
 		}
@@ -208,11 +208,11 @@ func TestConfigExtension(t *testing.T) {
 		}
 
 		// Config command should exist
-		if findSubcommand(root, "config") == nil {
+		if findChild(root, "config") == nil {
 			t.Fatal("config command should exist")
 		}
 		// Test extension should exist
-		if findSubcommand(root, "testhelp") == nil {
+		if findChild(root, "testhelp") == nil {
 			t.Fatal("testhelp command should exist")
 		}
 	})

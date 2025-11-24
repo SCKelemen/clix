@@ -50,7 +50,7 @@ func NewCommand() *clix.Command {
 		fmt.Fprintln(ctx.App.Out, "Refreshed authentication token.")
 		return nil
 	}
-	cmd.Subcommands = []*clix.Command{
+	cmd.Children = []*clix.Command{
 		login,
 		logout,
 		refresh,

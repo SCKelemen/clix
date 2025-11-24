@@ -37,7 +37,7 @@ func New() *clix.App {
 		fmt.Fprintln(ctx.App.Out, strings.Trim(demoBanner, "\n"))
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
-	root.Subcommands = []*clix.Command{
+	root.Children = []*clix.Command{
 		greet.NewCommand(&project),
 	}
 

@@ -28,7 +28,7 @@ func NewCommand(project *string) *clix.Command {
 		fmt.Fprintf(ctx.App.Out, "Creating project %s\n", ctx.Args[0])
 		return nil
 	}
-	cmd.Subcommands = []*clix.Command{
+	cmd.Children = []*clix.Command{
 		list,
 		create,
 	}

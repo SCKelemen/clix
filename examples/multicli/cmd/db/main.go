@@ -17,10 +17,10 @@ func main() {
 	root.Short = "Database operations"
 
 	// Direct access to database commands (no "database" prefix)
-	// Just mount the subcommands directly
+	// Just mount the children directly
 	dbCmd := database.NewDatabaseCommand()
-	for _, subcmd := range dbCmd.Subcommands {
-		root.AddCommand(subcmd)
+	for _, child := range dbCmd.Children {
+		root.AddCommand(child)
 	}
 
 	app.Root = root
