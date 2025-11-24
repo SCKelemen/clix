@@ -27,11 +27,12 @@ The project strives for minimal dependencies and simplicity while delivering a c
 
 4. **Help flags take precedence**: Global and command-level `-h`/`--help` flags always show help information, even if arguments are missing.
 
-5. **Configuration precedence**: Values are resolved in the following order (highest precedence first):
-   - Explicit flag values from the command line
-   - Environment variables matching the flag or command setting
+5. **Configuration precedence**: Values are resolved in the following order (highest precedence first): Command flags > App flags > Environment variables > Config file > Defaults
+   - Command-level flag values (flags defined on the specific command)
+   - App-level flag values (flags defined on the root command, accessible via `app.Flags()`)
+   - Environment variables matching the flag's `EnvVar` or the default pattern `APP_KEY`
    - Entries in `~/.config/<app>/config.yaml`
-   - Flag defaults defined on the command or global flag set
+   - Flag defaults defined on the command or app flag set
 
 ## Goals
 
@@ -216,7 +217,7 @@ Global and command-level flags support:
 - **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml`
 - **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`)
 - **Type support**: String, bool, int, int64, float64
-- **Precedence**: Flag values > Environment variables > Config file > Defaults
+- **Precedence**: Command flags > App flags > Environment variables > Config file > Defaults
 
 ```go
 var project string
@@ -347,9 +348,12 @@ Styling is optional—applications without styling still work perfectly.
 Command handlers receive a `*clix.Context` that embeds `context.Context` and provides:
 - Access to the active command and arguments
 - Application instance and configuration
-- Hydrated flag/config values via helper methods
+- Hydrated flag/config values via type-specific getters: `String()`, `Bool()`, `Integer()`, `Int64()`, `Float64()`
+- Argument access: `Arg(index)`, `ArgNamed(name)`, `AllArgs()`
 - Standard output/error streams
 - Standard context.Context functionality (cancellation, deadlines, values)
+
+All getter methods follow the same precedence: **command flags > app flags > env > config > defaults**
 
 **Context Layering:**
 
@@ -359,9 +363,26 @@ Command handlers receive a `*clix.Context` that embeds `context.Context` and pro
 
 ```go
 cmd.Run = func(ctx *clix.Context) error {
-        // Access CLI-specific data
+        // Access CLI-specific data via type-specific getters
+        // All methods follow the same precedence: command flags > app flags > env > config > defaults
         if project, ok := ctx.String("project"); ok {
                 fmt.Fprintf(ctx.App.Out, "Using project %s\n", project)
+        }
+        
+        if verbose, ok := ctx.Bool("verbose"); ok && verbose {
+                fmt.Fprintf(ctx.App.Out, "Verbose mode enabled\n")
+        }
+        
+        if port, ok := ctx.Integer("port"); ok {
+                fmt.Fprintf(ctx.App.Out, "Port: %d\n", port)
+        }
+        
+        if timeout, ok := ctx.Int64("timeout"); ok {
+                fmt.Fprintf(ctx.App.Out, "Timeout: %d\n", timeout)
+        }
+        
+        if ratio, ok := ctx.Float64("ratio"); ok {
+                fmt.Fprintf(ctx.App.Out, "Ratio: %.2f\n", ratio)
         }
 
         // Use context.Context functionality (cancellation, deadlines)
