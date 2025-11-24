@@ -19,13 +19,15 @@ The project strives for minimal dependencies and simplicity while delivering a c
 
 `clix` follows a few core behavioral principles that ensure consistent and intuitive CLI interactions:
 
-1. **Parent commands show help**: Commands with subcommands display their help surface when invoked without a subcommand or with an unknown subcommand.
+1. **Groups show help**: Commands with children but no Run handler (groups) display their help surface when invoked, showing available groups and commands.
 
-2. **Actionable commands prompt**: Commands without subcommands that require arguments will automatically prompt for missing required arguments, providing a smooth interactive experience.
+2. **Commands with handlers execute**: Commands with Run handlers execute when called. If they have children, the handler executes when called without arguments, or routes to child commands when a child name is provided.
 
-3. **Help flags take precedence**: Global and command-level `-h`/`--help` flags always show help information, even if arguments are missing.
+3. **Actionable commands prompt**: Commands without children that require arguments will automatically prompt for missing required arguments, providing a smooth interactive experience.
 
-4. **Configuration precedence**: Values are resolved in the following order (highest precedence first):
+4. **Help flags take precedence**: Global and command-level `-h`/`--help` flags always show help information, even if arguments are missing.
+
+5. **Configuration precedence**: Values are resolved in the following order (highest precedence first):
    - Explicit flag values from the command line
    - Environment variables matching the flag or command setting
    - Entries in `~/.config/<app>/config.yaml`
@@ -46,7 +48,7 @@ The project strives for minimal dependencies and simplicity while delivering a c
 - **Everything as a dependency**: Features like help commands, autocomplete, and version checking are opt-in via extensions
 - **Complex state management**: `clix` focuses on CLI structure, not application state
 - **Built-in templating or rich output**: While styling is supported, `clix` doesn't include markdown rendering or complex UI components by default
-- **Subcommand auto-generation**: You explicitly define your command tree
+- **Command auto-generation**: You explicitly define your command tree
 - **Automatic flag inference**: Flags must be explicitly declared (though defaults, env vars, and config files reduce boilerplate)
 
 ## Quick Start
@@ -82,7 +84,7 @@ func main() {
 }
 ```
 
-`cmd/demo/app.go` owns the `clix.App` and root command definition while delegating subcommands to the `internal/` tree:
+`cmd/demo/app.go` owns the `clix.App` and root command definition while delegating child commands to the `internal/` tree:
 
 ```go
 // cmd/demo/app.go
@@ -112,7 +114,7 @@ func newApp() *clix.App {
         root.Run = func(ctx *clix.Context) error {
                 return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
         }
-        root.Subcommands = []*clix.Command{
+        root.Children = []*clix.Command{
                 greet.NewCommand(&project),
         }
 
@@ -169,23 +171,40 @@ The full runnable version of this example (including additional flags and config
 
 ### Hierarchical Commands
 
-Commands can contain nested subcommands, forming a tree structure. Each command supports:
+Commands can contain nested children (groups or commands), forming a tree structure. `clix` distinguishes between:
+
+- **Groups**: Commands with children but no Run handler (interior nodes that show help)
+- **Commands**: Commands with Run handlers (executable, may have children or be leaf nodes)
+
+Each command supports:
 - **Aliases**: Alternative names for the same command
 - **Usage metadata**: Short descriptions, long descriptions, examples
 - **Visibility controls**: Hidden commands for internal or experimental features
 - **Execution hooks**: `PreRun`, `Run`, and `PostRun` handlers
 
-```go
-users := clix.NewCommand("users")
-users.Short = "Manage user accounts"
-users.Long = "Create, list, and delete users in the current project"
-users.Run = func(ctx *clix.Context) error {
-        return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
-}
+**Creating groups and commands:**
 
-create := clix.NewCommand("create")
-create.Short = "Create a user"
-users.AddCommand(create)
+```go
+// Create a group (organizes child commands, shows help when called)
+users := clix.NewGroup("users", "Manage user accounts",
+        clix.NewCommand("create"), // child command
+        clix.NewCommand("list"),   // child command
+)
+
+// Or create a command with both handler and children
+auth := clix.NewCommand("auth")
+auth.Short = "Authentication commands"
+auth.Run = func(ctx *clix.Context) error {
+        fmt.Println("Auth handler executed!")
+        return nil
+}
+auth.AddCommand(clix.NewCommand("login"))
+auth.AddCommand(clix.NewCommand("logout"))
+
+// Groups show help, commands with handlers execute
+// cli users        -> shows help
+// cli auth         -> executes auth handler
+// cli auth login   -> executes login child
 ```
 
 ### Flags and Configuration
@@ -407,7 +426,7 @@ Adds command-based help similar to man pages:
 #### Config Extension (`clix/ext/config`)
 
 Adds configuration management commands:
-- `cli config` - Show help for config commands
+- `cli config` - Show help for config commands (group)
 - `cli config list` - List all configuration values (supports `--format=json|yaml|text`)
 - `cli config get <key>` - Get a specific value
 - `cli config set <key> <value>` - Set a value
@@ -497,7 +516,12 @@ Key methods:
 
 ### `clix.Command`
 
-A `Command` represents a CLI command. Commands can contain nested subcommands, flags, argument definitions, and execution hooks.
+A `Command` represents a CLI command. Commands can contain nested children (groups or commands), flags, argument definitions, and execution hooks.
+
+A Command can be one of three types:
+- **Group**: has children but no Run handler (interior node, shows help when called)
+- **Leaf Command**: has a Run handler but no children (executable leaf node)
+- **Command with Children**: has both a Run handler and children (executes Run handler when called without args, or routes to child commands when a child name is provided)
 
 ```go
 type Command struct {
@@ -510,7 +534,7 @@ type Command struct {
         Hidden      bool
         Flags       *FlagSet
         Arguments   []*Argument
-        Subcommands []*Command
+        Children    []*Command // Children of this command (groups or commands)
 
         Run     Handler
         PreRun  Hook
@@ -519,8 +543,14 @@ type Command struct {
 ```
 
 Key methods:
-- `NewCommand(name string) *Command` - Construct a new command
-- `AddCommand(cmd *Command)` - Register a subcommand
+- `NewCommand(name string) *Command` - Construct a new executable command
+- `NewGroup(name, short string, children ...*Command) *Command` - Construct a group (interior node)
+- `AddCommand(cmd *Command)` - Register a child command or group
+- `IsGroup() bool` - Returns true if command is a group (has children, no Run handler)
+- `IsLeaf() bool` - Returns true if command is executable (has Run handler)
+- `Groups() []*Command` - Returns only child groups
+- `Commands() []*Command` - Returns only executable child commands
+- `VisibleChildren() []*Command` - Returns all visible child commands and groups
 - `Path() string` - Get the full command path from root
 
 ### `clix.Argument`
@@ -603,7 +633,7 @@ type Extension interface {
 ## Examples
 
 - [`examples/basic`](examples/basic): End-to-end application demonstrating commands, flags, prompting, and configuration usage.
-- [`examples/gh`](examples/gh): A GitHub CLI-style hierarchy with familiar subcommands, aliases, and interactive prompts.
+- [`examples/gh`](examples/gh): A GitHub CLI-style hierarchy with familiar groups, commands, aliases, and interactive prompts.
 - [`examples/gcloud`](examples/gcloud): A Google Cloud CLI-inspired tree with large command groups, global flags, and configuration interactions.
 - [`examples/lipgloss`](examples/lipgloss): Demonstrates prompt and help styling using [`lipgloss`](https://github.com/charmbracelet/lipgloss), including select, multi-select, and confirm prompts.
 - [`examples/multicli`](examples/multicli): Demonstrates sharing command implementations across multiple CLI applications with different hierarchies, similar to Google Cloud's gcloud/bq pattern.
