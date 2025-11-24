@@ -63,9 +63,9 @@ func TestAppGlobalFormatFlagVariants(t *testing.T) {
 			app := NewApp("demo")
 			app.configLoaded = true
 
-			root := NewCommand("demo")
+			// Use the root created by NewApp (it has the format flag)
 			executed := false
-			root.Run = func(ctx *Context) error {
+			app.Root.Run = func(ctx *Context) error {
 				executed = true
 				if format := ctx.App.OutputFormat(); format != "json" {
 					t.Fatalf("expected output format to be json, got %q", format)
@@ -75,8 +75,6 @@ func TestAppGlobalFormatFlagVariants(t *testing.T) {
 				}
 				return nil
 			}
-
-			app.Root = root
 
 			if err := app.Run(context.Background(), tc.args); err != nil {
 				t.Fatalf("app run failed: %v", err)

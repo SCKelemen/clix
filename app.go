@@ -132,7 +132,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// Use Flags() to get root command's flags (symmetric with cmd.Flags)
 	flags := a.Flags()
 	// Apply config/env/defaults to root flags before parsing
-	a.applyConfig(a.Root)
+	// This sets defaults, but parsing will override if flags are provided
+	a.applyConfigToFlags(a.Root.Flags, true)
 	remaining, err := flags.Parse(args)
 	if err != nil {
 		return err
@@ -194,7 +195,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// If the command has a Run handler, we'll let it handle the args (even if they don't match a child)
 
 	// Ensure defaults and env/config values are applied prior to parsing.
-	a.applyConfig(cmd)
+	// This sets defaults, but parsing will override if flags are provided
+	// Use reset=false to avoid resetting flags that were already set on root
+	a.applyConfigToFlags(cmd.Flags, false)
 
 	// Parse flags first - flags consume arguments starting with -
 	// This handles: --flag=value, --flag value, -f=value, -f value
@@ -297,11 +300,26 @@ func (a *App) ensureConfigLoaded(ctx context.Context) error {
 	return a.configLoadErr
 }
 
-func (a *App) applyConfig(cmd *Command) {
+// applyConfigToFlags applies env vars, config, and defaults to flags.
+// This should be called BEFORE parsing. After parsing, flags that were set
+// will have flag.set = true and won't be overridden.
+// If reset is false, flags that are already set (flag.set == true) will be skipped.
+func (a *App) applyConfigToFlags(flags *FlagSet, reset bool) {
+	if flags == nil {
+		return
+	}
 	sources := []map[string]string{a.Config.Values()}
 
-	for _, flag := range cmd.Flags.flags {
+	for _, flag := range flags.flags {
+		// If flag was already set (e.g., by parsing) and we're not resetting, skip it
+		// This ensures flags > env > config > defaults precedence
+		if !reset && flag.set {
+			continue
+		}
+		
+		// Reset flag state before applying precedence
 		flag.set = false
+		
 		if flag.EnvVar != "" {
 			if val, ok := os.LookupEnv(flag.EnvVar); ok {
 				flag.Value.Set(val)
