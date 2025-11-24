@@ -478,19 +478,49 @@ func (a *App) OutputFormat() string {
 // String retrieves a string configuration value with the given key, looking at
 // command flags, root flags, environment variables, config file, then defaults.
 // This follows the log/slog naming pattern for type-specific getters.
+// Precedence: command flags > app flags > env > config > defaults
 func (ctx *Context) String(key string) (string, bool) {
-	// First check command-level flags
-	if v, ok := ctx.Command.Flags.String(key); ok {
-		return v, true
+	// First check command-level flags (only if explicitly set)
+	if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
+		if v, ok := ctx.Command.Flags.String(key); ok {
+			return v, true
+		}
 	}
 
-	// Then check root flags (for flags like --project that are on the root)
+	// Then check root flags (only if explicitly set)
 	if ctx.App != nil {
 		rootFlags := ctx.App.Flags()
 		if rootFlags != nil {
-			if v, ok := rootFlags.String(key); ok {
-				return v, true
+			if flag := rootFlags.lookup(key); flag != nil && flag.set {
+				if v, ok := rootFlags.String(key); ok {
+					return v, true
+				}
 			}
+		}
+	}
+
+	// Then check environment variables
+	// First check if any flag defines an EnvVar for this key
+	if ctx.App != nil {
+		// Check command flags for EnvVar
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
+			if val, ok := os.LookupEnv(flag.EnvVar); ok {
+				return val, true
+			}
+		}
+		// Check root flags for EnvVar
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && flag.EnvVar != "" {
+				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+					return val, true
+				}
+			}
+		}
+		// Check default env var pattern (APP_KEY)
+		upper := fmt.Sprintf("%s_%s", ctx.App.EnvPrefix, strings.ToUpper(strings.ReplaceAll(key, "-", "_")))
+		if val, ok := os.LookupEnv(upper); ok {
+			return val, true
 		}
 	}
 
@@ -498,6 +528,21 @@ func (ctx *Context) String(key string) (string, bool) {
 	if ctx.App != nil && ctx.App.Config != nil {
 		if v, ok := ctx.App.Config.Get(key); ok {
 			return v, true
+		}
+	}
+
+	// Finally check defaults from flags (only if flag exists but wasn't set)
+	// Check command flag default first
+	if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+		return flag.Default, true
+	}
+	// Then check root flag default
+	if ctx.App != nil {
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+				return flag.Default, true
+			}
 		}
 	}
 
