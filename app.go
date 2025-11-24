@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -550,20 +551,55 @@ func (ctx *Context) String(key string) (string, bool) {
 }
 
 // Bool retrieves a boolean configuration value using the same precedence as
-// String (command flags, root flags, config).
+// String (command flags, root flags, env, config, defaults).
 // This follows the log/slog naming pattern for type-specific getters.
+// Precedence: command flags > app flags > env > config > defaults
 func (ctx *Context) Bool(key string) (bool, bool) {
-	// First check command-level flags
-	if v, ok := ctx.Command.Flags.Bool(key); ok {
-		return v, true
+	// First check command-level flags (only if explicitly set)
+	if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
+		if v, ok := ctx.Command.Flags.Bool(key); ok {
+			return v, true
+		}
 	}
 
-	// Then check root flags
+	// Then check root flags (only if explicitly set)
 	if ctx.App != nil {
 		rootFlags := ctx.App.Flags()
 		if rootFlags != nil {
-			if v, ok := rootFlags.Bool(key); ok {
-				return v, true
+			if flag := rootFlags.lookup(key); flag != nil && flag.set {
+				if v, ok := rootFlags.Bool(key); ok {
+					return v, true
+				}
+			}
+		}
+	}
+
+	// Then check environment variables
+	if ctx.App != nil {
+		// Check command flags for EnvVar
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
+			if val, ok := os.LookupEnv(flag.EnvVar); ok {
+				if parsed, err := strconv.ParseBool(val); err == nil {
+					return parsed, true
+				}
+			}
+		}
+		// Check root flags for EnvVar
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && flag.EnvVar != "" {
+				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+					if parsed, err := strconv.ParseBool(val); err == nil {
+						return parsed, true
+					}
+				}
+			}
+		}
+		// Check default env var pattern (APP_KEY)
+		upper := fmt.Sprintf("%s_%s", ctx.App.EnvPrefix, strings.ToUpper(strings.ReplaceAll(key, "-", "_")))
+		if val, ok := os.LookupEnv(upper); ok {
+			if parsed, err := strconv.ParseBool(val); err == nil {
+				return parsed, true
 			}
 		}
 	}
@@ -572,6 +608,25 @@ func (ctx *Context) Bool(key string) (bool, bool) {
 	if ctx.App != nil && ctx.App.Config != nil {
 		if v, ok := ctx.App.Config.Get(key); ok {
 			return strings.EqualFold(v, "true"), true
+		}
+	}
+
+	// Finally check defaults from flags (only if flag exists but wasn't set)
+	// Check command flag default first
+	if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+		if parsed, err := strconv.ParseBool(flag.Default); err == nil {
+			return parsed, true
+		}
+	}
+	// Then check root flag default
+	if ctx.App != nil {
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+				if parsed, err := strconv.ParseBool(flag.Default); err == nil {
+					return parsed, true
+				}
+			}
 		}
 	}
 
