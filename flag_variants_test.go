@@ -8,7 +8,7 @@ func TestFlagVariants(t *testing.T) {
 	t.Run("--flag=value format", func(t *testing.T) {
 		fs := NewFlagSet("test")
 		var name string
-		fs.StringVar(&StringVarOptions{Name: "name", Value: &name})
+		fs.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "name"}, Value: &name})
 
 		_, err := fs.Parse([]string{"--name=alice"})
 		if err != nil {
@@ -22,7 +22,7 @@ func TestFlagVariants(t *testing.T) {
 	t.Run("--flag value format", func(t *testing.T) {
 		fs := NewFlagSet("test")
 		var name string
-		fs.StringVar(&StringVarOptions{Name: "name", Value: &name})
+		fs.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "name"}, Value: &name})
 
 		_, err := fs.Parse([]string{"--name", "bob"})
 		if err != nil {
@@ -36,7 +36,7 @@ func TestFlagVariants(t *testing.T) {
 	t.Run("-f=value format", func(t *testing.T) {
 		fs := NewFlagSet("test")
 		var name string
-		fs.StringVar(&StringVarOptions{Name: "name", Short: "n", Value: &name})
+		fs.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "name", Short: "n"}, Value: &name})
 
 		_, err := fs.Parse([]string{"-n=charlie"})
 		if err != nil {
@@ -50,7 +50,7 @@ func TestFlagVariants(t *testing.T) {
 	t.Run("-f value format", func(t *testing.T) {
 		fs := NewFlagSet("test")
 		var name string
-		fs.StringVar(&StringVarOptions{Name: "name", Short: "n", Value: &name})
+		fs.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "name", Short: "n"}, Value: &name})
 
 		_, err := fs.Parse([]string{"-n", "david"})
 		if err != nil {
@@ -64,7 +64,7 @@ func TestFlagVariants(t *testing.T) {
 	t.Run("boolean flags", func(t *testing.T) {
 		fs := NewFlagSet("test")
 		var verbose bool
-		fs.BoolVar(&BoolVarOptions{Name: "verbose", Short: "v", Value: &verbose})
+		fs.BoolVar(BoolVarOptions{FlagOptions: FlagOptions{Name: "verbose", Short: "v"}, Value: &verbose})
 
 		_, err := fs.Parse([]string{"--verbose"})
 		if err != nil {
@@ -89,9 +89,9 @@ func TestFlagVariants(t *testing.T) {
 		var name string
 		var count int
 		var verbose bool
-		fs.StringVar(&StringVarOptions{Name: "name", Short: "n", Value: &name})
-		fs.IntVar(&IntVarOptions{Name: "count", Short: "c", Value: &count})
-		fs.BoolVar(&BoolVarOptions{Name: "verbose", Short: "v", Value: &verbose})
+		fs.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "name", Short: "n"}, Value: &name})
+		fs.IntVar(IntVarOptions{FlagOptions: FlagOptions{Name: "count", Short: "c"}, Value: &count})
+		fs.BoolVar(BoolVarOptions{FlagOptions: FlagOptions{Name: "verbose", Short: "v"}, Value: &verbose})
 
 		_, err := fs.Parse([]string{"--name=alice", "-c", "42", "-v"})
 		if err != nil {

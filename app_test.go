@@ -10,9 +10,11 @@ func TestAppRunAppliesConfigurationPrecedence(t *testing.T) {
 
 	root := NewCommand("root")
 	var colour string
-	root.Flags.StringVar(&StringVarOptions{
-		Name:    "colour",
-		EnvVar:  "SPECIAL_COLOUR",
+	root.Flags.StringVar(StringVarOptions{
+		FlagOptions: FlagOptions{
+			Name:   "colour",
+			EnvVar: "SPECIAL_COLOUR",
+		},
 		Default: "blue",
 		Value:   &colour,
 	})
@@ -23,8 +25,8 @@ func TestAppRunAppliesConfigurationPrecedence(t *testing.T) {
 		if colour != "red" {
 			t.Fatalf("expected colour to be %q, got %q", "red", colour)
 		}
-		if v, ok := ctx.GetString("colour"); !ok || v != "red" {
-			t.Fatalf("Context.GetString returned %q, %v", v, ok)
+		if v, ok := ctx.String("colour"); !ok || v != "red" {
+			t.Fatalf("Context.String returned %q, %v", v, ok)
 		}
 		return nil
 	}
@@ -68,7 +70,7 @@ func TestAppGlobalFormatFlagVariants(t *testing.T) {
 				if format := ctx.App.OutputFormat(); format != "json" {
 					t.Fatalf("expected output format to be json, got %q", format)
 				}
-				if value, ok := ctx.App.GlobalFlags.GetString("format"); !ok || value != "json" {
+				if value, ok := ctx.App.Flags().String("format"); !ok || value != "json" {
 					t.Fatalf("unexpected global flag value: %q, %v", value, ok)
 				}
 				return nil

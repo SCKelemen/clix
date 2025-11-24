@@ -90,21 +90,25 @@ func ExampleFlagSet_StringVar() {
 	app.Root = root
 
 	// Global flags
-	app.GlobalFlags.StringVar(&clix.StringVarOptions{
-		Name:    "project",
-		Short:   "p",
-		Usage:   "Project to operate on",
-		EnvVar:  "MYAPP_PROJECT",
+	app.Flags().StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:   "project",
+			Short:  "p",
+			Usage:  "Project to operate on",
+			EnvVar: "MYAPP_PROJECT",
+		},
 		Value:   &project,
 		Default: "default-project",
 	})
 
 	// Command-level flags
-	root.Flags.StringVar(&clix.StringVarOptions{
-		Name:    "region",
-		Short:   "r",
-		Usage:   "Region to deploy to",
-		EnvVar:  "MYAPP_REGION",
+	root.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:   "region",
+			Short:  "r",
+			Usage:  "Region to deploy to",
+			EnvVar: "MYAPP_REGION",
+		},
 		Value:   &region,
 		Default: "us-east-1",
 	})
@@ -120,18 +124,22 @@ func ExampleFlagSet_BoolVar() {
 	app.Root = root
 
 	// Global boolean flag
-	app.GlobalFlags.BoolVar(&clix.BoolVarOptions{
-		Name:  "verbose",
-		Short: "v",
-		Usage: "Enable verbose output",
+	app.Flags().BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "verbose",
+			Short: "v",
+			Usage: "Enable verbose output",
+		},
 		Value: &verbose,
 	})
 
 	// Command-level boolean flag
-	root.Flags.BoolVar(&clix.BoolVarOptions{
-		Name:  "force",
-		Short: "f",
-		Usage: "Force operation without confirmation",
+	root.Flags.BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "force",
+			Short: "f",
+			Usage: "Force operation without confirmation",
+		},
 		Value: &force,
 	})
 }
@@ -216,22 +224,24 @@ func ExamplePromptRequest() {
 	}
 }
 
-// ExampleContext_GetString demonstrates how to access configuration values from context.
-func ExampleContext_GetString() {
+// ExampleContext_String demonstrates how to access configuration values from context.
+func ExampleContext_String() {
 	app := clix.NewApp("myapp")
 	root := clix.NewCommand("myapp")
 	app.Root = root
 
 	var project string
-	app.GlobalFlags.StringVar(&clix.StringVarOptions{
-		Name:   "project",
-		Value:  &project,
-		EnvVar: "MYAPP_PROJECT",
+	app.Flags().StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:   "project",
+			EnvVar: "MYAPP_PROJECT",
+		},
+		Value: &project,
 	})
 
 	root.Run = func(ctx *clix.Context) error {
-		// GetString checks flags, env vars, and config in precedence order
-		if project, ok := ctx.GetString("project"); ok {
+		// String checks flags, env vars, and config in precedence order
+		if project, ok := ctx.String("project"); ok {
 			fmt.Fprintf(ctx.App.Out, "Using project: %s\n", project)
 		} else {
 			fmt.Fprintln(ctx.App.Out, "No project specified")
@@ -241,20 +251,22 @@ func ExampleContext_GetString() {
 	}
 }
 
-// ExampleContext_GetBool demonstrates how to access boolean configuration values.
-func ExampleContext_GetBool() {
+// ExampleContext_Bool demonstrates how to access boolean configuration values.
+func ExampleContext_Bool() {
 	app := clix.NewApp("myapp")
 	root := clix.NewCommand("myapp")
 	app.Root = root
 
 	var verbose bool
-	app.GlobalFlags.BoolVar(&clix.BoolVarOptions{
-		Name:  "verbose",
+	app.Flags().BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name: "verbose",
+		},
 		Value: &verbose,
 	})
 
 	root.Run = func(ctx *clix.Context) error {
-		if verbose, ok := ctx.GetBool("verbose"); ok && verbose {
+		if verbose, ok := ctx.Bool("verbose"); ok && verbose {
 			fmt.Fprintln(ctx.App.Out, "Verbose mode enabled")
 		}
 
@@ -288,21 +300,22 @@ func ExampleApp_Run() {
 	app.Description = "A greeting application"
 
 	var name string
-	app.GlobalFlags.StringVar(&clix.StringVarOptions{
-		Name:    "name",
-		Short:   "n",
-		Usage:   "Name to greet",
+	app.Flags().StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "name",
+			Short: "n",
+			Usage: "Name to greet",
+		},
 		Value:   &name,
 		Default: "World",
 	})
 
-	root := clix.NewCommand("greet")
-	root.Short = "Print a greeting"
-	root.Run = func(ctx *clix.Context) error {
+	// Use the root command created by NewApp, just customize it
+	app.Root.Short = "Print a greeting"
+	app.Root.Run = func(ctx *clix.Context) error {
 		fmt.Fprintf(ctx.App.Out, "Hello, %s!\n", name)
 		return nil
 	}
-	app.Root = root
 
 	// In a real application, you would call:
 	// if err := app.Run(context.Background(), nil); err != nil {

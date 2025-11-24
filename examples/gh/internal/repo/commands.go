@@ -26,9 +26,11 @@ func NewCommand() *clix.Command {
 	create.Arguments = []*clix.Argument{{Name: "name", Prompt: "Repository name", Required: true}}
 
 	var visibility string
-	create.Flags.StringVar(&clix.StringVarOptions{
-		Name:    "visibility",
-		Usage:   "Repository visibility (public, private)",
+	create.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "visibility",
+			Usage: "Repository visibility (public, private)",
+		},
 		Default: "public",
 		Value:   &visibility,
 	})

@@ -9,10 +9,10 @@ import (
 func TestIntVar(t *testing.T) {
 	var port int
 	fs := NewFlagSet("test")
-	fs.IntVar(&IntVarOptions{
-		Name:    "port",
-		Default: "8080",
-		Value:   &port,
+	fs.IntVar(IntVarOptions{
+		FlagOptions: FlagOptions{Name: "port"},
+		Default:     "8080",
+		Value:       &port,
 	})
 
 	// Test default value
@@ -29,19 +29,19 @@ func TestIntVar(t *testing.T) {
 		t.Errorf("expected port 9090, got %d", port)
 	}
 
-	// Test GetInt
-	if val, ok := fs.GetInt("port"); !ok || val != 9090 {
-		t.Errorf("GetInt returned %d, %v, expected 9090, true", val, ok)
+	// Test Integer
+	if val, ok := fs.Integer("port"); !ok || val != 9090 {
+		t.Errorf("Integer returned %d, %v, expected 9090, true", val, ok)
 	}
 }
 
 func TestInt64Var(t *testing.T) {
 	var count int64
 	fs := NewFlagSet("test")
-	fs.Int64Var(&Int64VarOptions{
-		Name:    "count",
-		Default: "1000000000",
-		Value:   &count,
+	fs.Int64Var(Int64VarOptions{
+		FlagOptions: FlagOptions{Name: "count"},
+		Default:      "1000000000",
+		Value:        &count,
 	})
 
 	if count != 1000000000 {
@@ -56,18 +56,18 @@ func TestInt64Var(t *testing.T) {
 		t.Errorf("expected count 2000000000, got %d", count)
 	}
 
-	if val, ok := fs.GetInt64("count"); !ok || val != 2000000000 {
-		t.Errorf("GetInt64 returned %d, %v, expected 2000000000, true", val, ok)
+	if val, ok := fs.Int64("count"); !ok || val != 2000000000 {
+		t.Errorf("Int64 returned %d, %v, expected 2000000000, true", val, ok)
 	}
 }
 
 func TestFloat64Var(t *testing.T) {
 	var ratio float64
 	fs := NewFlagSet("test")
-	fs.Float64Var(&Float64VarOptions{
-		Name:    "ratio",
-		Default: "3.14159",
-		Value:   &ratio,
+	fs.Float64Var(Float64VarOptions{
+		FlagOptions: FlagOptions{Name: "ratio"},
+		Default:      "3.14159",
+		Value:         &ratio,
 	})
 
 	if ratio != 3.14159 {
@@ -82,8 +82,8 @@ func TestFloat64Var(t *testing.T) {
 		t.Errorf("expected ratio 2.71828, got %f", ratio)
 	}
 
-	if val, ok := fs.GetFloat64("ratio"); !ok || val != 2.71828 {
-		t.Errorf("GetFloat64 returned %f, %v, expected 2.71828, true", val, ok)
+	if val, ok := fs.Float64("ratio"); !ok || val != 2.71828 {
+		t.Errorf("Float64 returned %f, %v, expected 2.71828, true", val, ok)
 	}
 }
 
@@ -96,10 +96,10 @@ func TestNumberVarWithConfigAndEnv(t *testing.T) {
 	app := NewApp("test")
 	var port int
 	root := NewCommand("test")
-	root.Flags.IntVar(&IntVarOptions{
-		Name:    "port",
-		Default: "3000",
-		Value:   &port,
+	root.Flags.IntVar(IntVarOptions{
+		FlagOptions: FlagOptions{Name: "port"},
+		Default:      "3000",
+		Value:        &port,
 	})
 	root.Run = func(ctx *Context) error {
 		return nil

@@ -21,9 +21,11 @@ func NewCommand() *clix.Command {
 	}
 
 	var web bool
-	login.Flags.BoolVar(&clix.BoolVarOptions{
-		Name:  "web",
-		Usage: "Use web-based login flow",
+	login.Flags.BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "web",
+			Usage: "Use web-based login flow",
+		},
 		Value: &web,
 	})
 	login.Run = func(ctx *clix.Context) error {

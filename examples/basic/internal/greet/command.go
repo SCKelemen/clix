@@ -17,10 +17,12 @@ func NewCommand(project *string) *clix.Command {
 	}}
 
 	var salutation string
-	cmd.Flags.StringVar(&clix.StringVarOptions{
-		Name:    "salutation",
-		Short:   "s",
-		Usage:   "Salutation prefix to use",
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "salutation",
+			Short: "s",
+			Usage: "Salutation prefix to use",
+		},
 		Default: "Hello",
 		Value:   &salutation,
 	})

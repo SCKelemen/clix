@@ -35,11 +35,13 @@ func newApp() *clix.App {
 	app.Description = "Interact with Google Cloud services from the command line."
 
 	var project string
-	app.GlobalFlags.StringVar(&clix.StringVarOptions{
-		Name:   "project",
-		Usage:  "Google Cloud project to operate against",
-		Value:  &project,
-		EnvVar: "GCLOUD_PROJECT",
+	app.Flags().StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:   "project",
+			Usage:  "Google Cloud project to operate against",
+			EnvVar: "GCLOUD_PROJECT",
+		},
+		Value: &project,
 	})
 
 	root := clix.NewCommand("gcloud")

@@ -48,10 +48,12 @@ func NewCommand(name string) *Command {
 		Flags: NewFlagSet(name),
 	}
 
-	cmd.Flags.BoolVar(&BoolVarOptions{
-		Name:  "help",
-		Short: "h",
-		Usage: "Show help information",
+	cmd.Flags.BoolVar(BoolVarOptions{
+		FlagOptions: FlagOptions{
+			Name:  "help",
+			Short: "h",
+			Usage: "Show help information",
+		},
 	})
 
 	return cmd
@@ -68,10 +70,12 @@ func NewGroup(name, short string, children ...*Command) *Command {
 		Flags:    NewFlagSet(name),
 	}
 
-	cmd.Flags.BoolVar(&BoolVarOptions{
-		Name:  "help",
-		Short: "h",
-		Usage: "Show help information",
+	cmd.Flags.BoolVar(BoolVarOptions{
+		FlagOptions: FlagOptions{
+			Name:  "help",
+			Short: "h",
+			Usage: "Show help information",
+		},
 	})
 
 	return cmd
@@ -104,10 +108,12 @@ func (c *Command) prepare(parent *Command) {
 	}
 
 	if c.Flags.lookup("help") == nil {
-		c.Flags.BoolVar(&BoolVarOptions{
-			Name:  "help",
-			Short: "h",
-			Usage: "Show help information",
+		c.Flags.BoolVar(BoolVarOptions{
+			FlagOptions: FlagOptions{
+				Name:  "help",
+				Short: "h",
+				Usage: "Show help information",
+			},
 		})
 	}
 

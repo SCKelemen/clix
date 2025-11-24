@@ -101,10 +101,12 @@ func newApp() *clix.App {
         app.Description = "Demonstrates the clix CLI framework"
 
         var project string
-        app.GlobalFlags.StringVar(&clix.StringVarOptions{
-                Name:    "project",
-                Usage:   "Project to operate on",
-                EnvVar:  "DEMO_PROJECT",
+        app.Flags().StringVar(clix.StringVarOptions{
+                FlagOptions: clix.FlagOptions{
+                        Name:   "project",
+                        Usage:  "Project to operate on",
+                        EnvVar: "DEMO_PROJECT",
+                },
                 Value:   &project,
                 Default: "sample-project",
         })
@@ -218,11 +220,13 @@ Global and command-level flags support:
 
 ```go
 var project string
-app.GlobalFlags.StringVar(&clix.StringVarOptions{
-        Name:    "project",
-        Short:   "p",
-        Usage:   "Project to operate on",
-        EnvVar:  "MYAPP_PROJECT",
+app.Flags().StringVar(clix.StringVarOptions{
+        FlagOptions: clix.FlagOptions{
+                Name:   "project",
+                Short:  "p",
+                Usage:  "Project to operate on",
+                EnvVar: "MYAPP_PROJECT",
+        },
         Value:   &project,
         Default: "default-project",
 })
@@ -356,7 +360,7 @@ Command handlers receive a `*clix.Context` that embeds `context.Context` and pro
 ```go
 cmd.Run = func(ctx *clix.Context) error {
         // Access CLI-specific data
-        if project, ok := ctx.GetString("project"); ok {
+        if project, ok := ctx.String("project"); ok {
                 fmt.Fprintf(ctx.App.Out, "Using project %s\n", project)
         }
 
@@ -510,7 +514,6 @@ type App struct {
         Description string
 
         Root        *Command
-        GlobalFlags *FlagSet
         Config      *ConfigManager
         Prompter    Prompter
         Out         io.Writer

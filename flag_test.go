@@ -10,16 +10,20 @@ func TestFlagSetParse(t *testing.T) {
         fs := NewFlagSet("test")
 
         var name string
-        fs.StringVar(&StringVarOptions{
-                Name:  "name",
-                Short: "n",
+        fs.StringVar(StringVarOptions{
+                FlagOptions: FlagOptions{
+                        Name:  "name",
+                        Short: "n",
+                },
                 Value: &name,
         })
 
         var verbose bool
-        fs.BoolVar(&BoolVarOptions{
-                Name:  "verbose",
-                Short: "v",
+        fs.BoolVar(BoolVarOptions{
+                FlagOptions: FlagOptions{
+                        Name:  "verbose",
+                        Short: "v",
+                },
                 Value: &verbose,
         })
 
@@ -37,12 +41,12 @@ func TestFlagSetParse(t *testing.T) {
                 t.Fatalf("expected name to be %q, got %q", "alice", name)
         }
 
-        if got, ok := fs.GetString("name"); !ok || got != "alice" {
-                t.Fatalf("GetString returned %q, %v", got, ok)
+        if got, ok := fs.String("name"); !ok || got != "alice" {
+                t.Fatalf("String returned %q, %v", got, ok)
         }
 
-        if got, ok := fs.GetBool("verbose"); !ok || !got {
-                t.Fatalf("GetBool returned %t, %v", got, ok)
+        if got, ok := fs.Bool("verbose"); !ok || !got {
+                t.Fatalf("Bool returned %t, %v", got, ok)
         }
 
         want := []string{"-x", "pos", "--flag"}
@@ -53,7 +57,7 @@ func TestFlagSetParse(t *testing.T) {
 
 func TestFlagSetParseMissingValue(t *testing.T) {
         fs := NewFlagSet("test")
-        fs.StringVar(&StringVarOptions{Name: "config"})
+        fs.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "config"}})
 
         _, err := fs.Parse([]string{"--config"})
         if err == nil {

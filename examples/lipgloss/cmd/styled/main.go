@@ -69,7 +69,7 @@ $ styled-demo style prompt multiselect
 $ styled-demo style prompt confirm
 `)
 	var mood string
-	root.Flags.StringVar(&clix.StringVarOptions{
+	root.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{
 		Name:    "mood",
 		Usage:   "Tone for the welcome message",
 		Default: "excited",
@@ -77,7 +77,7 @@ $ styled-demo style prompt confirm
 	})
 	root.Run = func(ctx *clix.Context) error {
 		tone := mood
-		if value, ok := ctx.GetString("mood"); ok {
+		if value, ok := ctx.String("mood"); ok {
 			tone = value
 		}
 

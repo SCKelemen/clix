@@ -23,10 +23,12 @@ func New() *clix.App {
 	app.Description = "Demonstrates the clix CLI framework"
 
 	var project string
-	app.GlobalFlags.StringVar(&clix.StringVarOptions{
-		Name:    "project",
-		Usage:   "Project to operate on",
-		EnvVar:  "DEMO_PROJECT",
+	app.Flags().StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:   "project",
+			Usage:  "Project to operate on",
+			EnvVar: "DEMO_PROJECT",
+		},
 		Value:   &project,
 		Default: "sample-project",
 	})

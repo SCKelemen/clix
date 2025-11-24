@@ -18,9 +18,11 @@ func NewCommand() *clix.Command {
 	login.Arguments = []*clix.Argument{{Name: "account", Prompt: "Google account", Required: true}}
 
 	var brief bool
-	login.Flags.BoolVar(&clix.BoolVarOptions{
-		Name:  "brief",
-		Usage: "Display minimal output",
+	login.Flags.BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "brief",
+			Usage: "Display minimal output",
+		},
 		Value: &brief,
 	})
 
@@ -38,9 +40,11 @@ func NewCommand() *clix.Command {
 	activate.Arguments = []*clix.Argument{{Name: "account", Prompt: "Service account email", Required: true}}
 
 	var keyFile string
-	activate.Flags.StringVar(&clix.StringVarOptions{
-		Name:  "key-file",
-		Usage: "Path to service account key file",
+	activate.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "key-file",
+			Usage: "Path to service account key file",
+		},
 		Value: &keyFile,
 	})
 

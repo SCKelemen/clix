@@ -27,9 +27,11 @@ func NewCommand() *clix.Command {
 	merge.Arguments = []*clix.Argument{{Name: "number", Prompt: "Pull request number", Required: true}}
 
 	var rebase bool
-	merge.Flags.BoolVar(&clix.BoolVarOptions{
-		Name:  "rebase",
-		Usage: "Rebase the branch before merging",
+	merge.Flags.BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "rebase",
+			Usage: "Rebase the branch before merging",
+		},
 		Value: &rebase,
 	})
 

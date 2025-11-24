@@ -24,9 +24,9 @@ func TestConfigurationPrecedence(t *testing.T) {
 
 		var value string
 		root := NewCommand("test")
-		root.Flags.StringVar(&StringVarOptions{
-			Name:    "value",
-			Default: "default-value",
+		root.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{Name: "value"},
+			Default:     "default-value",
 			Value:   &value,
 		})
 		root.Run = func(ctx *Context) error {

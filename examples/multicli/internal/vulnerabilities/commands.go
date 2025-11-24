@@ -9,7 +9,7 @@ func NewListCommand() *clix.Command {
 	cmd := clix.NewCommand("list")
 	cmd.Short = "List security vulnerabilities"
 	var severity string
-	cmd.Flags.StringVar(&clix.StringVarOptions{
+	cmd.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{
 		Name:    "severity",
 		Short:   "s",
 		Usage:   "Filter by severity (low, medium, high, critical)",

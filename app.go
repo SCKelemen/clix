@@ -17,14 +17,13 @@ type App struct {
 	Version     string
 	Description string
 
-	Root        *Command
-	GlobalFlags *FlagSet
-	Config      *ConfigManager
-	Prompter    Prompter
-	Out         io.Writer
-	Err         io.Writer
-	In          io.Reader
-	EnvPrefix   string
+	Root      *Command
+	Config    *ConfigManager
+	Prompter  Prompter
+	Out       io.Writer
+	Err       io.Writer
+	In        io.Reader
+	EnvPrefix string
 
 	DefaultTheme  PromptTheme
 	Styles        Styles
@@ -37,15 +36,15 @@ type App struct {
 	extensionsApplied bool
 }
 
-// NewApp constructs an application with sensible defaults. Callers are still
-// responsible for providing a root command.
+// NewApp constructs an application with sensible defaults. A minimal root command
+// is created automatically to hold default flags (format, help). You can replace
+// it with your own root command if needed: app.Root = clix.NewCommand("myroot")
 func NewApp(name string) *App {
 	app := &App{
-		Name:        name,
-		Out:         os.Stdout,
-		Err:         os.Stderr,
-		In:          os.Stdin,
-		GlobalFlags: NewFlagSet("global"),
+		Name: name,
+		Out:  os.Stdout,
+		Err:  os.Stderr,
+		In:   os.Stdin,
 	}
 
 	app.EnvPrefix = strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
@@ -54,23 +53,43 @@ func NewApp(name string) *App {
 	app.DefaultTheme = DefaultPromptTheme
 	app.Styles = DefaultStyles
 
-	// Standard global flags.
+	// Create a minimal root command to hold default flags
+	// Users can replace this with their own root command
+	app.Root = NewCommand(name)
+
+	// Standard flags on root command (accessible via app.Flags()).
 	var format = "text"
-	app.GlobalFlags.StringVar(&StringVarOptions{
-		Name:    "format",
-		Short:   "f",
-		Usage:   "Output format (json, yaml, text)",
+	app.Flags().StringVar(StringVarOptions{
+		FlagOptions: FlagOptions{
+			Name:  "format",
+			Short: "f",
+			Usage: "Output format (json, yaml, text)",
+		},
 		Default: "text",
 		Value:   &format,
 	})
 
-	app.GlobalFlags.BoolVar(&BoolVarOptions{
-		Name:  "help",
-		Short: "h",
-		Usage: "Show help information",
+	app.Flags().BoolVar(BoolVarOptions{
+		FlagOptions: FlagOptions{
+			Name:  "help",
+			Short: "h",
+			Usage: "Show help information",
+		},
 	})
 
 	return app
+}
+
+// Flags returns the flag set for the root command. Flags defined on the root
+// command apply to all commands (they are "global" by virtue of being on the root).
+// This provides a symmetric API with cmd.Flags.
+func (a *App) Flags() *FlagSet {
+	if a.Root == nil {
+		// Create a minimal root if one doesn't exist
+		// This should rarely happen since NewApp creates one
+		a.Root = NewCommand(a.Name)
+	}
+	return a.Root.Flags
 }
 
 // AddDefaultCommands attaches built-in helper commands to the application.
@@ -106,18 +125,21 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		args = os.Args[1:]
 	}
 
-
 	if err := a.ensureConfigLoaded(ctx); err != nil {
 		return err
 	}
 
-	remaining, err := a.GlobalFlags.Parse(args)
+	// Use Flags() to get root command's flags (symmetric with cmd.Flags)
+	flags := a.Flags()
+	// Apply config/env/defaults to root flags before parsing
+	a.applyConfig(a.Root)
+	remaining, err := flags.Parse(args)
 	if err != nil {
 		return err
 	}
 
 	// Check if global --version flag was set
-	if version, _ := a.GlobalFlags.GetBool("version"); version {
+	if version, _ := flags.Bool("version"); version {
 		// Show version info - same format as "version" command but simpler (no commit/date)
 		// The version extension sets app.Version, so if it's enabled, we show it
 		if a.Version != "" {
@@ -129,7 +151,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	// Check if global --help flag was set (when --help appears before any command)
-	if help, _ := a.GlobalFlags.GetBool("help"); help {
+	if help, _ := flags.Bool("help"); help {
 		// If there are remaining args, they might be a command - match it first
 		// so we show help for that command instead of root
 		if len(remaining) > 0 {
@@ -184,7 +206,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// Check for --help/-h flag at command level (automatic for all commands)
 	// Help flags are automatically added to every command in NewCommand/prepare
 	// This takes precedence over everything else - no need to implement per command
-	if help, _ := cmd.Flags.GetBool("help"); help {
+	if help, _ := cmd.Flags.Bool("help"); help {
 		return a.printCommandHelp(cmd, resultArgs)
 	}
 
@@ -204,20 +226,18 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		// Has Run handler, will execute it below
 	}
 
+	// If command has no user-defined children and required args are missing, prompt for them
+	if len(resultArgs) < cmd.RequiredArgs() {
+		if err := a.promptForArguments(nil, cmd, &resultArgs); err != nil {
+			return err
+		}
+	}
+
 	runCtx := &Context{
 		Context: ctx,
 		App:     a,
 		Command: cmd,
 		Args:    resultArgs,
-	}
-
-	// If command has no user-defined children and required args are missing, prompt for them
-	if len(resultArgs) < cmd.RequiredArgs() {
-		if err := a.promptForArguments(runCtx, cmd, &resultArgs); err != nil {
-			return err
-		}
-		// Update args in context after prompting
-		runCtx.Args = resultArgs
 	}
 
 	if cmd.PreRun != nil {
@@ -317,6 +337,14 @@ func (a *App) promptForArguments(ctx *Context, cmd *Command, args *[]string) err
 		return nil
 	}
 
+	// Create a temporary context for prompting if one wasn't provided
+	var promptCtx context.Context
+	if ctx != nil {
+		promptCtx = ctx
+	} else {
+		promptCtx = context.Background()
+	}
+
 	for i := len(*args); i < len(cmd.Arguments); i++ {
 		arg := cmd.Arguments[i]
 		if !arg.Required {
@@ -324,12 +352,11 @@ func (a *App) promptForArguments(ctx *Context, cmd *Command, args *[]string) err
 		}
 
 		// Use struct-based API for consistency with rest of codebase
-		// Pass ctx directly (it embeds context.Context) - no need for ctx.Context
-		value, err := ctx.App.Prompter.Prompt(ctx, PromptRequest{
+		value, err := a.Prompter.Prompt(promptCtx, PromptRequest{
 			Label:    arg.PromptLabel(),
 			Default:  arg.Default,
 			Validate: arg.Validate,
-			Theme:    ctx.App.DefaultTheme,
+			Theme:    a.DefaultTheme,
 		})
 		if err != nil {
 			return err
@@ -374,7 +401,7 @@ type Context struct {
 	context.Context
 	App     *App
 	Command *Command
-	Args    []string
+	Args    []string // Direct access to positional arguments
 }
 
 // ConfigDir returns the absolute path to the application's configuration
@@ -412,10 +439,11 @@ func (a *App) SaveConfig() error {
 // OutputFormat returns the currently selected output format.
 // Valid values are "json", "yaml", or "text" (default).
 func (a *App) OutputFormat() string {
-	if a.GlobalFlags == nil {
+	flags := a.Flags()
+	if flags == nil {
 		return "text"
 	}
-	if v, ok := a.GlobalFlags.GetString("format"); ok && v != "" {
+	if v, ok := flags.String("format"); ok && v != "" {
 		format := strings.ToLower(v)
 		// Validate format
 		switch format {
@@ -429,18 +457,22 @@ func (a *App) OutputFormat() string {
 	return "text"
 }
 
-// GetString retrieves a configuration value with the given key, looking at
-// command flags, global flags, environment variables, config file, then defaults.
-func (ctx *Context) GetString(key string) (string, bool) {
+// String retrieves a string configuration value with the given key, looking at
+// command flags, root flags, environment variables, config file, then defaults.
+// This follows the log/slog naming pattern for type-specific getters.
+func (ctx *Context) String(key string) (string, bool) {
 	// First check command-level flags
-	if v, ok := ctx.Command.Flags.GetString(key); ok {
+	if v, ok := ctx.Command.Flags.String(key); ok {
 		return v, true
 	}
 
-	// Then check global flags (for flags like --project that are global)
-	if ctx.App != nil && ctx.App.GlobalFlags != nil {
-		if v, ok := ctx.App.GlobalFlags.GetString(key); ok {
-			return v, true
+	// Then check root flags (for flags like --project that are on the root)
+	if ctx.App != nil {
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if v, ok := rootFlags.String(key); ok {
+				return v, true
+			}
 		}
 	}
 
@@ -454,18 +486,22 @@ func (ctx *Context) GetString(key string) (string, bool) {
 	return "", false
 }
 
-// GetBool retrieves a boolean configuration value using the same precedence as
-// GetString (command flags, global flags, config).
-func (ctx *Context) GetBool(key string) (bool, bool) {
+// Bool retrieves a boolean configuration value using the same precedence as
+// String (command flags, root flags, config).
+// This follows the log/slog naming pattern for type-specific getters.
+func (ctx *Context) Bool(key string) (bool, bool) {
 	// First check command-level flags
-	if v, ok := ctx.Command.Flags.GetBool(key); ok {
+	if v, ok := ctx.Command.Flags.Bool(key); ok {
 		return v, true
 	}
 
-	// Then check global flags
-	if ctx.App != nil && ctx.App.GlobalFlags != nil {
-		if v, ok := ctx.App.GlobalFlags.GetBool(key); ok {
-			return v, true
+	// Then check root flags
+	if ctx.App != nil {
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if v, ok := rootFlags.Bool(key); ok {
+				return v, true
+			}
 		}
 	}
 
@@ -479,3 +515,36 @@ func (ctx *Context) GetBool(key string) (bool, bool) {
 	return false, false
 }
 
+// Arg returns the positional argument at the given index.
+// Returns empty string if index is out of bounds.
+func (ctx *Context) Arg(index int) string {
+	if index < 0 || index >= len(ctx.Args) {
+		return ""
+	}
+	return ctx.Args[index]
+}
+
+// ArgNamed returns the value of a named argument by its name.
+// Returns the value and true if found, empty string and false otherwise.
+// This looks up arguments by the Name field in the command's Arguments definition.
+func (ctx *Context) ArgNamed(name string) (string, bool) {
+	if ctx.Command == nil || len(ctx.Command.Arguments) == 0 {
+		return "", false
+	}
+
+	// Check if any argument matches the name
+	for i, arg := range ctx.Command.Arguments {
+		if arg.Name == name && i < len(ctx.Args) {
+			return ctx.Args[i], true
+		}
+	}
+
+	return "", false
+}
+
+// AllArgs returns all positional arguments as a slice.
+// This provides a symmetric API with String()/Bool() for flags.
+// You can also access ctx.Args directly if preferred.
+func (ctx *Context) AllArgs() []string {
+	return ctx.Args
+}

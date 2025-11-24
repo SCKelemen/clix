@@ -2,7 +2,6 @@ package clix
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -18,24 +17,23 @@ func TestOutputFormat(t *testing.T) {
 
 	t.Run("format can be set to json", func(t *testing.T) {
 		app := NewApp("test")
-		root := NewCommand("test")
-		app.Root = root
-		root.Run = func(ctx *Context) error {
+		// Use the root created by NewApp (it has the format flag)
+		app.Root.Run = func(ctx *Context) error {
 			return nil
 		}
 
-		// Run with --format=json to set the flag
-		_ = app.Run(context.Background(), []string{"--format=json"})
+		// Parse the flag directly
+		app.Flags().Parse([]string{"--format=json"})
 
-		// After running, the flag should be set
-		if format, _ := app.GlobalFlags.GetString("format"); format != "json" {
+		// After parsing, the flag should be set
+		if format, _ := app.Flags().String("format"); format != "json" {
 			t.Errorf("expected format flag to be 'json', got %q", format)
 		}
 	})
 
 	t.Run("format can be set to yaml", func(t *testing.T) {
 		app := NewApp("test")
-		app.GlobalFlags.Parse([]string{"--format=yaml"})
+		app.Flags().Parse([]string{"--format=yaml"})
 
 		if app.OutputFormat() != "yaml" {
 			t.Errorf("expected format 'yaml', got %q", app.OutputFormat())
@@ -44,7 +42,7 @@ func TestOutputFormat(t *testing.T) {
 
 	t.Run("invalid format defaults to text", func(t *testing.T) {
 		app := NewApp("test")
-		app.GlobalFlags.Parse([]string{"--format=invalid"})
+		app.Flags().Parse([]string{"--format=invalid"})
 
 		if app.OutputFormat() != "text" {
 			t.Errorf("expected invalid format to default to 'text', got %q", app.OutputFormat())
@@ -53,7 +51,7 @@ func TestOutputFormat(t *testing.T) {
 
 	t.Run("format is case insensitive", func(t *testing.T) {
 		app := NewApp("test")
-		app.GlobalFlags.Parse([]string{"--format=JSON"})
+		app.Flags().Parse([]string{"--format=JSON"})
 
 		if app.OutputFormat() != "json" {
 			t.Errorf("expected format to be case insensitive 'json', got %q", app.OutputFormat())
@@ -66,7 +64,7 @@ func TestFormatOutput(t *testing.T) {
 	app.Out = &bytes.Buffer{}
 
 	t.Run("format map as json", func(t *testing.T) {
-		app.GlobalFlags.Parse([]string{"--format=json"})
+		app.Flags().Parse([]string{"--format=json"})
 		data := map[string]interface{}{
 			"name":  "test",
 			"value": 42,
@@ -90,7 +88,7 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("format map as yaml", func(t *testing.T) {
-		app.GlobalFlags.Parse([]string{"--format=yaml"})
+		app.Flags().Parse([]string{"--format=yaml"})
 		data := map[string]string{
 			"name":  "test",
 			"value": "42",
@@ -109,7 +107,7 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("format map as text", func(t *testing.T) {
-		app.GlobalFlags.Parse([]string{"--format=text"})
+		app.Flags().Parse([]string{"--format=text"})
 		data := map[string]string{
 			"name":  "test",
 			"value": "42",
@@ -128,7 +126,7 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("format slice as json", func(t *testing.T) {
-		app.GlobalFlags.Parse([]string{"--format=json"})
+		app.Flags().Parse([]string{"--format=json"})
 		data := []string{"item1", "item2", "item3"}
 
 		if err := app.FormatOutput(data); err != nil {
@@ -149,7 +147,7 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("format slice as yaml", func(t *testing.T) {
-		app.GlobalFlags.Parse([]string{"--format=yaml"})
+		app.Flags().Parse([]string{"--format=yaml"})
 		data := []string{"item1", "item2"}
 
 		if err := app.FormatOutput(data); err != nil {
@@ -165,7 +163,7 @@ func TestFormatOutput(t *testing.T) {
 	})
 
 	t.Run("format slice as text", func(t *testing.T) {
-		app.GlobalFlags.Parse([]string{"--format=text"})
+		app.Flags().Parse([]string{"--format=text"})
 		data := []string{"item1", "item2"}
 
 		if err := app.FormatOutput(data); err != nil {

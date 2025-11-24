@@ -142,10 +142,12 @@ func configResetCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("reset")
 	cmd.Short = "Clear all configuration values"
 	var force bool
-	cmd.Flags.BoolVar(&clix.BoolVarOptions{
-		Name:  "force",
-		Short: "f",
-		Usage: "Do not prompt for confirmation",
+	cmd.Flags.BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "force",
+			Short: "f",
+			Usage: "Do not prompt for confirmation",
+		},
 		Value: &force,
 	})
 	cmd.Run = func(ctx *clix.Context) error {

@@ -41,67 +41,58 @@ type boolFlag interface {
 	SetBool(bool) error
 }
 
+// FlagOptions contains common configuration for all flag types.
+type FlagOptions struct {
+	Name    string   // long flag name: "project"
+	Short   string   // optional shorthand: "p"
+	Usage   string   // help text
+	EnvVar  string   // environment variable name
+	EnvVars []string // optional additional environment variable aliases
+}
+
 // StringVarOptions describes the configuration for adding a string flag.
 type StringVarOptions struct {
-	Name    string
-	Short   string
-	Usage   string
-	EnvVar  string
+	FlagOptions
 	Default string
 	Value   *string
 }
 
 // BoolVarOptions describes the configuration for adding a bool flag.
 type BoolVarOptions struct {
-	Name   string
-	Short  string
-	Usage  string
-	EnvVar string
-	Value  *bool
+	FlagOptions
+	Value *bool
 }
 
 // DurationVarOptions describes the configuration for adding a duration flag.
 type DurationVarOptions struct {
-	Name    string
-	Short   string
-	Usage   string
-	EnvVar  string
+	FlagOptions
 	Default string
 	Value   *time.Duration
 }
 
 // IntVarOptions describes the configuration for adding an int flag.
 type IntVarOptions struct {
-	Name    string
-	Short   string
-	Usage   string
-	EnvVar  string
+	FlagOptions
 	Default string
 	Value   *int
 }
 
 // Int64VarOptions describes the configuration for adding an int64 flag.
 type Int64VarOptions struct {
-	Name    string
-	Short   string
-	Usage   string
-	EnvVar  string
+	FlagOptions
 	Default string
 	Value   *int64
 }
 
 // Float64VarOptions describes the configuration for adding a float64 flag.
 type Float64VarOptions struct {
-	Name    string
-	Short   string
-	Usage   string
-	EnvVar  string
+	FlagOptions
 	Default string
 	Value   *float64
 }
 
 // StringVar registers a string flag.
-func (fs *FlagSet) StringVar(opts *StringVarOptions) {
+func (fs *FlagSet) StringVar(opts StringVarOptions) {
 	value := &StringValue{target: opts.Value}
 	flag := &Flag{
 		Name:    opts.Name,
@@ -118,7 +109,7 @@ func (fs *FlagSet) StringVar(opts *StringVarOptions) {
 }
 
 // BoolVar registers a boolean flag.
-func (fs *FlagSet) BoolVar(opts *BoolVarOptions) {
+func (fs *FlagSet) BoolVar(opts BoolVarOptions) {
 	value := &BoolValue{target: opts.Value}
 	flag := &Flag{
 		Name:   opts.Name,
@@ -131,7 +122,7 @@ func (fs *FlagSet) BoolVar(opts *BoolVarOptions) {
 }
 
 // DurationVar registers a duration flag.
-func (fs *FlagSet) DurationVar(opts *DurationVarOptions) {
+func (fs *FlagSet) DurationVar(opts DurationVarOptions) {
 	value := &DurationValue{target: opts.Value}
 	flag := &Flag{
 		Name:    opts.Name,
@@ -148,7 +139,7 @@ func (fs *FlagSet) DurationVar(opts *DurationVarOptions) {
 }
 
 // IntVar registers an int flag.
-func (fs *FlagSet) IntVar(opts *IntVarOptions) {
+func (fs *FlagSet) IntVar(opts IntVarOptions) {
 	value := &IntValue{target: opts.Value}
 	flag := &Flag{
 		Name:    opts.Name,
@@ -165,7 +156,7 @@ func (fs *FlagSet) IntVar(opts *IntVarOptions) {
 }
 
 // Int64Var registers an int64 flag.
-func (fs *FlagSet) Int64Var(opts *Int64VarOptions) {
+func (fs *FlagSet) Int64Var(opts Int64VarOptions) {
 	value := &Int64Value{target: opts.Value}
 	flag := &Flag{
 		Name:    opts.Name,
@@ -182,7 +173,7 @@ func (fs *FlagSet) Int64Var(opts *Int64VarOptions) {
 }
 
 // Float64Var registers a float64 flag.
-func (fs *FlagSet) Float64Var(opts *Float64VarOptions) {
+func (fs *FlagSet) Float64Var(opts Float64VarOptions) {
 	value := &Float64Value{target: opts.Value}
 	flag := &Flag{
 		Name:    opts.Name,
@@ -270,8 +261,8 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 	return positionals, nil
 }
 
-// GetString fetches a string flag value.
-func (fs *FlagSet) GetString(name string) (string, bool) {
+// String fetches a string flag value.
+func (fs *FlagSet) String(name string) (string, bool) {
 	flag := fs.lookup(name)
 	if flag == nil {
 		return "", false
@@ -282,8 +273,8 @@ func (fs *FlagSet) GetString(name string) (string, bool) {
 	return flag.Value.String(), true
 }
 
-// GetBool fetches a boolean flag value.
-func (fs *FlagSet) GetBool(name string) (bool, bool) {
+// Bool fetches a boolean flag value.
+func (fs *FlagSet) Bool(name string) (bool, bool) {
 	flag := fs.lookup(name)
 	if flag == nil {
 		return false, false
@@ -300,8 +291,8 @@ func (fs *FlagSet) GetBool(name string) (bool, bool) {
 	return false, false
 }
 
-// GetInt fetches an int flag value.
-func (fs *FlagSet) GetInt(name string) (int, bool) {
+// Integer fetches an int flag value.
+func (fs *FlagSet) Integer(name string) (int, bool) {
 	flag := fs.lookup(name)
 	if flag == nil {
 		return 0, false
@@ -315,8 +306,8 @@ func (fs *FlagSet) GetInt(name string) (int, bool) {
 	return 0, false
 }
 
-// GetInt64 fetches an int64 flag value.
-func (fs *FlagSet) GetInt64(name string) (int64, bool) {
+// Int64 fetches an int64 flag value.
+func (fs *FlagSet) Int64(name string) (int64, bool) {
 	flag := fs.lookup(name)
 	if flag == nil {
 		return 0, false
@@ -330,8 +321,8 @@ func (fs *FlagSet) GetInt64(name string) (int64, bool) {
 	return 0, false
 }
 
-// GetFloat64 fetches a float64 flag value.
-func (fs *FlagSet) GetFloat64(name string) (float64, bool) {
+// Float64 fetches a float64 flag value.
+func (fs *FlagSet) Float64(name string) (float64, bool) {
 	flag := fs.lookup(name)
 	if flag == nil {
 		return 0, false

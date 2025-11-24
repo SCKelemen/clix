@@ -42,10 +42,12 @@ func (e Extension) Extend(app *clix.App) error {
 	}
 
 	// Add global --version flag that shows version info
-	app.GlobalFlags.BoolVar(&clix.BoolVarOptions{
-		Name:  "version",
-		Short: "v",
-		Usage: "Show version information",
+	app.Flags().BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "version",
+			Short: "v",
+			Usage: "Show version information",
+		},
 	})
 
 	// Store version info in app so Run can access it for --version flag
