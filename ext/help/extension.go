@@ -2,6 +2,7 @@ package help
 
 import (
 	"fmt"
+	"strings"
 
 	"clix"
 )
@@ -42,15 +43,9 @@ func (Extension) Extend(app *clix.App) error {
 }
 
 func findChild(cmd *clix.Command, name string) *clix.Command {
-	for _, child := range cmd.Children {
-		if child.Name == name {
-			return child
-		}
-		for _, alias := range child.Aliases {
-			if alias == name {
-				return child
-			}
-		}
+	// Use ResolvePath for consistent behavior with core library
+	if resolved := cmd.ResolvePath([]string{name}); resolved != nil {
+		return resolved
 	}
 	return nil
 }
@@ -66,7 +61,7 @@ func NewHelpCommand(app *clix.App) *clix.Command {
 			if resolved := app.Root.ResolvePath(ctx.Args); resolved != nil {
 				target = resolved
 			} else {
-				return fmt.Errorf("unknown command: %s", ctx.Args)
+				return fmt.Errorf("unknown command: %s", strings.Join(ctx.Args, " "))
 			}
 		}
 		helper := clix.HelpRenderer{App: app, Command: target}

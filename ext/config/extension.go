@@ -46,31 +46,22 @@ func (Extension) Extend(app *clix.App) error {
 }
 
 func findChild(cmd *clix.Command, name string) *clix.Command {
-	for _, child := range cmd.Children {
-		if child.Name == name {
-			return child
-		}
-		for _, alias := range child.Aliases {
-			if alias == name {
-				return child
-			}
-		}
+	// Use ResolvePath for consistent behavior with core library
+	if resolved := cmd.ResolvePath([]string{name}); resolved != nil {
+		return resolved
 	}
 	return nil
 }
 
 // NewConfigCommand builds the configuration management command hierarchy.
 func NewConfigCommand(app *clix.App) *clix.Command {
-	cmd := clix.NewCommand("config")
-	cmd.Short = "Manage CLI configuration"
+	cmd := clix.NewGroup("config", "Manage CLI configuration",
+		configListCommand(app),
+		configGetCommand(app),
+		configSetCommand(app),
+		configResetCommand(app),
+	)
 	cmd.Usage = fmt.Sprintf("%s config [command]", app.Name)
-	// No Run handler - shows help by default
-
-	cmd.AddCommand(configListCommand(app))
-	cmd.AddCommand(configGetCommand(app))
-	cmd.AddCommand(configSetCommand(app))
-	cmd.AddCommand(configResetCommand(app))
-
 	return cmd
 }
 
@@ -106,7 +97,10 @@ func configGetCommand(app *clix.App) *clix.Command {
 	cmd.Short = "Print a configuration value"
 	cmd.Arguments = []*clix.Argument{{Name: "key", Prompt: "Configuration key", Required: true}}
 	cmd.Run = func(ctx *clix.Context) error {
-		key := ctx.Args[0]
+		key, ok := ctx.ArgNamed("key")
+		if !ok || key == "" {
+			return errors.New("key argument required")
+		}
 		if value, ok := app.Config.Get(key); ok {
 			fmt.Fprintln(app.Out, value)
 			return nil
@@ -124,10 +118,14 @@ func configSetCommand(app *clix.App) *clix.Command {
 		{Name: "value", Prompt: "Value", Required: true},
 	}
 	cmd.Run = func(ctx *clix.Context) error {
-		if len(ctx.Args) < 2 {
-			return errors.New("key and value required")
+		key, ok := ctx.ArgNamed("key")
+		if !ok || key == "" {
+			return errors.New("key argument required")
 		}
-		key, value := ctx.Args[0], ctx.Args[1]
+		value, ok := ctx.ArgNamed("value")
+		if !ok || value == "" {
+			return errors.New("value argument required")
+		}
 		app.Config.Set(key, value)
 		if err := app.SaveConfig(); err != nil {
 			return err

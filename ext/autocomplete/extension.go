@@ -40,13 +40,9 @@ func (Extension) Extend(app *clix.App) error {
 }
 
 func findChild(cmd *clix.Command, name string) *clix.Command {
-	for _, child := range cmd.Children {
-		if child.Name == name {
-			return child
-		}
-		if found := findChild(child, name); found != nil {
-			return found
-		}
+	// Use ResolvePath for consistent behavior with core library
+	if resolved := cmd.ResolvePath([]string{name}); resolved != nil {
+		return resolved
 	}
 	return nil
 }
@@ -58,12 +54,13 @@ func NewAutocompleteCommand(app *clix.App) *clix.Command {
 	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish]", app.Name)
 	cmd.Arguments = []*clix.Argument{{Name: "shell", Prompt: "Shell", Required: false}}
 	cmd.Run = func(ctx *clix.Context) error {
-		if len(ctx.Args) == 0 || ctx.Args[0] == "" {
+		shellArg := ctx.Arg(0)
+		if shellArg == "" {
 			// Show help if no shell provided
 			helper := clix.HelpRenderer{App: app, Command: cmd}
 			return helper.Render(app.Out)
 		}
-		shell := strings.ToLower(ctx.Args[0])
+		shell := strings.ToLower(shellArg)
 		script, err := generateCompletionScript(app, shell)
 		if err != nil {
 			return err

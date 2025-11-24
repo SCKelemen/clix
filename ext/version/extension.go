@@ -64,13 +64,9 @@ func (e Extension) Extend(app *clix.App) error {
 }
 
 func findChild(cmd *clix.Command, name string) *clix.Command {
-	for _, child := range cmd.Children {
-		if child.Name == name {
-			return child
-		}
-		if found := findChild(child, name); found != nil {
-			return found
-		}
+	// Use ResolvePath for consistent behavior with core library
+	if resolved := cmd.ResolvePath([]string{name}); resolved != nil {
+		return resolved
 	}
 	return nil
 }
