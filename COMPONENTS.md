@@ -641,6 +641,171 @@ Authentication components provide a beautiful, secure experience for CLI authent
   })
   ```
 
+## Authentication Flow Patterns
+
+### AuthN Flow (Authentication)
+
+The authentication flow verifies user identity:
+
+```go
+func runLogin(ctx *clix.Context) error {
+    // Step 1: Generate and display auth code
+    code := generateAuthCode()
+    clix.RenderAuthCode(ctx.App.Out, clix.AuthCodeOptions{
+        Code: code,
+        Message: "Copy this code before opening your browser:",
+        ExpiresIn: 10 * time.Minute,
+        AutoCopy: true,
+        ShowTimer: true,
+    })
+    
+    // Step 2: Wait for user to copy code
+    fmt.Fprintln(ctx.App.Out, "\nPress Enter to open browser...")
+    // Wait for Enter or auto-open after delay
+    
+    // Step 3: Open browser with auth URL
+    authURL := buildAuthURL(code)
+    flow := clix.NewBrowserAuthFlow(clix.BrowserAuthFlowOptions{
+        AuthURL: authURL,
+        RedirectURI: "http://localhost:8080/callback",
+        Message: "Opening browser for authentication...",
+        SuccessMessage: "✓ Authentication successful!",
+    })
+    
+    // Step 4: Start local server and wait for callback
+    token, err := flow.Run(ctx)
+    if err != nil {
+        clix.RenderAlert(ctx.App.Out, clix.AlertOptions{
+            Type: clix.AlertError,
+            Title: "Authentication Failed",
+            Message: err.Error(),
+        })
+        return err
+    }
+    
+    // Step 5: Store token and show success
+    storeToken(token)
+    clix.RenderAlert(ctx.App.Out, clix.AlertOptions{
+        Type: clix.AlertSuccess,
+        Title: "Success",
+        Message: "You are now authenticated.",
+    })
+    
+    return nil
+}
+```
+
+### AuthZ Flow (Authorization)
+
+The authorization flow grants access to resources:
+
+```go
+func runAuthorize(ctx *clix.Context) error {
+    // Step 1: Show current auth status
+    status := getAuthStatus()
+    clix.RenderAuthStatus(ctx.App.Out, clix.AuthStatusOptions{
+        Authenticated: status.Authenticated,
+        User: status.User,
+        ServiceAccount: status.ServiceAccount,
+    })
+    
+    // Step 2: Select service account (if multiple available)
+    accounts := listServiceAccounts()
+    if len(accounts) > 1 {
+        account, err := clix.SelectServiceAccount(ctx, clix.ServiceAccountSelectorOptions{
+            Accounts: accounts,
+            Label: "Select service account:",
+        })
+        if err != nil {
+            return err
+        }
+        // Use selected account
+    }
+    
+    // Step 3: Show scopes being requested
+    scopes := []string{"read", "write"}
+    fmt.Fprintf(ctx.App.Out, "Requesting access to:\n")
+    for _, scope := range scopes {
+        fmt.Fprintf(ctx.App.Out, "  • %s\n", scope)
+    }
+    
+    // Step 4: Run OAuth flow
+    flow := clix.NewBrowserAuthFlow(clix.BrowserAuthFlowOptions{
+        AuthURL: buildAuthZURL(scopes),
+        RedirectURI: "http://localhost:8080/callback",
+        Message: "Opening browser to grant access...",
+        SuccessMessage: "✓ Access granted!",
+    })
+    
+    token, err := flow.Run(ctx)
+    if err != nil {
+        return err
+    }
+    
+    // Step 5: Store authorization token
+    storeAuthZToken(token)
+    
+    return nil
+}
+```
+
+### Complete Auth Command Example
+
+```go
+func NewAuthCommand() *clix.Command {
+    auth := clix.NewGroup("auth", "Authentication and authorization")
+    
+    // Login (AuthN)
+    login := clix.NewCommand("login")
+    login.Short = "Authenticate with the service"
+    login.Run = func(ctx *clix.Context) error {
+        return runLogin(ctx)
+    }
+    
+    // Logout
+    logout := clix.NewCommand("logout")
+    logout.Short = "Log out and clear stored credentials"
+    logout.Run = func(ctx *clix.Context) error {
+        clearTokens()
+        clix.RenderAlert(ctx.App.Out, clix.AlertOptions{
+            Type: clix.AlertSuccess,
+            Message: "Logged out successfully.",
+        })
+        return nil
+    }
+    
+    // Revoke (AuthZ)
+    revoke := clix.NewCommand("revoke")
+    revoke.Short = "Revoke authorization tokens"
+    revoke.Run = func(ctx *clix.Context) error {
+        revokeTokens()
+        clix.RenderAlert(ctx.App.Out, clix.AlertOptions{
+            Type: clix.AlertSuccess,
+            Message: "Authorization revoked.",
+        })
+        return nil
+    }
+    
+    // Show active service account
+    active := clix.NewCommand("active")
+    active.Short = "Show active service account"
+    active.Run = func(ctx *clix.Context) error {
+        status := getAuthStatus()
+        clix.RenderAuthStatus(ctx.App.Out, clix.AuthStatusOptions{
+            Authenticated: status.Authenticated,
+            User: status.User,
+            ServiceAccount: status.ServiceAccount,
+            TokenExpires: status.TokenExpires,
+            Scopes: status.Scopes,
+        })
+        return nil
+    }
+    
+    auth.Children = []*clix.Command{login, logout, revoke, active}
+    return auth
+}
+```
+
 ## Display Components API Design
 
 ### Core Principle: Write to io.Writer
