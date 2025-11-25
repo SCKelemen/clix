@@ -262,6 +262,20 @@ func WithDefault(def string) PromptOption {
 }
 
 // WithCommandHandler registers a handler for special key commands during prompts.
+// Command handlers can intercept escape, tab, function keys, and enter to provide
+// custom behavior (e.g., autocomplete, help, cancellation).
+//
+// Example:
+//
+//	result, err := prompter.Prompt(ctx,
+//		clix.WithLabel("Enter value"),
+//		clix.WithCommandHandler(func(ctx clix.PromptCommandContext) clix.PromptCommandAction {
+//			if ctx.Command.Type == clix.PromptCommandEscape {
+//				return clix.PromptCommandAction{Exit: true, ExitErr: errors.New("cancelled")}
+//			}
+//			return clix.PromptCommandAction{Handled: false}
+//		}),
+//	)
 func WithCommandHandler(handler PromptCommandHandler) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.CommandHandler = handler
@@ -269,6 +283,25 @@ func WithCommandHandler(handler PromptCommandHandler) PromptOption {
 }
 
 // WithKeyMap configures the key bindings shown and invoked by the prompt.
+// Key maps allow you to define keyboard shortcuts with descriptions and handlers.
+//
+// Example:
+//
+//	keyMap := clix.PromptKeyMap{
+//		Bindings: []clix.PromptKeyBinding{
+//			{
+//				Command:     clix.PromptCommand{Type: clix.PromptCommandEscape},
+//				Description: "Cancel",
+//				Handler: func(ctx clix.PromptCommandContext) clix.PromptCommandAction {
+//					return clix.PromptCommandAction{Exit: true}
+//				},
+//			},
+//		},
+//	}
+//	result, err := prompter.Prompt(ctx,
+//		clix.WithLabel("Enter value"),
+//		clix.WithKeyMap(keyMap),
+//	)
 func WithKeyMap(m PromptKeyMap) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		if m.isConfigured() {
@@ -280,6 +313,13 @@ func WithKeyMap(m PromptKeyMap) PromptOption {
 // WithNoDefaultPlaceholder sets the placeholder text shown when no default exists.
 // This is typically used by higher-level workflows (like surveys) to prompt the
 // user that pressing enter will keep their existing value.
+//
+// Example:
+//
+//	result, err := prompter.Prompt(ctx,
+//		clix.WithLabel("Enter value"),
+//		clix.WithNoDefaultPlaceholder("(press Enter to keep current value)"),
+//	)
 func WithNoDefaultPlaceholder(text string) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.NoDefaultPlaceholder = text

@@ -646,11 +646,15 @@ For convenience, `clix` also provides functional options that can be used instea
 - `WithValidate(validate func(string) error)` - Set validation function
 - `WithTheme(theme PromptTheme)` - Set the prompt theme
 - `WithConfirm()` - Enable yes/no confirmation prompt
+- `WithCommandHandler(handler PromptCommandHandler)` - Register handler for special key commands
+- `WithKeyMap(keyMap PromptKeyMap)` - Configure keyboard shortcuts and bindings
+- `WithNoDefaultPlaceholder(text string)` - Set placeholder text when no default exists
 
 **Advanced options (require `clix/ext/prompt` extension):**
 - `prompt.Select(options []SelectOption)` - Create a select prompt
 - `prompt.MultiSelect(options []SelectOption)` - Create a multi-select prompt
 - `prompt.WithContinueText(text string)` - Set continue button text for multi-select
+- `prompt.Confirm()` - Alias for `WithConfirm()` (for convenience)
 
 Both APIs can be mixed. For example:
 ```go

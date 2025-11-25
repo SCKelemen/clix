@@ -224,6 +224,53 @@ func ExamplePromptRequest() {
 	}
 }
 
+// ExampleWithLabel demonstrates how to use the functional options API for prompts.
+func ExampleWithLabel() {
+	app := clix.NewApp("myapp")
+	root := clix.NewCommand("myapp")
+	app.Root = root
+
+	root.Run = func(ctx *clix.Context) error {
+		// Basic text prompt using functional options
+		name, err := ctx.App.Prompter.Prompt(ctx,
+			clix.WithLabel("Enter your name"),
+			clix.WithDefault("Anonymous"),
+		)
+		if err != nil {
+			return err
+		}
+
+		// Prompt with validation using functional options
+		email, err := ctx.App.Prompter.Prompt(ctx,
+			clix.WithLabel("Enter your email"),
+			clix.WithValidate(func(value string) error {
+				if !strings.Contains(value, "@") {
+					return fmt.Errorf("invalid email address")
+				}
+				return nil
+			}),
+		)
+		if err != nil {
+			return err
+		}
+
+		// Confirm prompt using functional options
+		confirmed, err := ctx.App.Prompter.Prompt(ctx,
+			clix.WithLabel("Continue?"),
+			clix.WithConfirm(),
+		)
+		if err != nil {
+			return err
+		}
+
+		if confirmed == "yes" {
+			fmt.Fprintf(ctx.App.Out, "Hello %s (%s)!\n", name, email)
+		}
+
+		return nil
+	}
+}
+
 // ExampleContext_String demonstrates how to access configuration values from context.
 func ExampleContext_String() {
 	app := clix.NewApp("myapp")
