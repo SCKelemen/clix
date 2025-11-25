@@ -71,7 +71,7 @@ func TestConfigExtension(t *testing.T) {
 		if !strings.Contains(outputStr, "config") {
 			t.Errorf("config output should contain 'config', got: %s", outputStr)
 		}
-		if !strings.Contains(outputStr, "list") || !strings.Contains(outputStr, "get") {
+		if !strings.Contains(outputStr, "list") || !strings.Contains(outputStr, "get") || !strings.Contains(outputStr, "unset") || !strings.Contains(outputStr, "reset") {
 			t.Errorf("config help should show subcommands, got: %s", outputStr)
 		}
 	})
@@ -86,7 +86,7 @@ func TestConfigExtension(t *testing.T) {
 		configDir := filepath.Join(tempHome, ".config", "test")
 		os.MkdirAll(configDir, 0755)
 		configPath := filepath.Join(configDir, "config.yaml")
-		os.WriteFile(configPath, []byte("key1: value1\nkey2: value2\n"), 0644)
+		os.WriteFile(configPath, []byte("api.timeout: 30\nproject.default: dev\n"), 0644)
 
 		root := clix.NewCommand("test")
 		app.Root = root
@@ -102,12 +102,9 @@ func TestConfigExtension(t *testing.T) {
 		}
 
 		outputStr := output.String()
-		// Config list command should show the keys/values
-		if !strings.Contains(outputStr, "key1") || !strings.Contains(outputStr, "value1") {
-			t.Errorf("config list output should contain key1=value1, got: %s", outputStr)
-		}
-		if !strings.Contains(outputStr, "key2") || !strings.Contains(outputStr, "value2") {
-			t.Errorf("config list output should contain key2=value2, got: %s", outputStr)
+		expected := "api:\n  timeout: 30\nproject:\n  default: dev"
+		if strings.TrimSpace(outputStr) != expected {
+			t.Fatalf("unexpected list output.\nexpected:\n%s\n\ngot:\n%s", expected, outputStr)
 		}
 	})
 
@@ -121,7 +118,7 @@ func TestConfigExtension(t *testing.T) {
 		configDir := filepath.Join(tempHome, ".config", "test")
 		os.MkdirAll(configDir, 0755)
 		configPath := filepath.Join(configDir, "config.yaml")
-		os.WriteFile(configPath, []byte("testkey: testvalue\n"), 0644)
+		os.WriteFile(configPath, []byte("project.default: dev\n"), 0644)
 
 		root := clix.NewCommand("test")
 		app.Root = root
@@ -132,13 +129,33 @@ func TestConfigExtension(t *testing.T) {
 		app.AddExtension(Extension{})
 
 		// Run config get command
-		if err := app.Run(context.Background(), []string{"config", "get", "testkey"}); err != nil {
+		if err := app.Run(context.Background(), []string{"config", "get", "project.default"}); err != nil {
 			t.Fatalf("config get command failed: %v", err)
 		}
 
 		outputStr := strings.TrimSpace(output.String())
-		if outputStr != "testvalue" {
-			t.Errorf("expected 'testvalue', got %q", outputStr)
+		if outputStr != "dev" {
+			t.Errorf("expected 'dev', got %q", outputStr)
+		}
+	})
+
+	t.Run("config get missing key returns error", func(t *testing.T) {
+		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
+		defer os.Unsetenv("HOME")
+
+		app := clix.NewApp("test")
+		root := clix.NewCommand("test")
+		app.Root = root
+
+		app.AddExtension(Extension{})
+
+		err := app.Run(context.Background(), []string{"config", "get", "does.not.exist"})
+		if err == nil {
+			t.Fatalf("expected error for missing key")
+		}
+		if !strings.Contains(err.Error(), `config key "does.not.exist" not found`) {
+			t.Fatalf("unexpected error message: %v", err)
 		}
 	})
 
@@ -158,18 +175,79 @@ func TestConfigExtension(t *testing.T) {
 		app.AddExtension(Extension{})
 
 		// Run config set command
-		if err := app.Run(context.Background(), []string{"config", "set", "newkey", "newvalue"}); err != nil {
+		if err := app.Run(context.Background(), []string{"config", "set", "project.default", "staging"}); err != nil {
 			t.Fatalf("config set command failed: %v", err)
 		}
 
 		outputStr := output.String()
-		if !strings.Contains(outputStr, "newkey updated") {
-			t.Errorf("config set output should contain 'newkey updated', got: %s", outputStr)
+		if !strings.Contains(outputStr, "project.default = staging") {
+			t.Errorf("config set output should contain assignment, got: %s", outputStr)
 		}
 
 		// Verify value was saved
-		if val, ok := app.Config.Get("newkey"); !ok || val != "newvalue" {
-			t.Errorf("expected config to have newkey=newvalue, got %q, %v", val, ok)
+		if val, ok := app.Config.Get("project.default"); !ok || val != "staging" {
+			t.Errorf("expected config to have project.default=staging, got %q, %v", val, ok)
+		}
+	})
+
+	t.Run("config unset command removes value", func(t *testing.T) {
+		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
+		defer os.Unsetenv("HOME")
+
+		app := clix.NewApp("test")
+		app.Config.Set("project.default", "beta")
+		app.SaveConfig()
+
+		root := clix.NewCommand("test")
+		app.Root = root
+
+		var output bytes.Buffer
+		app.Out = &output
+
+		app.AddExtension(Extension{})
+
+		if err := app.Run(context.Background(), []string{"config", "unset", "project.default"}); err != nil {
+			t.Fatalf("config unset failed: %v", err)
+		}
+
+		if _, ok := app.Config.Get("project.default"); ok {
+			t.Fatalf("expected key to be removed")
+		}
+
+		if !strings.Contains(output.String(), "project.default") {
+			t.Fatalf("unset output should mention key, got: %s", output.String())
+		}
+	})
+
+	t.Run("config reset clears persisted config", func(t *testing.T) {
+		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
+		defer os.Unsetenv("HOME")
+
+		app := clix.NewApp("test")
+		app.Config.Set("api.timeout", "30")
+		app.SaveConfig()
+
+		root := clix.NewCommand("test")
+		app.Root = root
+
+		var output bytes.Buffer
+		app.Out = &output
+
+		app.AddExtension(Extension{})
+
+		if err := app.Run(context.Background(), []string{"config", "reset"}); err != nil {
+			t.Fatalf("config reset failed: %v", err)
+		}
+
+		if output.String() == "" {
+			t.Fatalf("reset should print confirmation")
+		}
+
+		configPath, _ := app.ConfigFile()
+		if _, err := os.Stat(configPath); err == nil {
+			t.Fatalf("config file should be removed")
 		}
 	})
 
@@ -224,4 +302,3 @@ type extensionFunc func(*clix.App) error
 func (f extensionFunc) Extend(app *clix.App) error {
 	return f(app)
 }
-

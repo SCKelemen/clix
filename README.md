@@ -485,12 +485,13 @@ Adds command-based help similar to man pages:
 
 #### Config Extension (`clix/ext/config`)
 
-Adds configuration management commands:
+Adds configuration management commands using dot-separated key paths (e.g. `project.default`):
 - `cli config` - Show help for config commands (group)
-- `cli config list` - List all configuration values (supports `--format=json|yaml|text`)
-- `cli config get <key>` - Get a specific value
-- `cli config set <key> <value>` - Set a value
-- `cli config reset` - Clear all configuration
+- `cli config list` - List persisted configuration as YAML (respects `--format=json|yaml|text`)
+- `cli config get <key_path>` - Print the persisted value at `key_path`
+- `cli config set <key_path> <value>` - Persist a new value
+- `cli config unset <key_path>` - Remove the persisted value (no-op if missing)
+- `cli config reset` - Remove all persisted configuration from disk (flags/env/defaults still apply)
 
 #### Autocomplete Extension (`clix/ext/autocomplete`)
 
@@ -716,6 +717,31 @@ If you plan a larger change, feel free to open an issue first so we can discuss 
 
 - [Marcos Quesada Samaniego](https://github.com/marcosQuesada)
 - [Samuel Kelemen](https://github.com/SCKelemen)
+
+## Receiving Dependabot PRs When clix Releases
+
+Whenever we tag a new version (e.g. `v1.0.0`, `v1.1.0`, …) the Go module proxy and Dependabot can see it automatically because the module path stays `github.com/SCKelemen/clix`. To have Dependabot open upgrade PRs in your application:
+
+1. **Import clix via the module path**:
+   ```go
+   import "github.com/SCKelemen/clix"
+   ```
+2. **Pin a version in your `go.mod`**:
+   ```go
+   require github.com/SCKelemen/clix v1.0.0
+   ```
+   Dependabot will bump this line when a newer semver-compatible version exists.
+3. **Add `.github/dependabot.yml` with a Go entry**:
+   ```yaml
+   version: 2
+   updates:
+     - package-ecosystem: "gomod"
+       directory: "/"          # path containing go.mod
+       schedule:
+         interval: "weekly"    # or daily/monthly
+   ```
+
+That’s it—each time clix tags a new release, Dependabot compares the version in your `go.mod` with the latest tag and submits a PR if they differ. If you want to limit updates (e.g. only patches), you can use Dependabot’s `allow`/`ignore` rules, but the basic config above is enough for automatic PRs.
 
 ## License
 

@@ -15,8 +15,10 @@ func ExampleExtension() {
 	app.Root = root
 
 	// Now the app will have:
-	//   example config          - List all config
-	//   example config get <key> - Get a value
-	//   example config set <key> <value> - Set a value
-	//   example config reset     - Clear config
+	//   example config                  - Show help for config commands
+	//   example config list             - List persisted config as YAML
+	//   example config get project.default
+	//   example config set project.default staging
+	//   example config unset project.default
+	//   example config reset            - Remove all persisted config
 }

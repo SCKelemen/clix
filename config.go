@@ -123,6 +123,19 @@ func (m *ConfigManager) Set(key, value string) {
 	m.values[key] = value
 }
 
+// Delete removes a key from the configuration. It returns true if the key existed.
+// Keys are stored using dot-separated paths (e.g. "project.default").
+func (m *ConfigManager) Delete(key string) bool {
+	if m.values == nil {
+		return false
+	}
+	if _, ok := m.values[key]; ok {
+		delete(m.values, key)
+		return true
+	}
+	return false
+}
+
 // Reset removes all values.
 func (m *ConfigManager) Reset() {
 	m.values = make(map[string]string)
