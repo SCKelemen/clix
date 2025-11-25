@@ -9,8 +9,8 @@ import (
 	"os"
 	"strings"
 
-	"clix"
-	"clix/ext/prompt"
+	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/ext/prompt"
 )
 
 // NoDefaultPlaceholder is the message shown when a survey question has no default value.
@@ -862,8 +862,8 @@ func (p sharedTextPrompter) Prompt(ctx context.Context, opts ...clix.PromptOptio
 // Example:
 //
 //	import (
-//		"clix"
-//		"clix/ext/survey"
+//		"github.com/SCKelemen/clix"
+//		"github.com/SCKelemen/clix/ext/survey"
 //	)
 //
 //	questions := []survey.Question{

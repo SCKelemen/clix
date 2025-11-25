@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 func NewCommand(name, description string) *clix.Command {

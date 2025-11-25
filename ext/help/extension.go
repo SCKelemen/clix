@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 // Extension adds the help command to a clix app.
@@ -20,8 +20,8 @@ import (
 // Example:
 //
 //	import (
-//		"clix"
-//		"clix/ext/help"
+//		"github.com/SCKelemen/clix"
+//		"github.com/SCKelemen/clix/ext/help"
 //	)
 //
 //	app := clix.NewApp("myapp")

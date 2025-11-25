@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"clix"
-	"clix/ext/version"
+	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/ext/version"
 	"multicli/internal/bigquery"
 	"multicli/internal/database"
 	"multicli/internal/vulnerabilities"

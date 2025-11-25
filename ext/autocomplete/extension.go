@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 // Extension adds the autocomplete command to a clix app.
@@ -20,8 +20,8 @@ import (
 // Example:
 //
 //	import (
-//		"clix"
-//		"clix/ext/autocomplete"
+//		"github.com/SCKelemen/clix"
+//		"github.com/SCKelemen/clix/ext/autocomplete"
 //	)
 //
 //	app := clix.NewApp("myapp")

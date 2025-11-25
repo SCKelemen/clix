@@ -1,6 +1,6 @@
 package prompt
 
-import "clix"
+import "github.com/SCKelemen/clix"
 
 // Extension replaces the default TextPrompter with TerminalPrompter,
 // enabling advanced prompt features: select, multi-select, confirm, and raw terminal mode.
@@ -11,8 +11,8 @@ import "clix"
 // Example:
 //
 //	import (
-//		"clix"
-//		"clix/ext/prompt"
+//		"github.com/SCKelemen/clix"
+//		"github.com/SCKelemen/clix/ext/prompt"
 //	)
 //
 //	app := clix.NewApp("myapp")

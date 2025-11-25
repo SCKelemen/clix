@@ -14,7 +14,7 @@ import (
 //
 // Example:
 //
-//	import "clix/ext/validation"
+//	import "github.com/SCKelemen/clix/ext/validation"
 //
 //	// Use with prompts
 //	result, err := prompter.Prompt(ctx, clix.PromptRequest{

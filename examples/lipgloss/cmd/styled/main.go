@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"clix"
-	"clix/ext/prompt"
+	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/ext/prompt"
 
 	"github.com/charmbracelet/lipgloss"
 )

@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"clix"
-	"clix/ext/prompt"
-	"clix/ext/survey"
-	"clix/ext/validation"
+	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/ext/prompt"
+	"github.com/SCKelemen/clix/ext/survey"
+	"github.com/SCKelemen/clix/ext/validation"
 
 	"github.com/charmbracelet/lipgloss"
 )

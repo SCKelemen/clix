@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 // Extension adds configuration management commands to a clix app.
@@ -24,8 +24,8 @@ import (
 // Example:
 //
 //	import (
-//		"clix"
-//		"clix/ext/config"
+//		"github.com/SCKelemen/clix"
+//		"github.com/SCKelemen/clix/ext/config"
 //	)
 //
 //	app := clix.NewApp("myapp")

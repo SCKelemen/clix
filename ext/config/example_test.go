@@ -1,8 +1,8 @@
 package config_test
 
 import (
-	"clix"
-	"clix/ext/config"
+	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/ext/config"
 )
 
 func ExampleExtension() {

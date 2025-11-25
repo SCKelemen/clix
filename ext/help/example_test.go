@@ -1,8 +1,8 @@
 package help_test
 
 import (
-	"clix"
-	"clix/ext/help"
+	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/ext/help"
 )
 
 func ExampleExtension() {

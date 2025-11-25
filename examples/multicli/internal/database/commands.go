@@ -3,7 +3,7 @@ package database
 import (
 	"fmt"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 // NewCreateCommand creates a "create" command for databases.

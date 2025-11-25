@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 // NewDatasetCommand creates a "dataset" command for BigQuery.

@@ -1,6 +1,6 @@
 package prompt
 
-import "clix"
+import "github.com/SCKelemen/clix"
 
 // Select creates a select prompt option.
 // This option is only valid when using the prompt extension (TerminalPrompter).

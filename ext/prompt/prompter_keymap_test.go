@@ -3,7 +3,7 @@ package prompt
 import (
 	"testing"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 func TestRenderHintLine_TextBindings(t *testing.T) {

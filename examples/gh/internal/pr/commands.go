@@ -3,7 +3,7 @@ package pr
 import (
 	"fmt"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 func NewCommand() *clix.Command {

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 func TestVersionExtension(t *testing.T) {

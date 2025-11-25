@@ -1,7 +1,7 @@
 package vulnerabilities
 
 import (
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 // NewListCommand creates a "list" command for vulnerabilities.

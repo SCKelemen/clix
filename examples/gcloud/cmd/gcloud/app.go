@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"clix"
-	authcmd "clix/examples/gcloud/internal/auth"
-	configcmd "clix/examples/gcloud/internal/config"
-	projectscmd "clix/examples/gcloud/internal/projects"
-	simplecmd "clix/examples/gcloud/internal/simple"
+	"github.com/SCKelemen/clix"
+	authcmd "github.com/SCKelemen/clix/examples/gcloud/internal/auth"
+	configcmd "github.com/SCKelemen/clix/examples/gcloud/internal/config"
+	projectscmd "github.com/SCKelemen/clix/examples/gcloud/internal/projects"
+	simplecmd "github.com/SCKelemen/clix/examples/gcloud/internal/simple"
 )
 
 // Toggle the feature packages you want to include in this build of gcloud. Because the

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"clix"
-	demoapp "clix/examples/basic/internal/app"
+	"github.com/SCKelemen/clix"
+	demoapp "github.com/SCKelemen/clix/examples/basic/internal/app"
 )
 
 func TestDemoGreetCommand(t *testing.T) {

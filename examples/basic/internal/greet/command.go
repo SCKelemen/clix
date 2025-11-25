@@ -3,7 +3,7 @@ package greet
 import (
 	"fmt"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 func NewCommand(project *string) *clix.Command {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 func TestConfigExtension(t *testing.T) {

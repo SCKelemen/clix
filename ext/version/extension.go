@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 // Extension adds the version command and --version flag to a clix app.
@@ -17,8 +17,8 @@ import (
 // Example:
 //
 //	import (
-//		"clix"
-//		"clix/ext/version"
+//		"github.com/SCKelemen/clix"
+//		"github.com/SCKelemen/clix/ext/version"
 //	)
 //
 //	app := clix.NewApp("myapp")
