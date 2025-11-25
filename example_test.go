@@ -456,9 +456,9 @@ func (e extensionImpl) Extend(app *clix.App) error {
 	return nil
 }
 
-// ExampleDeclarativeStyle demonstrates a purely declarative CLI app using
+// Example_declarativeStyle demonstrates a purely declarative CLI app using
 // only struct-based APIs throughout.
-func ExampleDeclarativeStyle() {
+func Example_declarativeStyle() {
 	var (
 		project string
 		verbose bool
@@ -546,9 +546,9 @@ func ExampleDeclarativeStyle() {
 	// Output:
 }
 
-// ExampleFunctionalStyle demonstrates a purely functional-style CLI app using
+// Example_functionalStyle demonstrates a purely functional-style CLI app using
 // only functional options APIs throughout.
-func ExampleFunctionalStyle() {
+func Example_functionalStyle() {
 	var (
 		project string
 		verbose bool
@@ -633,9 +633,9 @@ func ExampleFunctionalStyle() {
 	// Output:
 }
 
-// ExampleFluentStyle demonstrates a fully fluent-style CLI app using
+// Example_fluentStyle demonstrates a fully fluent-style CLI app using
 // only builder-style (method chaining) APIs throughout.
-func ExampleFluentStyle() {
+func Example_fluentStyle() {
 	var (
 		project string
 		verbose bool
