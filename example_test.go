@@ -453,20 +453,266 @@ type extensionImpl struct {
 }
 
 func (e extensionImpl) Extend(app *clix.App) error {
-	if app.Root == nil {
-		return nil
-	}
-
-	// Add a custom command
-	cmd := clix.NewCommand("custom")
-	cmd.Short = "Custom command added by extension"
-	cmd.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "Custom extension command")
-		return nil
-	}
-
-	app.Root.AddCommand(cmd)
 	return nil
+}
+
+// ExampleDeclarativeStyle demonstrates a purely declarative CLI app using
+// only struct-based APIs throughout.
+func ExampleDeclarativeStyle() {
+	var (
+		project string
+		verbose bool
+		port    int
+	)
+
+	// Create app using struct fields
+	app := clix.NewApp("myapp")
+	app.Description = "A declarative-style CLI application"
+	app.Version = "1.0.0"
+
+	// Global flags using struct-based API
+	app.Flags().StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:   "project",
+			Short:  "p",
+			Usage:  "Project to operate on",
+			EnvVar: "MYAPP_PROJECT",
+		},
+		Default: "default-project",
+		Value:   &project,
+	})
+
+	app.Flags().BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "verbose",
+			Short: "v",
+			Usage: "Enable verbose output",
+		},
+		Value: &verbose,
+	})
+
+	// Commands using struct fields
+	createCmd := clix.NewCommand("create")
+	createCmd.Short = "Create a new resource"
+	createCmd.Run = func(ctx *clix.Context) error {
+		name, _ := ctx.String("project")
+		fmt.Fprintf(ctx.App.Out, "Creating resource in project: %s\n", name)
+		return nil
+	}
+
+	// Command flags using struct-based API
+	createCmd.Flags.IntVar(clix.IntVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "port",
+			Usage: "Server port",
+		},
+		Default: "8080",
+		Value:   &port,
+	})
+
+	// Arguments using struct-based API
+	createCmd.Arguments = []*clix.Argument{
+		{
+			Name:     "name",
+			Prompt:   "Enter resource name",
+			Required: true,
+		},
+		{
+			Name:    "email",
+			Prompt:  "Enter email address",
+			Default: "user@example.com",
+		},
+	}
+
+	// Config schema using struct-based API
+	app.Config.RegisterSchema(clix.ConfigSchema{
+		Key:  "project.retries",
+		Type: clix.ConfigInteger,
+	})
+
+	// Build command tree
+	listCmd := clix.NewCommand("list")
+	listCmd.Short = "List resources"
+	listCmd.Run = func(ctx *clix.Context) error {
+		fmt.Fprintln(ctx.App.Out, "Listing resources...")
+		return nil
+	}
+
+	root := clix.NewGroup("myapp", "My application", createCmd, listCmd)
+	app.Root = root
+
+	// Run the app
+	_ = app
+	// Output:
+}
+
+// ExampleFunctionalStyle demonstrates a purely functional-style CLI app using
+// only functional options APIs throughout.
+func ExampleFunctionalStyle() {
+	var (
+		project string
+		verbose bool
+		port    int
+	)
+
+	// Create app with functional options
+	app := clix.NewApp("myapp")
+	app.Description = "A fully functional-style CLI application"
+
+	// Global flags using functional options
+	app.Flags().StringVar(
+		clix.WithFlagName("project"),
+		clix.WithFlagShort("p"),
+		clix.WithFlagUsage("Project to operate on"),
+		clix.WithFlagEnvVar("MYAPP_PROJECT"),
+		clix.WithStringValue(&project),
+		clix.WithStringDefault("default-project"),
+	)
+
+	app.Flags().BoolVar(
+		clix.WithFlagName("verbose"),
+		clix.WithFlagShort("v"),
+		clix.WithFlagUsage("Enable verbose output"),
+		clix.WithBoolValue(&verbose),
+	)
+
+	// Commands using functional options
+	createCmd := clix.NewCommand("create",
+		clix.WithCommandShort("Create a new resource"),
+		clix.WithCommandRun(func(ctx *clix.Context) error {
+			name, _ := ctx.String("project")
+			fmt.Fprintf(ctx.App.Out, "Creating resource in project: %s\n", name)
+			return nil
+		}),
+	)
+
+	// Command flags using functional options
+	createCmd.Flags.IntVar(
+		clix.WithFlagName("port"),
+		clix.WithFlagUsage("Server port"),
+		clix.WithIntegerValue(&port),
+		clix.WithIntegerDefault("8080"),
+	)
+
+	// Arguments using functional options
+	createCmd.Arguments = []*clix.Argument{
+		clix.NewArgument(
+			clix.WithArgName("name"),
+			clix.WithArgPrompt("Enter resource name"),
+			clix.WithArgRequired(),
+		),
+		clix.NewArgument(
+			clix.WithArgName("email"),
+			clix.WithArgPrompt("Enter email address"),
+			clix.WithArgDefault("user@example.com"),
+		),
+	}
+
+	// Config schema using functional options
+	app.Config.RegisterSchema(
+		clix.WithConfigKey("project.retries"),
+		clix.WithConfigType(clix.ConfigInteger),
+	)
+
+	// Build command tree
+	root := clix.NewGroup("myapp", "My application",
+		createCmd,
+		clix.NewCommand("list",
+			clix.WithCommandShort("List resources"),
+			clix.WithCommandRun(func(ctx *clix.Context) error {
+				fmt.Fprintln(ctx.App.Out, "Listing resources...")
+				return nil
+			}),
+		),
+	)
+
+	app.Root = root
+
+	// Run the app
+	_ = app
+	// Output:
+}
+
+// ExampleFluentStyle demonstrates a fully fluent-style CLI app using
+// only builder-style (method chaining) APIs throughout.
+func ExampleFluentStyle() {
+	var (
+		project string
+		verbose bool
+		port    int
+	)
+
+	// Create app using builder-style
+	app := clix.NewApp("myapp").
+		SetDescription("A fluent-style CLI application").
+		SetVersion("1.0.0")
+
+	// Global flags using builder-style
+	projectFlagOpts := &clix.StringVarOptions{}
+	projectFlagOpts.SetName("project").
+		SetShort("p").
+		SetUsage("Project to operate on").
+		SetEnvVar("MYAPP_PROJECT").
+		SetDefault("default-project").
+		SetValue(&project)
+	app.Flags().StringVar(*projectFlagOpts)
+
+	verboseFlagOpts := &clix.BoolVarOptions{}
+	verboseFlagOpts.SetName("verbose").
+		SetShort("v").
+		SetUsage("Enable verbose output").
+		SetValue(&verbose)
+	app.Flags().BoolVar(*verboseFlagOpts)
+
+	// Commands using builder-style
+	createCmd := clix.NewCommand("create").
+		SetShort("Create a new resource").
+		SetRun(func(ctx *clix.Context) error {
+			name, _ := ctx.String("project")
+			fmt.Fprintf(ctx.App.Out, "Creating resource in project: %s\n", name)
+			return nil
+		})
+
+	// Command flags using builder-style
+	portFlagOpts := &clix.IntVarOptions{}
+	portFlagOpts.SetName("port").
+		SetUsage("Server port").
+		SetDefault("8080").
+		SetValue(&port)
+	createCmd.Flags.IntVar(*portFlagOpts)
+
+	// Arguments using builder-style
+	createCmd.Arguments = []*clix.Argument{
+		clix.NewArgument().
+			SetName("name").
+			SetPrompt("Enter resource name").
+			SetRequired(),
+		clix.NewArgument().
+			SetName("email").
+			SetPrompt("Enter email address").
+			SetDefault("user@example.com"),
+	}
+
+	// Config schema using builder-style
+	schema := &clix.ConfigSchema{}
+	schema.SetKey("project.retries").
+		SetType(clix.ConfigInteger)
+	app.Config.RegisterSchema(*schema)
+
+	// Build command tree using builder-style
+	listCmd := clix.NewCommand("list").
+		SetShort("List resources").
+		SetRun(func(ctx *clix.Context) error {
+			fmt.Fprintln(ctx.App.Out, "Listing resources...")
+			return nil
+		})
+
+	root := clix.NewGroup("myapp", "My application", createCmd, listCmd)
+	app.SetRoot(root)
+
+	// Run the app
+	_ = app
+	// Output:
 }
 
 // ExampleApp_ConfigDir demonstrates how to work with configuration files.

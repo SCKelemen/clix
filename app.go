@@ -80,10 +80,47 @@ type App struct {
 	extensionsApplied bool
 }
 
+// AppOption configures an App using the functional options pattern.
+// Options can be used to build apps:
+//
+//	// Using functional options
+//	app := clix.NewApp("myapp",
+//		clix.WithAppDescription("My application"),
+//		clix.WithAppVersion("1.0.0"),
+//		clix.WithAppEnvPrefix("MYAPP"),
+//	)
+//
+//	// Using struct (primary API)
+//	app := clix.NewApp("myapp")
+//	app.Description = "My application"
+type AppOption interface {
+	// ApplyApp configures an App struct.
+	// Exported so extension packages can implement AppOption.
+	ApplyApp(*App)
+}
+
 // NewApp constructs an application with sensible defaults. A minimal root command
 // is created automatically to hold default flags (format, help). You can replace
 // it with your own root command if needed: app.Root = clix.NewCommand("myroot")
-func NewApp(name string) *App {
+//
+// Example - three API styles:
+//
+//	// 1. Struct-based (primary API)
+//	app := clix.NewApp("myapp")
+//	app.Description = "My application"
+//	app.Version = "1.0.0"
+//
+//	// 2. Functional options
+//	app := clix.NewApp("myapp",
+//		clix.WithAppDescription("My application"),
+//		clix.WithAppVersion("1.0.0"),
+//	)
+//
+//	// 3. Builder-style
+//	app := clix.NewApp("myapp").
+//		SetDescription("My application").
+//		SetVersion("1.0.0")
+func NewApp(name string, opts ...AppOption) *App {
 	app := &App{
 		Name: name,
 		Out:  os.Stdout,
@@ -96,6 +133,11 @@ func NewApp(name string) *App {
 	app.Prompter = TextPrompter{In: app.In, Out: app.Out}
 	app.DefaultTheme = DefaultPromptTheme
 	app.Styles = DefaultStyles
+
+	// Apply functional options
+	for _, opt := range opts {
+		opt.ApplyApp(app)
+	}
 
 	// Create a minimal root command to hold default flags
 	// Users can replace this with their own root command
@@ -745,4 +787,194 @@ func (ctx *Context) ArgNamed(name string) (string, bool) {
 // You can also access ctx.Args directly if preferred.
 func (ctx *Context) AllArgs() []string {
 	return ctx.Args
+}
+
+// Functional option helpers for App
+
+// WithAppDescription sets the application description.
+func WithAppDescription(description string) AppOption {
+	return appDescriptionOption(description)
+}
+
+// WithAppVersion sets the application version.
+func WithAppVersion(version string) AppOption {
+	return appVersionOption(version)
+}
+
+// WithAppEnvPrefix sets the environment variable prefix.
+func WithAppEnvPrefix(prefix string) AppOption {
+	return appEnvPrefixOption(prefix)
+}
+
+// WithAppRoot sets the root command.
+func WithAppRoot(root *Command) AppOption {
+	return appRootOption{root: root}
+}
+
+// WithAppPrompter sets the prompter.
+func WithAppPrompter(prompter Prompter) AppOption {
+	return appPrompterOption{prompter: prompter}
+}
+
+// WithAppDefaultTheme sets the default prompt theme.
+func WithAppDefaultTheme(theme PromptTheme) AppOption {
+	return appDefaultThemeOption{theme: theme}
+}
+
+// WithAppStyles sets the application styles.
+func WithAppStyles(styles Styles) AppOption {
+	return appStylesOption{styles: styles}
+}
+
+// WithAppOut sets the output writer.
+func WithAppOut(out io.Writer) AppOption {
+	return appOutOption{out: out}
+}
+
+// WithAppErr sets the error writer.
+func WithAppErr(err io.Writer) AppOption {
+	return appErrOption{err: err}
+}
+
+// WithAppIn sets the input reader.
+func WithAppIn(in io.Reader) AppOption {
+	return appInOption{in: in}
+}
+
+// Internal option types
+
+type appDescriptionOption string
+
+func (o appDescriptionOption) ApplyApp(app *App) {
+	app.Description = string(o)
+}
+
+type appVersionOption string
+
+func (o appVersionOption) ApplyApp(app *App) {
+	app.Version = string(o)
+}
+
+type appEnvPrefixOption string
+
+func (o appEnvPrefixOption) ApplyApp(app *App) {
+	app.EnvPrefix = string(o)
+}
+
+type appRootOption struct {
+	root *Command
+}
+
+func (o appRootOption) ApplyApp(app *App) {
+	app.Root = o.root
+}
+
+type appPrompterOption struct {
+	prompter Prompter
+}
+
+func (o appPrompterOption) ApplyApp(app *App) {
+	app.Prompter = o.prompter
+}
+
+type appDefaultThemeOption struct {
+	theme PromptTheme
+}
+
+func (o appDefaultThemeOption) ApplyApp(app *App) {
+	app.DefaultTheme = o.theme
+}
+
+type appStylesOption struct {
+	styles Styles
+}
+
+func (o appStylesOption) ApplyApp(app *App) {
+	app.Styles = o.styles
+}
+
+type appOutOption struct {
+	out io.Writer
+}
+
+func (o appOutOption) ApplyApp(app *App) {
+	app.Out = o.out
+}
+
+type appErrOption struct {
+	err io.Writer
+}
+
+func (o appErrOption) ApplyApp(app *App) {
+	app.Err = o.err
+}
+
+type appInOption struct {
+	in io.Reader
+}
+
+func (o appInOption) ApplyApp(app *App) {
+	app.In = o.in
+}
+
+// Builder-style methods for App (fluent API)
+
+// SetDescription sets the application description and returns the app for method chaining.
+func (a *App) SetDescription(description string) *App {
+	a.Description = description
+	return a
+}
+
+// SetVersion sets the application version and returns the app for method chaining.
+func (a *App) SetVersion(version string) *App {
+	a.Version = version
+	return a
+}
+
+// SetEnvPrefix sets the environment variable prefix and returns the app for method chaining.
+func (a *App) SetEnvPrefix(prefix string) *App {
+	a.EnvPrefix = prefix
+	return a
+}
+
+// SetRoot sets the root command and returns the app for method chaining.
+func (a *App) SetRoot(root *Command) *App {
+	a.Root = root
+	return a
+}
+
+// SetPrompter sets the prompter and returns the app for method chaining.
+func (a *App) SetPrompter(prompter Prompter) *App {
+	a.Prompter = prompter
+	return a
+}
+
+// SetDefaultTheme sets the default prompt theme and returns the app for method chaining.
+func (a *App) SetDefaultTheme(theme PromptTheme) *App {
+	a.DefaultTheme = theme
+	return a
+}
+
+// SetStyles sets the application styles and returns the app for method chaining.
+func (a *App) SetStyles(styles Styles) *App {
+	a.Styles = styles
+	return a
+}
+
+// SetOut sets the output writer and returns the app for method chaining.
+func (a *App) SetOut(out io.Writer) *App {
+	a.Out = out
+	return a
+}
+
+// SetErr sets the error writer and returns the app for method chaining.
+func (a *App) SetErr(err io.Writer) *App {
+	a.Err = err
+	return a
+}
+
+// SetIn sets the input reader and returns the app for method chaining.
+func (a *App) SetIn(in io.Reader) *App {
+	a.In = in
+	return a
 }

@@ -87,9 +87,57 @@ type Command struct {
 	parent *Command
 }
 
+// CommandOption configures a command using the functional options pattern.
+// Options can be used to build commands:
+//
+//	// Using functional options
+//	cmd := clix.NewCommand("hello",
+//		WithCommandShort("Say hello"),
+//		WithCommandRun(func(ctx *clix.Context) error {
+//			fmt.Println("Hello!")
+//			return nil
+//		}),
+//	)
+//
+//	// Using struct (primary API)
+//	cmd := clix.NewCommand("hello")
+//	cmd.Short = "Say hello"
+//	cmd.Run = func(ctx *clix.Context) error { ... }
+type CommandOption interface {
+	// ApplyCommand configures a command struct.
+	// Exported so extension packages can implement CommandOption.
+	ApplyCommand(*Command)
+}
+
 // NewCommand constructs a Command with an initialised flag set.
 // This creates an executable command (leaf node) that can have a Run handler.
-func NewCommand(name string) *Command {
+// Accepts optional CommandOption arguments for configuration.
+//
+// Example - three API styles:
+//
+//	// 1. Struct-based (primary API)
+//	cmd := clix.NewCommand("hello")
+//	cmd.Short = "Say hello"
+//	cmd.Run = func(ctx *clix.Context) error {
+//		fmt.Println("Hello!")
+//		return nil
+//	}
+//
+//	// 2. Functional options
+//	cmd := clix.NewCommand("hello",
+//		clix.WithCommandShort("Say hello"),
+//		clix.WithCommandRun(func(ctx *clix.Context) error {
+//			fmt.Println("Hello!")
+//			return nil
+//		}),
+//	)
+//
+//	// 3. Mixed (constructor + struct fields)
+//	cmd := clix.NewCommand("hello",
+//		clix.WithCommandShort("Say hello"),
+//	)
+//	cmd.Run = func(ctx *clix.Context) error { ... }
+func NewCommand(name string, opts ...CommandOption) *Command {
 	cmd := &Command{
 		Name:  name,
 		Flags: NewFlagSet(name),
@@ -103,12 +151,31 @@ func NewCommand(name string) *Command {
 		},
 	})
 
+	for _, opt := range opts {
+		opt.ApplyCommand(cmd)
+	}
+
 	return cmd
 }
 
 // NewGroup constructs a Command that acts as a group (interior node).
 // Groups organize child commands but do not execute (no Run handler).
 // Groups are used to create hierarchical command structures.
+// Accepts optional CommandOption arguments for additional configuration.
+//
+//	// Struct-based (primary API)
+//	group := clix.NewGroup("project", "Manage projects",
+//		clix.NewCommand("list", ...),
+//		clix.NewCommand("get", ...),
+//	)
+//	group.Long = "Detailed description..."
+//
+//	// Functional options
+//	group := clix.NewGroup("project", "Manage projects",
+//		clix.NewCommand("list", ...),
+//		clix.NewCommand("get", ...),
+//		WithCommandLong("Detailed description..."),
+//	)
 func NewGroup(name, short string, children ...*Command) *Command {
 	cmd := &Command{
 		Name:     name,
@@ -279,4 +346,188 @@ func (c *Command) ResolvePath(path []string) *Command {
 		cmd = next
 	}
 	return cmd
+}
+
+// Functional option helpers for commands
+
+// WithCommandShort sets the command short description.
+func WithCommandShort(short string) CommandOption {
+	return commandShortOption(short)
+}
+
+// WithCommandLong sets the command long description.
+func WithCommandLong(long string) CommandOption {
+	return commandLongOption(long)
+}
+
+// WithCommandUsage sets the command usage string.
+func WithCommandUsage(usage string) CommandOption {
+	return commandUsageOption(usage)
+}
+
+// WithCommandExample sets the command example string.
+func WithCommandExample(example string) CommandOption {
+	return commandExampleOption(example)
+}
+
+// WithCommandAliases sets the command aliases.
+func WithCommandAliases(aliases ...string) CommandOption {
+	return commandAliasesOption(aliases)
+}
+
+// WithCommandHidden marks the command as hidden.
+func WithCommandHidden(hidden bool) CommandOption {
+	return commandHiddenOption(hidden)
+}
+
+// WithCommandRun sets the command run handler.
+func WithCommandRun(run Handler) CommandOption {
+	return commandRunOption{run: run}
+}
+
+// WithCommandPreRun sets the command pre-run hook.
+func WithCommandPreRun(preRun Hook) CommandOption {
+	return commandPreRunOption{preRun: preRun}
+}
+
+// WithCommandPostRun sets the command post-run hook.
+func WithCommandPostRun(postRun Hook) CommandOption {
+	return commandPostRunOption{postRun: postRun}
+}
+
+// WithCommandArguments sets the command arguments.
+func WithCommandArguments(args ...*Argument) CommandOption {
+	return commandArgumentsOption{args: args}
+}
+
+// Internal option types
+
+type commandShortOption string
+
+func (o commandShortOption) ApplyCommand(cmd *Command) {
+	cmd.Short = string(o)
+}
+
+type commandLongOption string
+
+func (o commandLongOption) ApplyCommand(cmd *Command) {
+	cmd.Long = string(o)
+}
+
+type commandUsageOption string
+
+func (o commandUsageOption) ApplyCommand(cmd *Command) {
+	cmd.Usage = string(o)
+}
+
+type commandExampleOption string
+
+func (o commandExampleOption) ApplyCommand(cmd *Command) {
+	cmd.Example = string(o)
+}
+
+type commandAliasesOption []string
+
+func (o commandAliasesOption) ApplyCommand(cmd *Command) {
+	cmd.Aliases = []string(o)
+}
+
+type commandHiddenOption bool
+
+func (o commandHiddenOption) ApplyCommand(cmd *Command) {
+	cmd.Hidden = bool(o)
+}
+
+type commandRunOption struct {
+	run Handler
+}
+
+func (o commandRunOption) ApplyCommand(cmd *Command) {
+	cmd.Run = o.run
+}
+
+type commandPreRunOption struct {
+	preRun Hook
+}
+
+func (o commandPreRunOption) ApplyCommand(cmd *Command) {
+	cmd.PreRun = o.preRun
+}
+
+type commandPostRunOption struct {
+	postRun Hook
+}
+
+func (o commandPostRunOption) ApplyCommand(cmd *Command) {
+	cmd.PostRun = o.postRun
+}
+
+type commandArgumentsOption struct {
+	args []*Argument
+}
+
+func (o commandArgumentsOption) ApplyCommand(cmd *Command) {
+	cmd.Arguments = o.args
+}
+
+// Builder-style methods for Command (fluent API)
+
+// SetShort sets the command short description and returns the command for method chaining.
+func (c *Command) SetShort(short string) *Command {
+	c.Short = short
+	return c
+}
+
+// SetLong sets the command long description and returns the command for method chaining.
+func (c *Command) SetLong(long string) *Command {
+	c.Long = long
+	return c
+}
+
+// SetUsage sets the command usage string and returns the command for method chaining.
+func (c *Command) SetUsage(usage string) *Command {
+	c.Usage = usage
+	return c
+}
+
+// SetExample sets the command example string and returns the command for method chaining.
+func (c *Command) SetExample(example string) *Command {
+	c.Example = example
+	return c
+}
+
+// SetAliases sets the command aliases and returns the command for method chaining.
+func (c *Command) SetAliases(aliases ...string) *Command {
+	c.Aliases = aliases
+	return c
+}
+
+// SetHidden marks the command as hidden and returns the command for method chaining.
+func (c *Command) SetHidden(hidden bool) *Command {
+	c.Hidden = hidden
+	return c
+}
+
+// SetRun sets the command run handler and returns the command for method chaining.
+func (c *Command) SetRun(run Handler) *Command {
+	c.Run = run
+	return c
+}
+
+// SetPreRun sets the command pre-run hook and returns the command for method chaining.
+func (c *Command) SetPreRun(preRun Hook) *Command {
+	c.PreRun = preRun
+	return c
+}
+
+// SetPostRun sets the command post-run hook and returns the command for method chaining.
+func (c *Command) SetPostRun(postRun Hook) *Command {
+	c.PostRun = postRun
+	return c
+}
+
+// SetArguments sets the command arguments and returns the command for method chaining.
+func (c *Command) SetArguments(args ...*Argument) *Command {
+	c.Arguments = args
+	return c
 }
