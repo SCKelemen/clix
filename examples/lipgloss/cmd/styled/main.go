@@ -40,8 +40,12 @@ func newApp() *clix.App {
 	styles.SectionHeading = accentStyle
 	styles.FlagName = codeStyle
 	styles.FlagUsage = subtitleStyle
-	styles.SubcommandName = accentStyle
-	styles.SubcommandDesc = subtitleStyle
+	styles.AppFlagName = accentStyle
+	styles.AppFlagUsage = subtitleStyle
+	styles.CommandFlagName = codeStyle
+	styles.CommandFlagUsage = subtitleStyle
+	styles.ChildName = accentStyle
+	styles.ChildDesc = subtitleStyle
 	styles.Example = clix.StyleFunc(func(strs ...string) string {
 		return codeStyle.Render(strings.TrimSpace(strs[0]))
 	})
@@ -69,9 +73,11 @@ $ styled-demo style prompt multiselect
 $ styled-demo style prompt confirm
 `)
 	var mood string
-	root.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{
-		Name:    "mood",
-		Usage:   "Tone for the welcome message",
+	root.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "mood",
+			Usage: "Tone for the welcome message",
+		},
 		Default: "excited",
 		Value:   &mood,
 	})
@@ -96,7 +102,7 @@ $ styled-demo style prompt confirm
 			Theme:   promptTheme,
 			Validate: func(value string) error {
 				if strings.TrimSpace(value) == "" {
-					return errors.New("Name cannot be empty")
+					return errors.New("name cannot be empty")
 				}
 				return nil
 			},

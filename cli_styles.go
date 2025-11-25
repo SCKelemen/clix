@@ -28,10 +28,28 @@ type Styles struct {
 	Usage TextStyle
 
 	// FlagName styles flag names (e.g., "--project") in help output.
+	// Used as the default for both global and local flag names.
 	FlagName TextStyle
 
 	// FlagUsage styles flag usage text in help output.
+	// Used as the default for both global and local flag usage.
 	FlagUsage TextStyle
+
+	// AppFlagName styles app-level flag names (root command flags shown everywhere).
+	// Falls back to FlagName when unset.
+	AppFlagName TextStyle
+
+	// AppFlagUsage styles app-level flag usage text.
+	// Falls back to FlagUsage when unset.
+	AppFlagUsage TextStyle
+
+	// CommandFlagName styles command-level flag names.
+	// Falls back to FlagName when unset.
+	CommandFlagName TextStyle
+
+	// CommandFlagUsage styles command-level flag usage text.
+	// Falls back to FlagUsage when unset.
+	CommandFlagUsage TextStyle
 
 	// ArgumentName styles argument names in help output.
 	ArgumentName TextStyle
@@ -39,11 +57,13 @@ type Styles struct {
 	// ArgumentMarker styles argument markers (e.g., "<name>", "[name]") in help output.
 	ArgumentMarker TextStyle
 
-	// SubcommandName styles subcommand names in help output.
-	SubcommandName TextStyle
+	// ChildName styles child command and group names in help output.
+	// Used for both groups and commands in the GROUPS and COMMANDS sections.
+	ChildName TextStyle
 
-	// SubcommandDesc styles subcommand descriptions in help output.
-	SubcommandDesc TextStyle
+	// ChildDesc styles child command and group descriptions in help output.
+	// Used for both groups and commands in the GROUPS and COMMANDS sections.
+	ChildDesc TextStyle
 
 	// Example styles example text in help output.
 	Example TextStyle

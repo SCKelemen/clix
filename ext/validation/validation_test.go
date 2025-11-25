@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -174,6 +175,91 @@ func TestE164(t *testing.T) {
 	}
 }
 
+func TestPort(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid port", "8080", false},
+		{"valid min port", "1", false},
+		{"valid max port", "65535", false},
+		{"empty port", "", true},
+		{"port too low", "0", true},
+		{"port too high", "65536", true},
+		{"negative port", "-1", true},
+		{"not a number", "abc", true},
+		{"float port", "8080.5", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Port(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Port(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestHostname(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid hostname", "example.com", false},
+		{"valid subdomain", "subdomain.example.com", false},
+		{"valid localhost", "localhost", false},
+		{"valid single label", "example", false},
+		{"valid with numbers", "example123.com", false},
+		{"valid with hyphens", "my-example.com", false},
+		{"empty hostname", "", true},
+		{"label too long", strings.Repeat("a", 64) + ".com", true},
+		{"total too long", strings.Repeat("a", 254) + ".com", true},
+		{"label starts with hyphen", "-example.com", true},
+		{"label ends with hyphen", "example-.com", true},
+		{"empty label", "example..com", true},
+		{"invalid characters", "example@.com", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Hostname(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Hostname(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestUUID(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid UUID lowercase", "550e8400-e29b-41d4-a716-446655440000", false},
+		{"valid UUID uppercase", "550E8400-E29B-41D4-A716-446655440000", false},
+		{"valid UUID mixed case", "550e8400-E29b-41d4-A716-446655440000", false},
+		{"empty UUID", "", true},
+		{"missing hyphens", "550e8400e29b41d4a716446655440000", true},
+		{"wrong format", "550e8400-e29b-41d4-a716", true},
+		{"invalid characters", "550e8400-e29b-41d4-a716-44665544000g", true},
+		{"too short", "550e8400-e29b-41d4-a716-44665544000", true},
+		{"too long", "550e8400-e29b-41d4-a716-4466554400000", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := UUID(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("UUID(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestNotEmpty(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -342,6 +428,140 @@ func TestAny(t *testing.T) {
 			err := validator(tt.value)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Any(...)(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestInteger(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid integer", "123", false},
+		{"valid negative", "-456", false},
+		{"valid zero", "0", false},
+		{"valid large", "2147483647", false},
+		{"empty", "", true},
+		{"not a number", "abc", true},
+		{"float", "123.45", true},
+		{"with spaces", " 123 ", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Integer(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Integer(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestInt64(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid int64", "123", false},
+		{"valid negative", "-456", false},
+		{"valid zero", "0", false},
+		{"valid large", "9223372036854775807", false},
+		{"valid negative large", "-9223372036854775808", false},
+		{"empty", "", true},
+		{"not a number", "abc", true},
+		{"float", "123.45", true},
+		{"too large", "9223372036854775808", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Int64(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Int64(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestFloat64(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"valid float", "123.45", false},
+		{"valid negative", "-456.78", false},
+		{"valid zero", "0", false},
+		{"valid integer", "123", false},
+		{"valid scientific", "1.23e10", false},
+		{"valid negative scientific", "-1.23e-10", false},
+		{"empty", "", true},
+		{"not a number", "abc", true},
+		{"with spaces", " 123.45 ", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := Float64(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Float64(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestIntRange(t *testing.T) {
+	validator := IntRange(1, 100)
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"within range", "50", false},
+		{"at minimum", "1", false},
+		{"at maximum", "100", false},
+		{"below minimum", "0", true},
+		{"above maximum", "101", true},
+		{"not a number", "abc", true},
+		{"empty", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validator(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("IntRange(1, 100)(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestFloatRange(t *testing.T) {
+	validator := FloatRange(0.0, 1.0)
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{"within range", "0.5", false},
+		{"at minimum", "0.0", false},
+		{"at maximum", "1.0", false},
+		{"below minimum", "-0.1", true},
+		{"above maximum", "1.1", true},
+		{"not a number", "abc", true},
+		{"empty", "", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validator(tt.value)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("FloatRange(0.0, 1.0)(%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
 			}
 		})
 	}

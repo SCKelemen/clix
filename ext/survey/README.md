@@ -50,6 +50,45 @@ if err := s.Run(); err != nil {
 answers := s.Answers()
 ```
 
+## Declarative Question Trees
+
+Prefer a declarative, struct-based API? Define questions up-front using `survey.Question` and wire them together with branches. This mirrors how commands and arguments are defined elsewhere in clix.
+
+```go
+questions := []survey.Question{
+    {
+        ID: "start",
+        Request: clix.PromptRequest{
+            Label:   "Do you have children?",
+            Confirm: true,
+        },
+        Branches: map[string]survey.Branch{
+            "y": survey.PushQuestion("how-many"),
+            "n": survey.End(),
+        },
+    },
+    {
+        ID: "how-many",
+        Request: clix.PromptRequest{
+            Label: "How many?",
+        },
+        Branches: map[string]survey.Branch{
+            "": survey.End(), // Always end after this question
+        },
+    },
+}
+
+s := survey.NewFromQuestions(ctx, app.Prompter, questions, "start",
+    survey.WithUndoStack(),
+    survey.WithEndCardText("Survey complete. Export responses?"),
+)
+if err := s.Run(); err != nil {
+    return err
+}
+```
+
+You can still mix in dynamic questions by calling `Survey.Ask` within branch handlers—`NewFromQuestions` simply seeds the initial tree.
+
 ## Depth-First Traversal
 
 Questions are processed depth-first, meaning when a question's handler adds new questions, those new questions are immediately processed before returning to process other questions at the same level.

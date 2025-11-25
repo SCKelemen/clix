@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -237,5 +238,160 @@ func Any(validators ...Validator) Validator {
 			return errors.New("validation failed")
 		}
 		return lastErr
+	}
+}
+
+// Port validates a TCP/UDP port number (1-65535).
+func Port(value string) error {
+	if value == "" {
+		return errors.New("port cannot be empty")
+	}
+
+	port, err := strconv.Atoi(value)
+	if err != nil {
+		return errors.New("port must be a number")
+	}
+
+	if port < 1 || port > 65535 {
+		return errors.New("port must be between 1 and 65535")
+	}
+
+	return nil
+}
+
+// Hostname validates a hostname according to RFC 1123.
+// Accepts hostnames like "example.com", "subdomain.example.com", "localhost".
+func Hostname(value string) error {
+	if value == "" {
+		return errors.New("hostname cannot be empty")
+	}
+
+	// RFC 1123 hostname rules:
+	// - Each label can be up to 63 characters
+	// - Total length can be up to 253 characters
+	// - Labels can contain letters, digits, and hyphens
+	// - Labels cannot start or end with hyphens
+	// - At least one label must be present
+
+	if len(value) > 253 {
+		return errors.New("hostname cannot exceed 253 characters")
+	}
+
+	labels := strings.Split(value, ".")
+	if len(labels) == 0 {
+		return errors.New("hostname must contain at least one label")
+	}
+
+	hostnameRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
+	for _, label := range labels {
+		if len(label) == 0 {
+			return errors.New("hostname labels cannot be empty")
+		}
+		if len(label) > 63 {
+			return errors.New("hostname labels cannot exceed 63 characters")
+		}
+		if !hostnameRegex.MatchString(label) {
+			return errors.New("hostname contains invalid characters or format")
+		}
+	}
+
+	return nil
+}
+
+// UUID validates a UUID string in standard format (e.g., "550e8400-e29b-41d4-a716-446655440000").
+// Accepts both uppercase and lowercase UUIDs.
+func UUID(value string) error {
+	if value == "" {
+		return errors.New("UUID cannot be empty")
+	}
+
+	// UUID format: 8-4-4-4-12 hexadecimal digits
+	uuidRegex := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	if !uuidRegex.MatchString(value) {
+		return errors.New("invalid UUID format (expected: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)")
+	}
+
+	return nil
+}
+
+// Integer validates that a string can be parsed as an integer (int).
+func Integer(value string) error {
+	if value == "" {
+		return errors.New("integer cannot be empty")
+	}
+
+	_, err := strconv.Atoi(value)
+	if err != nil {
+		return errors.New("must be a valid integer")
+	}
+
+	return nil
+}
+
+// Int64 validates that a string can be parsed as an int64.
+func Int64(value string) error {
+	if value == "" {
+		return errors.New("integer cannot be empty")
+	}
+
+	_, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return errors.New("must be a valid 64-bit integer")
+	}
+
+	return nil
+}
+
+// Float64 validates that a string can be parsed as a float64.
+func Float64(value string) error {
+	if value == "" {
+		return errors.New("float cannot be empty")
+	}
+
+	_, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return errors.New("must be a valid floating-point number")
+	}
+
+	return nil
+}
+
+// IntRange validates that a string can be parsed as an integer within the specified range [min, max].
+func IntRange(min, max int) Validator {
+	return func(value string) error {
+		if value == "" {
+			return errors.New("integer cannot be empty")
+		}
+
+		val, err := strconv.Atoi(value)
+		if err != nil {
+			return errors.New("must be a valid integer")
+		}
+
+		if val < min || val > max {
+			return fmt.Errorf("must be between %d and %d", min, max)
+		}
+
+		return nil
+	}
+}
+
+// FloatRange validates that a string can be parsed as a float64 within the specified range [min, max].
+func FloatRange(min, max float64) Validator {
+	return func(value string) error {
+		if value == "" {
+			return errors.New("float cannot be empty")
+		}
+
+		val, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return errors.New("must be a valid floating-point number")
+		}
+
+		if val < min || val > max {
+			return fmt.Errorf("must be between %g and %g", min, max)
+		}
+
+		return nil
 	}
 }

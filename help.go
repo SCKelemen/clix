@@ -67,6 +67,8 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 		return
 	}
 
+	nameStyle, usageStyle := h.flagStylesFor(cmd == h.App.Root)
+
 	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "FLAGS"))
 	for _, flag := range flags {
 		var names []string
@@ -74,11 +76,41 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 			names = append(names, "-"+flag.Short)
 		}
 		names = append(names, "--"+flag.Name)
-		renderedNames := renderText(h.App.Styles.FlagName, strings.Join(names, ", "))
-		usage := renderText(h.App.Styles.FlagUsage, flag.Usage)
+		renderedNames := renderText(nameStyle, strings.Join(names, ", "))
+		usage := renderText(usageStyle, flag.Usage)
 		fmt.Fprintf(w, "  %-20s %s\n", renderedNames, usage)
 	}
 	fmt.Fprintln(w)
+}
+
+func (h HelpRenderer) flagStylesFor(isGlobal bool) (name TextStyle, usage TextStyle) {
+	if isGlobal {
+		if h.App.Styles.AppFlagName != nil {
+			name = h.App.Styles.AppFlagName
+		} else {
+			name = h.App.Styles.FlagName
+		}
+		if h.App.Styles.AppFlagUsage != nil {
+			usage = h.App.Styles.AppFlagUsage
+		} else {
+			usage = h.App.Styles.FlagUsage
+		}
+		return
+	}
+
+	if h.App.Styles.CommandFlagName != nil {
+		name = h.App.Styles.CommandFlagName
+	} else {
+		name = h.App.Styles.FlagName
+	}
+
+	if h.App.Styles.CommandFlagUsage != nil {
+		usage = h.App.Styles.CommandFlagUsage
+	} else {
+		usage = h.App.Styles.FlagUsage
+	}
+
+	return
 }
 
 func (h HelpRenderer) renderArguments(w io.Writer, cmd *Command) {
@@ -124,8 +156,8 @@ func (h HelpRenderer) renderChildren(w io.Writer, cmd *Command) {
 			if desc == "" {
 				desc = group.Long
 			}
-			name := renderText(h.App.Styles.SubcommandName, group.Name)
-			desc = renderText(h.App.Styles.SubcommandDesc, desc)
+			name := renderText(h.App.Styles.ChildName, group.Name)
+			desc = renderText(h.App.Styles.ChildDesc, desc)
 			fmt.Fprintf(w, "  %-20s %s\n", name, desc)
 		}
 		fmt.Fprintln(w)
@@ -139,11 +171,10 @@ func (h HelpRenderer) renderChildren(w io.Writer, cmd *Command) {
 			if desc == "" {
 				desc = child.Long
 			}
-			name := renderText(h.App.Styles.SubcommandName, child.Name)
-			desc = renderText(h.App.Styles.SubcommandDesc, desc)
+			name := renderText(h.App.Styles.ChildName, child.Name)
+			desc = renderText(h.App.Styles.ChildDesc, desc)
 			fmt.Fprintf(w, "  %-20s %s\n", name, desc)
 		}
 		fmt.Fprintln(w)
 	}
 }
-

@@ -13,7 +13,15 @@
 
 `clix` is an opinionated, batteries-optional framework for building nested CLI applications using plain Go. It provides a declarative API for describing commands, flags, and arguments while handling configuration hydration, interactive prompting, and contextual execution hooks for you.
 
-The project strives for minimal dependencies and simplicity while delivering a cohesive CLI experience similar in spirit to Cobra, ff, and Prompt UI. `clix` is designed to be **simple by default, powerful when needed**—starting with core functionality and allowing optional features through an extension system.
+### Inspired by
+
+`clix` would not exist without the great work done in other CLI ecosystems. If you need a different mental model or additional batteries, definitely explore:
+
+- [spf13/cobra](https://github.com/spf13/cobra) – the battle-tested, code-generation friendly CLI toolkit
+- [peterbourgon/ff](https://github.com/peterbourgon/ff) – fast flag parsing with cohesive env/config loading
+- [manifoldco/promptui](https://github.com/manifoldco/promptui) – elegant interactive prompts for Go CLIs
+
+`clix` is designed to be **simple by default, powerful when needed**—starting with core functionality and allowing optional features through an extension system.
 
 ## Principles
 
@@ -339,7 +347,17 @@ import "github.com/charmbracelet/lipgloss"
 style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 app.DefaultTheme.PrefixStyle = clix.StyleFunc(style.Render)
 app.Styles.SectionHeading = clix.StyleFunc(style.Render)
+// Style app-level vs. command-level flags differently if desired
+app.Styles.AppFlagName = clix.StyleFunc(style.Render)
+app.Styles.CommandFlagName = clix.StyleFunc(style.Render)
 ```
+
+Key style hooks:
+
+- `AppFlagName` / `AppFlagUsage` – app-level flags defined on `app.Flags()`
+- `CommandFlagName` / `CommandFlagUsage` – command-level flags defined on `cmd.Flags()`
+- `FlagName` / `FlagUsage` – base styles applied when the more specific hooks are unset
+- `ChildName` / `ChildDesc` – section entries under **GROUPS** and **COMMANDS**
 
 Styling is optional—applications without styling still work perfectly.
 
@@ -685,4 +703,20 @@ type Extension interface {
 
 ## Contributing
 
-Issues and pull requests are welcome. Please include tests when adding new behavior and run `go test ./...` before submitting changes.
+We welcome issues and pull requests. To keep the review cycle short:
+
+1. Fork the repo and create a feature branch.
+2. Format Go sources with `gofmt` (or `go fmt ./...`).
+3. Run `go test ./...` to ensure tests and examples stay green.
+4. Include tests and docs for new behavior.
+
+If you plan a larger change, feel free to open an issue first so we can discuss the approach.
+
+## Developers & Maintainers
+
+- [Marcos Quesada Samaniego](https://github.com/marcosQuesada)
+- [Samuel Kelemen](https://github.com/SCKelemen)
+
+## License
+
+`clix` is available under the [MIT License](LICENSE).
