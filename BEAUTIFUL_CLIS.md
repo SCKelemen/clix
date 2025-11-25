@@ -501,6 +501,97 @@ const (
 )
 ```
 
+## Authentication Flow Examples
+
+### Beautiful Auth Code Display
+
+```go
+func renderAuthCode(w io.Writer, code string) {
+    // Prominent, easy-to-copy format
+    clix.RenderCard(w, clix.CardOptions{
+        Title: "Authentication Code",
+        Content: fmt.Sprintf(`
+Copy this code before opening your browser:
+
+  %s
+
+This code expires in 10 minutes.
+`, code),
+        Border: true,
+    })
+    
+    // Auto-copy to clipboard (TerminalPrompter only)
+    if isTerminal(w) {
+        copyToClipboard(code)
+        fmt.Fprintln(w, "✓ Code copied to clipboard")
+    }
+}
+```
+
+### Beautiful Browser Auth Flow
+
+```go
+func runBrowserAuth(w io.Writer, authURL string) error {
+    // Step 1: Show message
+    fmt.Fprintf(w, "Opening browser for authentication...\n")
+    
+    // Step 2: Open browser
+    openBrowser(authURL)
+    
+    // Step 3: Show waiting state with spinner
+    spinner := clix.NewSpinner("Waiting for authentication...")
+    spinner.Start()
+    defer spinner.Stop()
+    
+    // Step 4: Start local server
+    server := startLocalServer()
+    defer server.Close()
+    
+    // Step 5: Wait for callback
+    token := <-server.TokenChan
+    
+    // Step 6: Show success
+    spinner.Stop()
+    clix.RenderAlert(w, clix.AlertOptions{
+        Type:    clix.AlertSuccess,
+        Title:   "Success",
+        Message: "Authentication successful!",
+    })
+    
+    return nil
+}
+```
+
+### Beautiful Auth Status
+
+```go
+func renderAuthStatus(w io.Writer, status AuthStatus) {
+    if !status.Authenticated {
+        clix.RenderEmptyState(w, clix.EmptyStateOptions{
+            Icon:    "🔒",
+            Title:   "Not authenticated",
+            Message: "Run 'cli auth login' to authenticate",
+        })
+        return
+    }
+    
+    // Show authenticated state
+    clix.RenderCard(w, clix.CardOptions{
+        Title: "Authentication Status",
+        Content: renderStatusContent(status),
+    })
+    
+    // Show service account details
+    if status.ServiceAccount != "" {
+        clix.RenderKeyValue(w, []clix.KeyValue{
+            {Key: "Service Account", Value: status.ServiceAccount},
+            {Key: "Expires", Value: formatExpiry(status.TokenExpires)},
+            {Key: "Scopes", Value: strings.Join(status.Scopes, ", ")},
+        })
+    }
+}
+```
+
 ## Examples
 
 ### Beautiful Command Output

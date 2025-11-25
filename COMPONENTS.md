@@ -558,6 +558,89 @@ Display components render information to output, not for user input. They write 
   })
   ```
 
+### Authentication Components
+
+Authentication components provide a beautiful, secure experience for CLI authentication flows (AuthN and AuthZ).
+
+#### 34. Auth Code Display
+**Status**: ❌ Not implemented
+- Display authentication code for user to copy (like GitHub CLI)
+- Prominent, easy-to-copy format
+- Auto-copy to clipboard (TerminalPrompter only, optional)
+- Countdown timer for expiration
+- **API**:
+  ```go
+  clix.RenderAuthCode(ctx.App.Out, clix.AuthCodeOptions{
+      Code: "ABCD-1234-EFGH-5678",
+      Message: "Copy this code before opening your browser:",
+      ExpiresIn: 10 * time.Minute,
+      AutoCopy: true, // Copy to clipboard automatically (TerminalPrompter only)
+      ShowTimer: true, // Show countdown timer
+  })
+  ```
+
+#### 35. Browser Auth Flow
+**Status**: ❌ Not implemented
+- Guide user through browser-based authentication
+- Show waiting state while browser is open
+- Handle PKCE flow with local webserver
+- Show success/error states
+- **API**:
+  ```go
+  flow := clix.NewBrowserAuthFlow(clix.BrowserAuthFlowOptions{
+      AuthURL: "https://example.com/oauth/authorize?code=...",
+      RedirectURI: "http://localhost:8080/callback",
+      Message: "Opening browser for authentication...",
+      SuccessMessage: "Authentication successful!",
+      ErrorMessage: "Authentication failed. Please try again.",
+  })
+  
+  token, err := flow.Run(ctx)
+  if err != nil {
+      return err
+  }
+  // Token received, store it
+  ```
+
+#### 36. Auth Status Display
+**Status**: ❌ Not implemented
+- Show current authentication status
+- Display active service account/token
+- Show expiration times
+- **API**:
+  ```go
+  clix.RenderAuthStatus(ctx.App.Out, clix.AuthStatusOptions{
+      Authenticated: true,
+      User: "user@example.com",
+      ServiceAccount: "service-account@project.iam.gserviceaccount.com",
+      TokenExpires: time.Now().Add(1 * time.Hour),
+      Scopes: []string{"read", "write"},
+  })
+  ```
+
+#### 37. Service Account Selector
+**Status**: ❌ Not implemented
+- Interactive selection of service account for AuthZ flow
+- Shows available service accounts with descriptions
+- **API**:
+  ```go
+  account, err := clix.SelectServiceAccount(ctx, clix.ServiceAccountSelectorOptions{
+      Accounts: []clix.ServiceAccount{
+          {
+              Email: "sa-1@project.iam.gserviceaccount.com",
+              DisplayName: "Production Service Account",
+              Description: "Full access to production resources",
+          },
+          {
+              Email: "sa-2@project.iam.gserviceaccount.com",
+              DisplayName: "Development Service Account",
+              Description: "Limited access to dev resources",
+          },
+      },
+      Label: "Select service account for authorization:",
+  })
+  ```
+
 ## Display Components API Design
 
 ### Core Principle: Write to io.Writer
