@@ -468,7 +468,7 @@ func ExampleDeclarativeStyle() {
 	// Create app using struct fields
 	app := clix.NewApp("myapp")
 	app.Description = "A declarative-style CLI application"
-	app.Version = "1.0.0"
+	// Note: Version is typically set by the version extension, not directly
 
 	// Global flags using struct-based API
 	app.Flags().StringVar(clix.StringVarOptions{
@@ -644,8 +644,8 @@ func ExampleFluentStyle() {
 
 	// Create app using builder-style
 	app := clix.NewApp("myapp").
-		SetDescription("A fluent-style CLI application").
-		SetVersion("1.0.0")
+		SetDescription("A fluent-style CLI application")
+	// Note: Version is typically set by the version extension, not via builder methods
 
 	// Global flags using builder-style
 	projectFlagOpts := &clix.StringVarOptions{}
