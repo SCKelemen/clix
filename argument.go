@@ -59,7 +59,7 @@ func (a *Argument) PromptLabel() string {
 func parseNamedArguments(args []string, commandArgs []*Argument) (map[string]string, []string) {
 	named := make(map[string]string)
 	positional := make([]string, 0)
-	
+
 	// Build a map of argument names for quick lookup
 	argNames := make(map[string]*Argument)
 	for _, arg := range commandArgs {
