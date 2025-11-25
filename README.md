@@ -713,6 +713,21 @@ We welcome issues and pull requests. To keep the review cycle short:
 
 If you plan a larger change, feel free to open an issue first so we can discuss the approach.
 
+## Release Process
+
+We use semantic versioning and Git tags so Go tooling (and Dependabot) can pick up new versions automatically. When you’re ready to cut a release:
+
+1. Ensure `main` is green: `gofmt ./... && go test ./...`.
+2. Update any docs or examples that mention the version (e.g., changelog snippets if applicable).
+3. Tag the release using Go-style semver and push the tag:
+   ```bash
+   git tag -a v1.0.0 -m "clix v1.0.0"
+   git push origin v1.0.0
+   ```
+4. GitHub Actions (`release.yml`) will build/test and publish a GitHub Release for that tag. pkg.go.dev and Dependabot will automatically index the new version.
+
+Following this flow keeps the module path (`github.com/SCKelemen/clix`) stable and gives downstream consumers reproducible builds.
+
 ## Developers & Maintainers
 
 - [Marcos Quesada Samaniego](https://github.com/marcosQuesada)
