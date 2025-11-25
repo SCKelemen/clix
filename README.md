@@ -1,5 +1,7 @@
 # clix
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/SCKelemen/clix.svg)](https://pkg.go.dev/github.com/SCKelemen/clix)
+
 ```
   ██████╗ ██╗      ██╗ ██╗  ██╗
  ██╔════╝ ██║      ██║ ╚██╗██╔╝
