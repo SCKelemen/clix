@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"clix"
+	"github.com/SCKelemen/clix"
 )
 
 // ExampleNewApp demonstrates how to create a new CLI application.
