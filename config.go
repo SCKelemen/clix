@@ -47,12 +47,64 @@ const (
 	ConfigFloat64
 )
 
+// ConfigSchemaOption configures a config schema using the functional options pattern.
+// Options can be used to build schemas:
+//
+//	// Using functional options
+//	app.Config.RegisterSchema(
+//		WithConfigKey("project.retries"),
+//		WithConfigType(clix.ConfigInteger),
+//		WithConfigValidate(validation.IntRange(1, 10)),
+//	)
+//
+//	// Using struct (primary API)
+//	app.Config.RegisterSchema(clix.ConfigSchema{
+//		Key:  "project.retries",
+//		Type: clix.ConfigInteger,
+//		Validate: validation.IntRange(1, 10),
+//	})
+type ConfigSchemaOption interface {
+	// ApplyConfigSchema configures a config schema struct.
+	// Exported so extension packages can implement ConfigSchemaOption.
+	ApplyConfigSchema(*ConfigSchema)
+}
+
 // ConfigSchema describes an expected type (and optional validator) for a config key.
+// This struct implements ConfigSchemaOption, so it can be used alongside functional options.
 // This is optional— schemas only apply when registered via RegisterSchema.
+//
+// Example:
+//
+//	// Struct-based (primary API)
+//	app.Config.RegisterSchema(clix.ConfigSchema{
+//		Key:  "project.retries",
+//		Type: clix.ConfigInteger,
+//		Validate: validation.IntRange(1, 10),
+//	})
+//
+//	// Functional options
+//	app.Config.RegisterSchema(
+//		WithConfigKey("project.retries"),
+//		WithConfigType(clix.ConfigInteger),
+//		WithConfigValidate(validation.IntRange(1, 10)),
+//	)
 type ConfigSchema struct {
 	Key      string
 	Type     ConfigType
 	Validate func(string) error
+}
+
+// ApplyConfigSchema implements ConfigSchemaOption so ConfigSchema can be used directly.
+func (s ConfigSchema) ApplyConfigSchema(schema *ConfigSchema) {
+	if s.Key != "" {
+		schema.Key = s.Key
+	}
+	if s.Type != ConfigString {
+		schema.Type = s.Type
+	}
+	if s.Validate != nil {
+		schema.Validate = s.Validate
+	}
 }
 
 // NewConfigManager constructs a manager for the given application name.
@@ -181,15 +233,45 @@ func (m *ConfigManager) Values() map[string]string {
 
 // RegisterSchema registers one or more schema entries for configuration keys.
 // Registration is optional; keys without schema entries behave like raw strings.
-func (m *ConfigManager) RegisterSchema(entries ...ConfigSchema) {
+// Accepts either ConfigSchema structs (primary API) or functional options (convenience layer).
+//
+// Example - two API styles:
+//
+//	// 1. Struct-based (primary API)
+//	app.Config.RegisterSchema(clix.ConfigSchema{
+//		Key:  "project.retries",
+//		Type: clix.ConfigInteger,
+//		Validate: validation.IntRange(1, 10),
+//	})
+//
+//	// 2. Functional options
+//	app.Config.RegisterSchema(
+//		clix.WithConfigKey("project.retries"),
+//		clix.WithConfigType(clix.ConfigInteger),
+//		clix.WithConfigValidate(validation.IntRange(1, 10)),
+//	)
+//
+//	// 3. Mixed (struct + functional options)
+//	app.Config.RegisterSchema(
+//		clix.ConfigSchema{Key: "project.retries"},
+//		clix.WithConfigType(clix.ConfigInteger),
+//	)
+func (m *ConfigManager) RegisterSchema(entries ...ConfigSchemaOption) {
 	if m.schemas == nil {
 		m.schemas = make(map[string]ConfigSchema)
 	}
 	for _, entry := range entries {
-		if entry.Key == "" {
+		var schema ConfigSchema
+		switch v := entry.(type) {
+		case ConfigSchema:
+			schema = v
+		default:
+			entry.ApplyConfigSchema(&schema)
+		}
+		if schema.Key == "" {
 			continue
 		}
-		m.schemas[entry.Key] = entry
+		m.schemas[schema.Key] = schema
 	}
 }
 
@@ -301,4 +383,65 @@ func (m *ConfigManager) Float64(key string) (float64, bool) {
 		return 0, false
 	}
 	return parsed, true
+}
+
+// Functional option helpers for config schemas
+
+// WithConfigKey sets the config schema key.
+func WithConfigKey(key string) ConfigSchemaOption {
+	return configKeyOption(key)
+}
+
+// WithConfigType sets the config schema type.
+func WithConfigType(typ ConfigType) ConfigSchemaOption {
+	return configTypeOption{typ: typ}
+}
+
+// WithConfigValidate sets the config schema validation function.
+func WithConfigValidate(validate func(string) error) ConfigSchemaOption {
+	return configValidateOption{validate: validate}
+}
+
+// Internal option types
+
+type configKeyOption string
+
+func (o configKeyOption) ApplyConfigSchema(schema *ConfigSchema) {
+	schema.Key = string(o)
+}
+
+type configTypeOption struct {
+	typ ConfigType
+}
+
+func (o configTypeOption) ApplyConfigSchema(schema *ConfigSchema) {
+	schema.Type = o.typ
+}
+
+type configValidateOption struct {
+	validate func(string) error
+}
+
+func (o configValidateOption) ApplyConfigSchema(schema *ConfigSchema) {
+	schema.Validate = o.validate
+}
+
+// Builder-style methods for ConfigSchema (fluent API)
+
+// SetKey sets the config schema key and returns the schema for method chaining.
+func (s *ConfigSchema) SetKey(key string) *ConfigSchema {
+	s.Key = key
+	return s
+}
+
+// SetType sets the config schema type and returns the schema for method chaining.
+func (s *ConfigSchema) SetType(typ ConfigType) *ConfigSchema {
+	s.Type = typ
+	return s
+}
+
+// SetValidate sets the validation function and returns the schema for method chaining.
+func (s *ConfigSchema) SetValidate(validate func(string) error) *ConfigSchema {
+	s.Validate = validate
+	return s
 }
