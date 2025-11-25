@@ -248,6 +248,12 @@ func (o TextPromptOption) Apply(cfg *PromptConfig) {
 }
 
 // WithLabel sets the prompt label (functional option).
+//
+// Example:
+//
+//	result, err := prompter.Prompt(ctx,
+//		clix.WithLabel("Enter your name"),
+//	)
 func WithLabel(label string) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.Label = label
@@ -255,6 +261,14 @@ func WithLabel(label string) PromptOption {
 }
 
 // WithDefault sets the default value (functional option).
+// The default is shown in the prompt and used if the user presses Enter without input.
+//
+// Example:
+//
+//	result, err := prompter.Prompt(ctx,
+//		clix.WithLabel("Color"),
+//		clix.WithDefault("blue"),
+//	)
 func WithDefault(def string) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.Default = def
@@ -327,6 +341,20 @@ func WithNoDefaultPlaceholder(text string) PromptOption {
 }
 
 // WithValidate sets the validation function (functional option).
+// The validation function is called when the user submits input.
+// Return an error if the value is invalid; the prompt will re-prompt until valid.
+//
+// Example:
+//
+//	result, err := prompter.Prompt(ctx,
+//		clix.WithLabel("Enter email"),
+//		clix.WithValidate(func(value string) error {
+//			if !strings.Contains(value, "@") {
+//				return errors.New("invalid email address")
+//			}
+//			return nil
+//		}),
+//	)
 func WithValidate(validate func(string) error) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.Validate = validate
@@ -334,6 +362,19 @@ func WithValidate(validate func(string) error) PromptOption {
 }
 
 // WithTheme sets the prompt theme (functional option).
+// Themes control the visual appearance of prompts (prefix, hint, error indicators, styling).
+// If not set, uses app.DefaultTheme.
+//
+// Example:
+//
+//	theme := clix.PromptTheme{
+//		Prefix: "> ",
+//		Error:  "✗ ",
+//	}
+//	result, err := prompter.Prompt(ctx,
+//		clix.WithLabel("Name"),
+//		clix.WithTheme(theme),
+//	)
 func WithTheme(theme PromptTheme) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.Theme = theme
@@ -342,6 +383,17 @@ func WithTheme(theme PromptTheme) PromptOption {
 
 // WithConfirm enables yes/no confirmation prompt mode (functional option).
 // Works with TextPrompter - it's just a text prompt with y/n validation.
+// Returns "y" or "n" (or "yes"/"no").
+//
+// Example:
+//
+//	result, err := prompter.Prompt(ctx,
+//		clix.WithLabel("Continue?"),
+//		clix.WithConfirm(),
+//	)
+//	if result == "y" {
+//		// User confirmed
+//	}
 func WithConfirm() PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
 		cfg.Confirm = true
