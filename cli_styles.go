@@ -97,6 +97,11 @@ func WithSectionHeading(style TextStyle) StyleOption {
 	return styleSectionHeadingOption{style: style}
 }
 
+// WithUsage sets the usage string style.
+func WithUsage(style TextStyle) StyleOption {
+	return styleUsageOption{style: style}
+}
+
 // WithStyleFlagName sets the flag name style (default for both app and command flags).
 func WithStyleFlagName(style TextStyle) StyleOption {
 	return styleFlagNameOption{style: style}
@@ -170,6 +175,10 @@ type styleSectionHeadingOption struct{ style TextStyle }
 
 func (o styleSectionHeadingOption) ApplyStyle(s *Styles) { s.SectionHeading = o.style }
 
+type styleUsageOption struct{ style TextStyle }
+
+func (o styleUsageOption) ApplyStyle(s *Styles) { s.Usage = o.style }
+
 type styleFlagNameOption struct{ style TextStyle }
 
 func (o styleFlagNameOption) ApplyStyle(s *Styles) { s.FlagName = o.style }
@@ -237,6 +246,12 @@ func (s *Styles) SetCommandTitle(style TextStyle) *Styles {
 // SetSectionHeading sets the section heading style and returns the styles for method chaining.
 func (s *Styles) SetSectionHeading(style TextStyle) *Styles {
 	s.SectionHeading = style
+	return s
+}
+
+// SetUsage sets the usage string style and returns the styles for method chaining.
+func (s *Styles) SetUsage(style TextStyle) *Styles {
+	s.Usage = style
 	return s
 }
 

@@ -113,14 +113,16 @@ type AppOption interface {
 //	// 2. Functional options
 //	app := clix.NewApp("myapp",
 //		clix.WithAppDescription("My application"),
+//		clix.WithAppVersion("1.0.0"),
 //	)
 //
 //	// 3. Builder-style
 //	app := clix.NewApp("myapp").
-//		SetDescription("My application")
+//		SetDescription("My application").
+//		SetVersion("1.0.0")
 //
-// Note: Version is typically set by the version extension, not via these APIs.
-// Use app.Version = "1.0.0" directly if you need to set it without the extension.
+// Note: While you can set Version directly, use the version extension to get
+// `cli --version` and `cli version` commands. The extension will set this field.
 func NewApp(name string, opts ...AppOption) *App {
 	app := &App{
 		Name: name,
@@ -797,6 +799,13 @@ func WithAppDescription(description string) AppOption {
 	return appDescriptionOption(description)
 }
 
+// WithAppVersion sets the application version.
+// Note: While you can set Version directly, use the version extension to get
+// `cli --version` and `cli version` commands. The extension will set this field.
+func WithAppVersion(version string) AppOption {
+	return appVersionOption(version)
+}
+
 // WithAppEnvPrefix sets the environment variable prefix.
 func WithAppEnvPrefix(prefix string) AppOption {
 	return appEnvPrefixOption(prefix)
@@ -843,6 +852,12 @@ type appDescriptionOption string
 
 func (o appDescriptionOption) ApplyApp(app *App) {
 	app.Description = string(o)
+}
+
+type appVersionOption string
+
+func (o appVersionOption) ApplyApp(app *App) {
+	app.Version = string(o)
 }
 
 type appEnvPrefixOption string
@@ -912,6 +927,14 @@ func (o appInOption) ApplyApp(app *App) {
 // SetDescription sets the application description and returns the app for method chaining.
 func (a *App) SetDescription(description string) *App {
 	a.Description = description
+	return a
+}
+
+// SetVersion sets the application version and returns the app for method chaining.
+// Note: While you can set Version directly, use the version extension to get
+// `cli --version` and `cli version` commands. The extension will set this field.
+func (a *App) SetVersion(version string) *App {
+	a.Version = version
 	return a
 }
 
