@@ -78,4 +78,3 @@ func NewHelpCommand(app *clix.App) *clix.Command {
 	}
 	return cmd
 }
-

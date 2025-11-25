@@ -145,4 +145,3 @@ func TestHelpExtension(t *testing.T) {
 		}
 	})
 }
-

@@ -57,6 +57,17 @@
 - **Everything as a dependency**: Features like help commands, autocomplete, and version checking are opt-in via extensions
 - **Complex state management**: `clix` focuses on CLI structure, not application state
 - **Built-in templating or rich output**: While styling is supported, `clix` doesn't include markdown rendering or complex UI components by default
+
+## When to Use clix
+
+`clix` is a good fit if you want:
+
+- **A strict tree of groups and commands** – Clear hierarchy where groups organize commands and commands execute handlers
+- **Built-in prompting and config precedence** – Automatic prompting for missing arguments and consistent flag/env/config/default resolution
+- **Extensions instead of code generation** – Optional features via extensions rather than codegen tools
+- **Declarative API** – Describe your CLI structure clearly with structs, functional options, or builder-style APIs
+
+If you need code generation, complex plugin systems, or a more flexible command model, consider [Cobra](https://github.com/spf13/cobra) or [ff](https://github.com/peterbourgon/ff).
 - **Command auto-generation**: You explicitly define your command tree
 - **Automatic flag inference**: Flags must be explicitly declared (though defaults, env vars, and config files reduce boilerplate)
 
@@ -569,7 +580,7 @@ Extensions implement the `clix.Extension` interface:
 ```go
 package myextension
 
-import "clix"
+import "github.com/SCKelemen/clix"
 
 type Extension struct {
         // Optional: extension-specific configuration

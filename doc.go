@@ -4,6 +4,29 @@
 // Command which can be composed to describe the command tree and execution
 // behaviour of a CLI.
 //
+// # Getting Started
+//
+// Define an App, create commands with handlers, and call Run:
+//
+//	app := clix.NewApp("myapp")
+//	app.Root = clix.NewGroup("myapp", "My application",
+//		clix.NewCommand("greet", "Greet someone", func(ctx *clix.Context) error {
+//			name, _ := ctx.Arg(0)
+//			fmt.Printf("Hello, %s!\n", name)
+//			return nil
+//		}),
+//	)
+//	app.Run(context.Background(), nil)
+//
+// # Core Types
+//
+// The primary stable types for v1 are:
+//
+//   - App – owns the root command, flags, and extensions
+//   - Command – represents a node in the CLI tree (group or command)
+//   - Context – wraps context.Context with CLI metadata (App, Command, Args)
+//   - Extension – plugs cross-cutting behavior into App
+//
 // # Context Usage
 //
 // clix uses a layered context design:
@@ -34,4 +57,13 @@
 //		// Use ctx.App, ctx.Command, ctx.Args for CLI data
 //		return nil
 //	}
+//
+// # Compatibility
+//
+// clix v1 follows semantic versioning. The github.com/SCKelemen/clix module path
+// will not have breaking changes within major version 1. Extensions under
+// github.com/SCKelemen/clix/ext/... may evolve more quickly but will also respect
+// semver for their exported APIs.
+//
+// clix requires Go 1.24 or later.
 package clix

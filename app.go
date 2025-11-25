@@ -534,6 +534,13 @@ func (a *App) countUserChildren(cmd *Command) int {
 //		}
 //		return nil
 //	}
+//
+// Context wraps the standard library context.Context with CLI metadata.
+// It should be passed to any code that needs cancellation, deadlines, or values
+// related to this command execution.
+//
+// Because Context embeds context.Context, you can pass it anywhere a
+// context.Context is required (e.g., to Prompter.Prompt).
 type Context struct {
 	context.Context // Embedded for cancellation, deadlines, and context values
 
