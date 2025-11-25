@@ -19,7 +19,9 @@ import (
 //   - cli config set <key> <value> - Set a configuration value
 //   - cli config reset    - Clear all configuration values
 //
-// Usage:
+// All commands respect the --format flag (text, json, yaml).
+//
+// Example:
 //
 //	import (
 //		"clix"
@@ -29,7 +31,15 @@ import (
 //	app := clix.NewApp("myapp")
 //	app.AddExtension(config.Extension{})
 //	// Now your app has config commands!
-type Extension struct{}
+//
+//	// Users can now manage configuration:
+//	//   myapp config set project my-project
+//	//   myapp config get project
+//	//   myapp config list
+type Extension struct {
+	// Extension has no configuration options.
+	// Simply add it to your app to enable config commands.
+}
 
 // Extend implements clix.Extension.
 func (Extension) Extend(app *clix.App) error {

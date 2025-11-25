@@ -7,12 +7,14 @@ import (
 	"clix"
 )
 
-// Extension adds the version command to a clix app.
-// This provides version information:
+// Extension adds the version command and --version flag to a clix app.
+// This provides version information in multiple formats (text, json, yaml).
 //
-//   - cli version - Show version information
+// The extension adds:
+//   - cli version - Show detailed version information (includes commit, date, Go version)
+//   - cli --version / -v - Show simple version info inline
 //
-// Usage:
+// Example:
 //
 //	import (
 //		"clix"
@@ -25,13 +27,18 @@ import (
 //		Commit:  "abc123",  // optional
 //		Date:    "2024-01-01", // optional
 //	})
-//	// Now your app has: myapp version
+//	// Now your app has: myapp version and myapp --version
 type Extension struct {
-	// Version is the semantic version (e.g., "1.0.0")
+	// Version is the semantic version (e.g., "1.0.0").
+	// Required. If empty, defaults to "dev" in the version command.
 	Version string
-	// Commit is the git commit hash (optional)
+
+	// Commit is the git commit hash (optional).
+	// Only shown in the "version" command, not in the --version flag.
 	Commit string
-	// Date is the build date (optional)
+
+	// Date is the build date (optional).
+	// Only shown in the "version" command, not in the --version flag.
 	Date string
 }
 

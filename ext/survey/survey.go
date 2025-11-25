@@ -22,27 +22,60 @@ var ErrGoBack = errors.New("survey: go back to previous question")
 
 // Question represents a single prompt in a survey.
 // Questions can be defined as struct literals, similar to clix.Command.
+//
+// Example:
+//
+//	questions := []survey.Question{
+//		{
+//			ID: "add-child",
+//			Request: clix.PromptRequest{
+//				Label: "Do you want to add a child?",
+//				Options: []clix.SelectOption{
+//					{Label: "Yes", Value: "yes"},
+//					{Label: "No", Value: "no"},
+//				},
+//			},
+//			Branches: map[string]survey.Branch{
+//				"yes": survey.PushQuestion("child-name"),
+//				"no":  survey.End(),
+//			},
+//		},
+//		{
+//			ID: "child-name",
+//			Request: clix.PromptRequest{
+//				Label: "Child's name",
+//			},
+//			Branches: map[string]survey.Branch{
+//				"": survey.PushQuestion("add-another"), // Default: always continue
+//			},
+//		},
+//	}
 type Question struct {
-	// ID uniquely identifies this question for branching
+	// ID uniquely identifies this question for branching.
+	// Used to reference this question from other questions' branches.
 	ID string
 
-	// Request defines the prompt to show (Label, Options, Confirm, etc.)
+	// Request defines the prompt to show (Label, Options, Confirm, etc.).
+	// Supports all prompt types based on the prompter used (TextPrompter or TerminalPrompter).
 	Request clix.PromptRequest
 
 	// Branches map answer values to actions.
-	// Empty string "" means "always continue to this action".
+	// Empty string "" means "always continue to this action" (default branch).
 	// Use helper functions like PushQuestion(), End(), or Handler() to create branches.
 	Branches map[string]Branch
 }
 
 // Branch defines what happens after a question is answered.
+// Branches enable conditional question flows based on user responses.
 type Branch interface {
-	// Execute processes the branch - may push questions or call handlers
+	// Execute processes the branch - may push questions or call handlers.
 	Execute(answer string, s *Survey)
 }
 
-// QuestionBranch pushes another question to the stack (by ID)
+// QuestionBranch pushes another question to the stack (by ID).
+// Use PushQuestion(questionID) to create a QuestionBranch.
 type QuestionBranch struct {
+	// QuestionID is the ID of the question to push next.
 	QuestionID string
 }
 
@@ -52,8 +85,20 @@ func (b QuestionBranch) Execute(answer string, s *Survey) {
 	}
 }
 
-// HandlerBranch calls a handler function
+// HandlerBranch calls a handler function for dynamic question flows.
+// Use Handler(fn) to create a HandlerBranch.
+//
+// Example:
+//
+//	Branches: map[string]survey.Branch{
+//		"yes": survey.Handler(func(answer string, s *survey.Survey) {
+//			s.Ask(clix.PromptRequest{Label: "Child's name"}, nil)
+//			s.Ask(clix.PromptRequest{Label: "Child's age"}, nil)
+//		}),
+//	}
 type HandlerBranch struct {
+	// Handler is the function called when this branch is executed.
+	// The function receives the answer and can add new questions dynamically.
 	Handler func(answer string, s *Survey)
 }
 
@@ -63,8 +108,11 @@ func (b HandlerBranch) Execute(answer string, s *Survey) {
 	}
 }
 
-// EndBranch signals the survey should end
-type EndBranch struct{}
+// EndBranch signals the survey should end.
+// Use End() to create an EndBranch.
+type EndBranch struct {
+	// EndBranch has no fields - it simply signals the survey to stop.
+}
 
 func (b EndBranch) Execute(answer string, s *Survey) {
 	// Clear the stack so the survey loop will exit after this question
@@ -91,6 +139,23 @@ func Handler(fn func(answer string, s *Survey)) Branch {
 
 // Survey manages a stack of questions for depth-first traversal.
 // Supports both static (pre-defined) and dynamic (handler-based) question flows.
+//
+// Questions are processed depth-first, meaning when a question's handler adds new
+// questions, those new questions are immediately processed before returning to other
+// questions at the same level. This enables recursive patterns like "add another child?" loops.
+//
+// Example:
+//
+//	s := survey.NewFromQuestions(ctx, app.Prompter, questions, "start-question")
+//	s.Run()
+//
+// Or with options:
+//
+//	s := survey.NewFromQuestions(ctx, app.Prompter, questions, "start-question",
+//		survey.WithUndoStack(),    // Enable "back" command
+//		survey.WithEndCard(),       // Show summary at end
+//	)
+//	s.Run()
 type Survey struct {
 	prompter       clix.Prompter
 	ctx            context.Context
@@ -112,22 +177,30 @@ type Survey struct {
 	endCardTheme clix.PromptTheme // Theme for end card display
 }
 
-// historyEntry tracks a question and its answer for undo functionality
+// historyEntry tracks a question and its answer for undo functionality.
 type historyEntry struct {
 	question *Question
 	answer   string
 }
 
-// SurveyOption configures survey behavior
+// SurveyOption configures survey behavior.
+// Options are applied when creating a Survey via New() or NewFromQuestions().
 type SurveyOption interface {
+	// Apply configures the survey with this option.
 	Apply(*Survey)
 }
 
-// SurveyConfig holds survey configuration
+// SurveyConfig holds survey configuration.
+// This is used internally by survey options.
 type SurveyConfig struct {
+	// WithUndoStack enables undo/back functionality.
 	WithUndoStack bool
-	WithEndCard   bool
-	EndCardText   string
+
+	// WithEndCard enables the end card confirmation prompt.
+	WithEndCard bool
+
+	// EndCardText is the text shown in the end card.
+	EndCardText string
 }
 
 // WithUndoStack enables undo/back functionality in the survey.
@@ -778,7 +851,35 @@ func (p sharedTextPrompter) Prompt(ctx context.Context, opts ...clix.PromptOptio
 
 // Extension adds survey functionality to a clix app.
 // The survey extension itself doesn't add commands - it's used programmatically.
-type Extension struct{}
+// Extension adds survey functionality to a clix app.
+// Surveys enable chaining prompts together in a depth-first traversal pattern,
+// allowing both static and dynamic question flows.
+//
+// The survey extension works with any prompter:
+//   - TextPrompter: text input and confirm prompts
+//   - TerminalPrompter (from ext/prompt): text input, confirm, select, and multi-select prompts
+//
+// Example:
+//
+//	import (
+//		"clix"
+//		"clix/ext/survey"
+//	)
+//
+//	questions := []survey.Question{
+//		{
+//			ID: "name",
+//			Request: clix.PromptRequest{Label: "Name"},
+//			Branches: map[string]survey.Branch{"": survey.End()},
+//		},
+//	}
+//
+//	s := survey.NewFromQuestions(ctx, app.Prompter, questions, "name")
+//	s.Run()
+type Extension struct {
+	// Extension has no configuration options.
+	// Simply import the package to use survey functionality.
+}
 
 // Extend implements clix.Extension.
 func (Extension) Extend(app *clix.App) error {

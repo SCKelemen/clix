@@ -9,11 +9,15 @@ import (
 )
 
 // Extension adds the autocomplete command to a clix app.
-// This provides shell completion script generation:
+// This provides shell completion script generation for bash, zsh, and fish.
 //
+// The extension adds:
 //   - cli autocomplete [bash|zsh|fish] - Generate completion script for the specified shell
 //
-// Usage:
+// The generated scripts include all commands, groups, flags, and aliases
+// from your application's command tree.
+//
+// Example:
 //
 //	import (
 //		"clix"
@@ -23,7 +27,15 @@ import (
 //	app := clix.NewApp("myapp")
 //	app.AddExtension(autocomplete.Extension{})
 //	// Now your app has: myapp autocomplete [shell]
-type Extension struct{}
+//
+//	// Users can generate and install completion:
+//	//   myapp autocomplete bash > /etc/bash_completion.d/myapp
+//	//   myapp autocomplete zsh > ~/.zsh/completions/_myapp
+//	//   myapp autocomplete fish > ~/.config/fish/completions/myapp.fish
+type Extension struct {
+	// Extension has no configuration options.
+	// Simply add it to your app to enable autocomplete command generation.
+}
 
 // Extend implements clix.Extension.
 func (Extension) Extend(app *clix.App) error {

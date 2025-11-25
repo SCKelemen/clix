@@ -10,6 +10,33 @@ import (
 )
 
 // Validator is a function that validates a string value and returns an error if invalid.
+// Validators can be used with prompts, arguments, and flags.
+//
+// Example:
+//
+//	import "clix/ext/validation"
+//
+//	// Use with prompts
+//	result, err := prompter.Prompt(ctx, clix.PromptRequest{
+//		Label:   "Email",
+//		Validate: validation.Email,
+//	})
+//
+//	// Use with arguments
+//	cmd.Arguments = []*clix.Argument{
+//		{
+//			Name:     "email",
+//			Required: true,
+//			Validate: validation.Email,
+//		},
+//	}
+//
+//	// Combine validators
+//	validate := validation.All(
+//		validation.NotEmpty,
+//		validation.MinLength(8),
+//		validation.Regex(`^[a-zA-Z0-9]+$`),
+//	)
 type Validator func(string) error
 
 // Email validates an RFC 5322 compliant email address.

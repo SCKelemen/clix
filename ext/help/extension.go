@@ -14,9 +14,10 @@ import (
 //   - cli help [command]    - Show help for a specific command
 //
 // Note: Flag-based help (-h, --help) is handled by the core library
-// and does not require this extension.
+// and does not require this extension. This extension only adds the
+// "help" command itself.
 //
-// Usage:
+// Example:
 //
 //	import (
 //		"clix"
@@ -26,7 +27,15 @@ import (
 //	app := clix.NewApp("myapp")
 //	app.AddExtension(help.Extension{})
 //	// Now your app has: myapp help [command]
-type Extension struct{}
+//
+//	// Users can now access help via:
+//	//   myapp help
+//	//   myapp help subcommand
+//	//   myapp help subcommand nested
+type Extension struct {
+	// Extension has no configuration options.
+	// Simply add it to your app to enable the help command.
+}
 
 // Extend implements clix.Extension.
 func (Extension) Extend(app *clix.App) error {

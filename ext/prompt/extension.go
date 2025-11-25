@@ -5,7 +5,10 @@ import "clix"
 // Extension replaces the default TextPrompter with TerminalPrompter,
 // enabling advanced prompt features: select, multi-select, confirm, and raw terminal mode.
 //
-// Usage:
+// Without this extension, advanced prompt types (select, multi-select) return errors
+// directing users to add the extension. With this extension, all prompt types are supported.
+//
+// Example:
 //
 //	import (
 //		"clix"
@@ -16,15 +19,23 @@ import "clix"
 //	app.AddExtension(prompt.Extension{})
 //	// Now your app supports select, multi-select, and confirm prompts
 //
-//	// For advanced prompts, use type assertion to access TerminalPrompter methods:
-//	if tp, ok := app.Prompter.(TerminalPrompter); ok {
-//		// Use PromptWithOptions, PromptMultiSelect, or PromptConfirm
-//		result, _ := tp.PromptWithOptions(ctx, clix.PromptRequest{
-//			TextPromptRequest: clix.TextPromptRequest{Label: "Choose"},
-//			Options: []clix.SelectOption{{Label: "A", Value: "a"}},
-//		})
+//	// Use advanced prompts via the standard PromptRequest API:
+//	result, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
+//		Label: "Choose an option",
+//		Options: []clix.SelectOption{
+//			{Label: "Option A", Value: "a"},
+//			{Label: "Option B", Value: "b"},
+//		},
+//	})
+//
+//	// Or use the helper function for type-safe access:
+//	if tp := prompt.AsTerminalPrompter(app.Prompter); tp != nil {
+//		// Access TerminalPrompter-specific methods if needed
 //	}
-type Extension struct{}
+type Extension struct {
+	// Extension has no configuration options.
+	// Simply add it to your app to enable advanced prompt features.
+}
 
 // Extend implements clix.Extension.
 func (Extension) Extend(app *clix.App) error {
