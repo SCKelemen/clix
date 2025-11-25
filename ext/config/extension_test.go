@@ -190,6 +190,36 @@ func TestConfigExtension(t *testing.T) {
 		}
 	})
 
+	t.Run("config set enforces schema when registered", func(t *testing.T) {
+		tempHome := t.TempDir()
+		t.Setenv("HOME", tempHome)
+		defer os.Unsetenv("HOME")
+
+		app := clix.NewApp("test")
+		app.Config.RegisterSchema(clix.ConfigSchema{
+			Key:  "service.retries",
+			Type: clix.ConfigInteger,
+		})
+
+		root := clix.NewCommand("test")
+		app.Root = root
+		app.AddExtension(Extension{})
+
+		// Non-integer should fail.
+		err := app.Run(context.Background(), []string{"config", "set", "service.retries", "abc"})
+		if err == nil {
+			t.Fatalf("expected schema enforcement error")
+		}
+
+		// Valid integer should be accepted and canonicalised.
+		if err := app.Run(context.Background(), []string{"config", "set", "service.retries", "08"}); err != nil {
+			t.Fatalf("config set should accept canonical integer: %v", err)
+		}
+		if val, ok := app.Config.Get("service.retries"); !ok || val != "8" {
+			t.Fatalf("expected stored canonical integer, got %q %v", val, ok)
+		}
+	})
+
 	t.Run("config unset command removes value", func(t *testing.T) {
 		tempHome := t.TempDir()
 		t.Setenv("HOME", tempHome)

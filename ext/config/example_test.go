@@ -11,6 +11,14 @@ func ExampleExtension() {
 	// Add the config extension to enable config commands
 	app.AddExtension(config.Extension{})
 
+	// Optionally register schema so config set/get enforce types.
+	app.Config.RegisterSchema(
+		clix.ConfigSchema{
+			Key:  "project.retries",
+			Type: clix.ConfigInteger,
+		},
+	)
+
 	root := clix.NewCommand("example")
 	app.Root = root
 

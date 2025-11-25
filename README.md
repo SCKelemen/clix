@@ -241,6 +241,42 @@ app.Flags().StringVar(clix.StringVarOptions{
 })
 ```
 
+#### Typed configuration access (optional schema)
+
+When you read persisted configuration directly, you can use typed helpers:
+
+```go
+if retries, ok := app.Config.Integer("project.retries"); ok {
+        fmt.Fprintf(app.Out, "Retry count: %d\n", retries)
+}
+if enabled, ok := app.Config.Bool("feature.enabled"); ok && enabled {
+        fmt.Fprintln(app.Out, "Feature flag is on")
+}
+```
+
+If you want `cli config set` to enforce types, register an optional schema:
+
+```go
+app.Config.RegisterSchema(
+        clix.ConfigSchema{
+                Key:  "project.retries",
+                Type: clix.ConfigInteger,
+                Validate: func(value string) error {
+                        if value == "0" {
+                                return fmt.Errorf("retries must be positive")
+                        }
+                        return nil
+                },
+        },
+        clix.ConfigSchema{
+                Key:  "feature.enabled",
+                Type: clix.ConfigBool,
+        },
+)
+```
+
+With a schema in place, `cli config set project.retries 10` is accepted, while non-integer input is rejected with a clear error. Schemas are optional—keys without entries continue to behave like raw strings.
+
 ### Positional Arguments
 
 Commands can define required or optional positional arguments with:
@@ -492,6 +528,17 @@ Adds configuration management commands using dot-separated key paths (e.g. `proj
 - `cli config set <key_path> <value>` - Persist a new value
 - `cli config unset <key_path>` - Remove the persisted value (no-op if missing)
 - `cli config reset` - Remove all persisted configuration from disk (flags/env/defaults still apply)
+
+Optional schemas can enforce types when setting values:
+
+```go
+app.Config.RegisterSchema(clix.ConfigSchema{
+        Key:  "project.retries",
+        Type: clix.ConfigInteger,
+})
+```
+
+With a schema, `config set project.retries 5` succeeds while `config set project.retries nope` fails with a helpful error.
 
 #### Autocomplete Extension (`clix/ext/autocomplete`)
 

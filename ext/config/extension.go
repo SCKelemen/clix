@@ -138,6 +138,15 @@ func configSetCommand(app *clix.App) *clix.Command {
 		if !ok || strings.TrimSpace(value) == "" {
 			return errors.New("value argument required")
 		}
+
+		if app.Config != nil {
+			normalized, err := app.Config.NormalizeValue(keyPath, value)
+			if err != nil {
+				return err
+			}
+			value = normalized
+		}
+
 		app.Config.Set(keyPath, value)
 		if err := app.SaveConfig(); err != nil {
 			return err
