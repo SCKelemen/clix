@@ -61,12 +61,26 @@ Adds command-based help similar to man pages:
 
 ### Config Extension (`clix/ext/config`)
 
-Adds configuration management commands:
-- `cli config` - Show help for config commands
-- `cli config list` - List all configuration values
-- `cli config get <key>` - Get a specific value
-- `cli config set <key> <value>` - Set a value
-- `cli config reset` - Clear all configuration
+Adds configuration management commands using dot-separated key paths (e.g. `project.default`):
+- `cli config` - Show help for config commands (group)
+- `cli config list` - List persisted config as YAML (respects `--format=json|yaml|text`)
+- `cli config get <key_path>` - Print a persisted value
+- `cli config set <key_path> <value>` - Persist a new value (schema-aware if registered)
+- `cli config unset <key_path>` - Remove a persisted value (no-op if missing)
+- `cli config reset` - Remove all persisted configuration from disk
+
+Optional schemas let you enforce types:
+
+```go
+app.Config.RegisterSchema(clix.ConfigSchema{
+	Key:  "project.retries",
+	Type: clix.ConfigInteger,
+})
+// cli config set project.retries 5       ✅
+// cli config set project.retries nope    ❌ (clear error)
+```
+
+The schema layer is purely opt-in; keys without schema entries behave like plain strings.
 
 ### Autocomplete Extension (`clix/ext/autocomplete`)
 
