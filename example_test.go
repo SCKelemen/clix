@@ -227,7 +227,7 @@ func ExamplePromptRequest() {
 // ExampleWithLabel demonstrates how to use the functional options API for prompts.
 func ExampleWithLabel() {
 	app := clix.NewApp("myapp")
-	root := clix.NewCommand("myapp")
+	root := clix.NewCommand(app.Name)
 	app.Root = root
 
 	root.Run = func(ctx *clix.Context) error {
