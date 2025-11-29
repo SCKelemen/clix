@@ -7,8 +7,14 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Ensure NO_COLOR is not set and build
-Type "unset NO_COLOR; go build -o gcloud ./cmd/gcloud"
+# Build the example (unset NO_COLOR but clear it from view)
+Type "unset NO_COLOR"
+Enter
+Sleep 100ms
+Type "\014"
+Enter
+Sleep 100ms
+Type "go build -o gcloud ./cmd/gcloud"
 Enter
 Sleep 2s
 
