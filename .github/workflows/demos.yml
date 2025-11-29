@@ -1,0 +1,120 @@
+name: Generate Demo GIFs
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'examples/**'
+      - 'demos/vhs/generate-demos.sh'
+      - '.github/workflows/demos.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'examples/**'
+      - 'demos/vhs/generate-demos.sh'
+  workflow_dispatch:
+
+jobs:
+  generate-demos:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PERSONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Build examples
+        run: |
+          # Build all examples to ensure they compile
+          for example in examples/*/; do
+            if [ -d "$example/cmd" ]; then
+              echo "Building example: $(basename $example)"
+              for cmd_dir in "$example/cmd"/*/; do
+                if [ -f "$cmd_dir/main.go" ]; then
+                  cmd_name=$(basename $cmd_dir)
+                  example_name=$(basename $example)
+                  binary_name="$example_name"
+                  
+                  # Special cases
+                  case "$example_name" in
+                    "basic") binary_name="demo" ;;
+                    "survey") binary_name="demo" ;;
+                    "lipgloss") binary_name="styled" ;;
+                  esac
+                  
+                  echo "  Building $cmd_name -> $binary_name"
+                  (cd "$example" && go build -o "$binary_name" "./cmd/$cmd_name" || true)
+                fi
+              done
+            fi
+          done
+          
+          # Handle multicli separately
+          if [ -d "examples/multicli/cmd" ]; then
+            cd examples/multicli
+            for cmd_dir in cmd/*/; do
+              if [ -f "$cmd_dir/main.go" ]; then
+                binary=$(basename "$cmd_dir")
+                echo "  Building multicli/$binary"
+                go build -o "$binary" "./$cmd_dir" || true
+              fi
+            done
+          fi
+      
+      - name: Install VHS and dependencies
+        run: |
+          # Install VHS dependencies
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd
+          # Install VHS
+          go install github.com/charmbracelet/vhs@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+      
+      - name: Discover and generate tape files
+        run: |
+          cd demos/vhs
+          chmod +x generate-demos.sh
+          GENERATE_GIFS=0 ./generate-demos.sh
+      
+      - name: Generate demo GIFs
+        run: |
+          cd demos/vhs
+          GENERATE_GIFS=1 ./generate-demos.sh
+      
+      - name: Check for changes
+        id: check
+        run: |
+          if [ -n "$(git status --porcelain examples/*/*.gif examples/*/*.tape)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit changes
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          # Get the branch name - use HEAD_REF for PRs, otherwise extract from GITHUB_REF
+          if [ -n "${{ github.head_ref }}" ]; then
+            BRANCH_NAME="${{ github.head_ref }}"
+          else
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          fi
+          # Checkout the branch if we're in detached HEAD state
+          git checkout -B "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
+          git config --local user.email "${{ secrets.GIT_USER_EMAIL || 'SCKelemen@users.noreply.github.com' }}"
+          git config --local user.name "${{ secrets.GIT_USER_NAME || 'Samuel Kelemen' }}"
+          git add examples/*/*.gif examples/*/*.tape
+          git commit -m "Auto-update demo GIFs [skip ci]" || exit 0
+          git push origin "$BRANCH_NAME"
+        env:
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
