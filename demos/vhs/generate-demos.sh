@@ -1,0 +1,423 @@
+#!/bin/bash
+# Script to discover examples and generate VHS demo GIFs
+# This script walks the examples directory and creates/updates tape files in each example's directory
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+EXAMPLES_DIR="$PROJECT_ROOT/examples"
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo "Discovering examples in $EXAMPLES_DIR..."
+
+# Function to generate a tape file for an example
+generate_tape() {
+    local example_name=$1
+    local example_path=$2
+    local main_cmd=$3
+    local binary_name=$4
+    local tape_file="$example_path/${binary_name}.tape"
+    
+    echo -e "${GREEN}Generating tape for: ${example_name} -> ${tape_file}${NC}"
+    
+    cat > "$tape_file" <<EOF
+Output ${binary_name}.gif
+Set Width 1200
+Set Height 800
+Set Theme "Monokai Pro"
+Set FontSize 18
+Set Shell "bash"
+
+# Build the example
+Type "go build -o ${binary_name} ./cmd/${main_cmd}"
+Enter
+Sleep 2s
+
+EOF
+
+    # Add example-specific commands
+    case "$example_name" in
+        "basic")
+            cat >> "$tape_file" <<'BASICEOF'
+# Show help
+Type "./demo"
+Enter
+Sleep 1s
+
+Type "./demo --help"
+Enter
+Sleep 1.5s
+
+Type "./demo greet --help"
+Enter
+Sleep 1.5s
+
+Type "./demo greet Alice"
+Enter
+Sleep 1s
+
+Type "./demo greet"
+Enter
+Sleep 500ms
+Type "Bob"
+Enter
+Sleep 1s
+BASICEOF
+            ;;
+        "survey")
+            cat >> "$tape_file" <<'SURVEYEOF'
+# Run simple survey
+Type "./demo simple"
+Enter
+Sleep 500ms
+Type "John Doe"
+Enter
+Sleep 500ms
+Type "john@example.com"
+Enter
+Sleep 500ms
+Type "y"
+Enter
+Sleep 1s
+Type "y"
+Enter
+Sleep 2s
+
+# Run advanced survey
+Type "./demo advanced"
+Enter
+Sleep 500ms
+Type "Jane Smith"
+Enter
+Sleep 500ms
+Type "jane@example.com"
+Enter
+Sleep 500ms
+Type "25"
+Enter
+Sleep 500ms
+Type "\033[B"
+Sleep 300ms
+Type "\033[B"
+Sleep 300ms
+Enter
+Sleep 500ms
+Type "\033[B"
+Sleep 300ms
+Type " "
+Sleep 300ms
+Type "\033[B"
+Sleep 300ms
+Type " "
+Sleep 300ms
+Enter
+Sleep 500ms
+Type "y"
+Enter
+Sleep 2s
+SURVEYEOF
+            ;;
+        "lipgloss")
+            cat >> "$tape_file" <<'LIPGLOSSEOF'
+# Show styled help
+Type "./styled"
+Enter
+Sleep 1s
+
+Type "./styled --help"
+Enter
+Sleep 2s
+
+Type "./styled style"
+Enter
+Sleep 500ms
+Type "Test User"
+Enter
+Sleep 1s
+
+Type "./styled style --format json"
+Enter
+Sleep 1s
+LIPGLOSSEOF
+            ;;
+        "gh")
+            cat >> "$tape_file" <<'GHEOF'
+# Show help
+Type "./gh"
+Enter
+Sleep 1s
+
+Type "./gh auth --help"
+Enter
+Sleep 1.5s
+
+Type "./gh repo --help"
+Enter
+Sleep 1.5s
+
+Type "./gh pr --help"
+Enter
+Sleep 1.5s
+
+Type "./gh org --help"
+Enter
+Sleep 1.5s
+
+Type "./gh --version"
+Enter
+Sleep 1s
+GHEOF
+            ;;
+        "multicli")
+            cat >> "$tape_file" <<'MULTICLIEOF'
+# Show dev CLI
+Type "./dev --help"
+Enter
+Sleep 1.5s
+
+Type "./dev database list"
+Enter
+Sleep 1s
+
+# Show db CLI (focused)
+Type "./db --help"
+Enter
+Sleep 1.5s
+
+Type "./db list"
+Enter
+Sleep 1s
+
+# Show sec CLI with aliases
+Type "./sec --help"
+Enter
+Sleep 1.5s
+
+Type "./sec vulns list"
+Enter
+Sleep 1s
+
+# Show bq CLI with versioning
+Type "./bq --help"
+Enter
+Sleep 1.5s
+
+Type "./bq dataset list"
+Enter
+Sleep 1s
+MULTICLIEOF
+            ;;
+        "gcloud")
+            cat >> "$tape_file" <<'GCLOUDEOF'
+# Show help
+Type "./gcloud"
+Enter
+Sleep 1s
+
+Type "./gcloud auth --help"
+Enter
+Sleep 1.5s
+
+Type "./gcloud config --help"
+Enter
+Sleep 1.5s
+
+Type "./gcloud projects --help"
+Enter
+Sleep 1.5s
+GCLOUDEOF
+            ;;
+        "bubbles")
+            cat >> "$tape_file" <<'BUBBLESEOF'
+# Show help
+Type "./demo"
+Enter
+Sleep 1s
+
+Type "./demo greet"
+Enter
+Sleep 500ms
+Type "Alice"
+Enter
+Sleep 500ms
+Type "\033[B"
+Sleep 300ms
+Enter
+Sleep 500ms
+Type "y"
+Enter
+Sleep 1s
+BUBBLESEOF
+            ;;
+        *)
+            # Generic example - just show help
+            cat >> "$tape_file" <<GENERICEOF
+# Show help
+Type "./${binary_name}"
+Enter
+Sleep 1s
+
+Type "./${binary_name} --help"
+Enter
+Sleep 2s
+GENERICEOF
+            ;;
+    esac
+}
+
+# Discover examples by looking for cmd/ directories
+discover_examples() {
+    local examples_found=0
+    
+    for example_dir in "$EXAMPLES_DIR"/*; do
+        if [[ ! -d "$example_dir" ]]; then
+            continue
+        fi
+        
+        local example_name=$(basename "$example_dir")
+        
+        # Look for cmd/ subdirectory
+        if [[ -d "$example_dir/cmd" ]]; then
+            # Find the first cmd subdirectory (usually cmd/<name>/)
+            local cmd_dir=$(find "$example_dir/cmd" -mindepth 1 -maxdepth 1 -type d | head -1)
+            if [[ -n "$cmd_dir" ]]; then
+                local main_cmd=$(basename "$cmd_dir")
+                local binary_name="$example_name"
+                
+                # Special cases for binary names
+                case "$example_name" in
+                    "basic") binary_name="demo" ;;
+                    "survey") binary_name="demo" ;;
+                    "lipgloss") binary_name="styled" ;;
+                    "bubbles") binary_name="demo" ;;
+                    "multicli")
+                        # Skip multicli - it has multiple binaries, handled separately
+                        continue
+                        ;;
+                esac
+                
+                generate_tape "$example_name" "$example_dir" "$main_cmd" "$binary_name"
+                examples_found=$((examples_found + 1))
+            fi
+        fi
+    done
+    
+    # Handle multicli separately (has multiple binaries)
+    if [[ -d "$EXAMPLES_DIR/multicli/cmd" ]]; then
+        # Create multicli tape in multicli directory
+        local multicli_tape="$EXAMPLES_DIR/multicli/multicli.tape"
+        cat > "$multicli_tape" <<'MULTICLIHEAD'
+Output multicli.gif
+Set Width 1200
+Set Height 800
+Set Theme "Monokai Pro"
+Set FontSize 18
+Set Shell "bash"
+
+# Build all CLIs
+Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
+Enter
+Sleep 3s
+MULTICLIHEAD
+        # Add multicli-specific commands
+        cat >> "$multicli_tape" <<'MULTICLIEOF'
+# Show dev CLI
+Type "./dev --help"
+Enter
+Sleep 1.5s
+
+Type "./dev database list"
+Enter
+Sleep 1s
+
+# Show db CLI (focused)
+Type "./db --help"
+Enter
+Sleep 1.5s
+
+Type "./db list"
+Enter
+Sleep 1s
+
+# Show sec CLI with aliases
+Type "./sec --help"
+Enter
+Sleep 1.5s
+
+Type "./sec vulns list"
+Enter
+Sleep 1s
+
+# Show bq CLI with versioning
+Type "./bq --help"
+Enter
+Sleep 1.5s
+
+Type "./bq dataset list"
+Enter
+Sleep 1s
+MULTICLIEOF
+        examples_found=$((examples_found + 1))
+    fi
+    
+    echo -e "${GREEN}Found ${examples_found} example(s)${NC}"
+    return 0
+}
+
+# Generate GIFs from tape files
+generate_gifs() {
+    local vhs_cmd="vhs"
+    if ! command -v vhs &> /dev/null; then
+        # Try common locations
+        if [[ -f "$HOME/go/bin/vhs" ]]; then
+            vhs_cmd="$HOME/go/bin/vhs"
+        elif [[ -f "/opt/homebrew/bin/vhs" ]]; then
+            vhs_cmd="/opt/homebrew/bin/vhs"
+        else
+            echo -e "${YELLOW}Warning: vhs not found. Skipping GIF generation.${NC}"
+            echo "Install vhs: brew install vhs or go install github.com/charmbracelet/vhs@latest"
+            return 1
+        fi
+    fi
+    
+    echo -e "${GREEN}Generating GIFs...${NC}"
+    
+    cd "$VHS_DIR"
+    for tape_file in *.tape; do
+        if [[ ! -f "$tape_file" ]]; then
+            continue
+        fi
+        
+        local example_name="${tape_file%.tape}"
+        echo -e "${GREEN}Generating ${example_name}.gif...${NC}"
+        
+        if "$vhs_cmd" < "$tape_file"; then
+            echo -e "${GREEN}✓ Generated ${example_name}.gif${NC}"
+        else
+            echo -e "${YELLOW}⚠ Failed to generate ${example_name}.gif${NC}"
+        fi
+    done
+}
+
+# Main execution
+main() {
+    echo "=== Discovering Examples ==="
+    discover_examples
+    
+    if [[ "${GENERATE_GIFS:-1}" == "1" ]]; then
+        echo ""
+        echo "=== Generating GIFs ==="
+        generate_gifs
+    else
+        echo ""
+        echo "Skipping GIF generation (set GENERATE_GIFS=1 to enable)"
+    fi
+}
+
+main "$@"
+

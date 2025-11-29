@@ -1,20 +1,14 @@
-Output multicli-example.gif
+Output multicli.gif
 Set Width 1200
 Set Height 800
 Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
 
-# Navigate to multicli example
-Type "cd examples/multicli"
-Enter
-Sleep 500ms
-
 # Build all CLIs
 Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
 Enter
 Sleep 3s
-
 # Show dev CLI
 Type "./dev --help"
 Enter
@@ -50,4 +44,3 @@ Sleep 1.5s
 Type "./bq dataset list"
 Enter
 Sleep 1s
-

@@ -1,16 +1,11 @@
-Output interactive-prompts.gif
+Output demo.gif
 Set Width 1200
 Set Height 800
 Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
 
-# Navigate to survey example
-Type "cd examples/survey"
-Enter
-Sleep 500ms
-
-# Build the demo
+# Build the example
 Type "go build -o demo ./cmd/demo"
 Enter
 Sleep 2s
@@ -32,7 +27,7 @@ Type "y"
 Enter
 Sleep 2s
 
-# Show advanced survey (with select/multiselect)
+# Run advanced survey
 Type "./demo advanced"
 Enter
 Sleep 500ms
@@ -45,25 +40,22 @@ Sleep 500ms
 Type "25"
 Enter
 Sleep 500ms
-# Select country (use arrow keys)
-Type "\033[B" # Down arrow
+Type "\033[B"
 Sleep 300ms
-Type "\033[B" # Down arrow
+Type "\033[B"
 Sleep 300ms
 Enter
 Sleep 500ms
-# Multi-select interests
-Type "\033[B" # Down arrow
+Type "\033[B"
 Sleep 300ms
-Type " " # Select
+Type " "
 Sleep 300ms
-Type "\033[B" # Down arrow
+Type "\033[B"
 Sleep 300ms
-Type " " # Select
+Type " "
 Sleep 300ms
 Enter
 Sleep 500ms
 Type "y"
 Enter
 Sleep 2s
-
