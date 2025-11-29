@@ -31,7 +31,7 @@ Set Width 1200
 Set Height 800
 Set Theme "Monokai Pro"
 Set FontSize 18
-Set Shell "bash"
+Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
@@ -350,7 +350,7 @@ Set Width 1200
 Set Height 800
 Set Theme "Monokai Pro"
 Set FontSize 18
-Set Shell "bash"
+Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
