@@ -92,11 +92,29 @@ jobs:
           chmod +x generate-demos.sh
           GENERATE_GIFS=0 ./generate-demos.sh
       
-      - name: Generate demo GIFs
+      - name: Find all tape files
+        id: tapes
+        run: |
+          cd demos/vhs
+          # Find all tape files and output as JSON array for matrix
+          TAPES=$(find ../examples -name "*.tape" -type f | jq -R -s -c 'split("\n") | map(select(. != ""))')
+          echo "tapes=$TAPES" >> $GITHUB_OUTPUT
+      
+      - name: Generate demo GIFs in parallel
         run: |
           export DISPLAY=:99
-          cd demos/vhs
-          GENERATE_GIFS=1 ./generate-demos.sh
+          TAPE_FILE="${{ matrix.tape }}"
+          EXAMPLE_DIR=$(dirname "$TAPE_FILE")
+          TAPE_NAME=$(basename "$TAPE_FILE")
+          cd "$EXAMPLE_DIR"
+          echo "Generating GIF from $TAPE_FILE"
+          vhs < "$TAPE_NAME" || echo "Failed to generate GIF from $TAPE_FILE"
+        env:
+          DISPLAY: :99
+        strategy:
+          fail-fast: false
+          matrix:
+            tape: ${{ fromJson(steps.tapes.outputs.tapes) }}
       
       - name: Check for changes
         id: check
