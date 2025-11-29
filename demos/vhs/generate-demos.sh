@@ -33,11 +33,6 @@ Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
 
-# Debug: Print working directory
-Type "pwd"
-Enter
-Sleep 500ms
-
 # Build the example
 Type "go build -o ${binary_name} ./cmd/${main_cmd}"
 Enter
@@ -323,11 +318,6 @@ Set Height 800
 Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
-
-# Debug: Print working directory
-Type "pwd"
-Enter
-Sleep 500ms
 
 # Build all CLIs
 Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
