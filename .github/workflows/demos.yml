@@ -65,7 +65,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg ttyd xvfb
+          sudo apt-get install -y ffmpeg ttyd xvfb zsh
       
       - name: Cache VHS binary
         id: cache-vhs
@@ -123,7 +123,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg ttyd xvfb
+          sudo apt-get install -y ffmpeg ttyd xvfb zsh
       
       - name: Build example
         run: |
