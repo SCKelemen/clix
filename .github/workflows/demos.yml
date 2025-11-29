@@ -231,34 +231,24 @@ jobs:
       
       - name: Copy GIFs to example directories
         run: |
-          # Copy each GIF to its corresponding example directory
+          # Copy each downloaded GIF to its corresponding example directory
           for gif_file in gifs/*.gif; do
             if [ -f "$gif_file" ]; then
               gif_name=$(basename "$gif_file")
-              # Find the corresponding example directory
+              echo "Processing $gif_name"
+              
+              # Find matching example directory by checking tape files
               for example_dir in examples/*/; do
-                if [ -f "$example_dir/${gif_name}" ] || [ -f "$example_dir/*.tape" ]; then
-                  echo "Copying $gif_name to $example_dir"
-                  cp "$gif_file" "$example_dir/"
-                  break
-                fi
-              done
-            fi
-          done
-          # Also try direct matching by name
-          for gif_file in gifs/*.gif; do
-            if [ -f "$gif_file" ]; then
-              gif_name=$(basename "$gif_file")
-              # Try to find matching example directory
-              for example_dir in examples/*/; do
-                tape_file=$(find "$example_dir" -name "*.tape" -type f | head -1)
-                if [ -n "$tape_file" ]; then
-                  expected_gif="${tape_file%.tape}.gif"
-                  if [ "$(basename "$expected_gif")" = "$gif_name" ]; then
-                    echo "Copying $gif_name to $example_dir"
-                    cp "$gif_file" "$example_dir/"
+                for tape_file in "$example_dir"/*.tape; do
+                  if [ -f "$tape_file" ]; then
+                    expected_gif="${tape_file%.tape}.gif"
+                    if [ "$(basename "$expected_gif")" = "$gif_name" ]; then
+                      echo "Copying $gif_name to $example_dir"
+                      cp "$gif_file" "$example_dir/"
+                      break 2
+                    fi
                   fi
-                fi
+                done
               done
             fi
           done
