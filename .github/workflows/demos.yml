@@ -104,16 +104,32 @@ jobs:
           chmod +x generate-demos.sh
           GENERATE_GIFS=0 ./generate-demos.sh
       
-      - name: Install ffmpeg (workaround for vhs-action issue)
+      - name: Install VHS and dependencies
         run: |
+          # Install ffmpeg from Ubuntu repos (more reliable than vhs-action's method)
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg ttyd xvfb
+          # Install VHS
+          go install github.com/charmbracelet/vhs@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+      
+      - name: Setup display server
+        run: |
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+          sleep 2
       
       - name: Generate demo GIF
-        uses: charmbracelet/vhs-action@v1
-        with:
-          path: ${{ matrix.tape }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          export DISPLAY=:99
+          TAPE_FILE="${{ matrix.tape }}"
+          EXAMPLE_DIR=$(dirname "$TAPE_FILE")
+          TAPE_NAME=$(basename "$TAPE_FILE")
+          cd "$EXAMPLE_DIR"
+          echo "Generating GIF from $TAPE_FILE"
+          vhs < "$TAPE_NAME" || echo "Failed to generate GIF from $TAPE_FILE"
+        env:
+          DISPLAY: :99
 
   commit:
     needs: generate-demos
