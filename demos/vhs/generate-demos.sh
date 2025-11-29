@@ -32,11 +32,7 @@ Set Height 800
 Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
-
-# Set TERM for color support
-Type "export TERM=xterm-256color"
-Enter
-Sleep 200ms
+Env TERM "xterm-256color"
 
 # Build the example
 Type "go build -o ${binary_name} ./cmd/${main_cmd}"
@@ -171,9 +167,13 @@ Sleep 2s
 # Run style command with interactive prompt
 Type "./styled style"
 Enter
-Sleep 1s
-# Wait for prompt to appear, then type name
+Sleep 1.5s
+# Wait for name prompt to appear, then type name
 Type "Test User"
+Enter
+Sleep 1.5s
+# Wait for confirmation prompt
+Type "y"
 Enter
 Sleep 1.5s
 
