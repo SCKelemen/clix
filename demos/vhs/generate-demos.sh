@@ -35,8 +35,8 @@ Set Shell "bash"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Build the example
-Type "go build -o ${binary_name} ./cmd/${main_cmd}"
+# Ensure NO_COLOR is not set and build
+Type "unset NO_COLOR && go build -o ${binary_name} ./cmd/${main_cmd}"
 Enter
 Sleep 2s
 
@@ -156,8 +156,8 @@ SURVEYEOF
             ;;
         "lipgloss")
             cat >> "$tape_file" <<'LIPGLOSSEOF'
-# Run styled (prompts for name)
-Type "./styled"
+# Run styled (prompts for name) - ensure colors are enabled
+Type "unset NO_COLOR && ./styled"
 Enter
 Sleep 2s
 # Wait for banner and name prompt to appear, then type name
@@ -168,12 +168,12 @@ Sleep 2s
 Sleep 1s
 
 # Show help
-Type "./styled --help"
+Type "unset NO_COLOR && ./styled --help"
 Enter
 Sleep 2s
 
 # Show format option (non-interactive)
-Type "./styled style --format json"
+Type "unset NO_COLOR && ./styled style --format json"
 Enter
 Sleep 1s
 LIPGLOSSEOF
@@ -354,8 +354,8 @@ Set Shell "bash"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Build all CLIs
-Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
+# Build all CLIs (ensure NO_COLOR is unset)
+Type "unset NO_COLOR && go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
 Enter
 Sleep 3s
 MULTICLIHEAD
