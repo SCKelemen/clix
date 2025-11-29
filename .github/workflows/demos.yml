@@ -69,6 +69,12 @@ jobs:
             done
           fi
       
+      - name: Install VHS
+        uses: charmbracelet/vhs-action@v1
+        with:
+          path: ""
+          version: "latest"
+      
       - name: Discover and generate tape files
         run: |
           cd demos/vhs
@@ -77,24 +83,8 @@ jobs:
       
       - name: Generate demo GIFs
         run: |
-          # Find all tape files and generate GIFs using vhs-action
-          for tape_file in examples/*/*.tape; do
-            if [ -f "$tape_file" ]; then
-              echo "Generating GIF from $tape_file"
-              # vhs-action needs to be run from the directory containing the tape file
-              tape_dir=$(dirname "$tape_file")
-              tape_name=$(basename "$tape_file")
-              cd "$tape_dir"
-              # Use vhs directly since vhs-action doesn't support glob patterns
-              # Install vhs if not already available
-              if ! command -v vhs &> /dev/null; then
-                go install github.com/charmbracelet/vhs@latest
-                export PATH="$HOME/go/bin:$PATH"
-              fi
-              vhs < "$tape_name" || echo "Failed to generate GIF from $tape_file"
-              cd "$GITHUB_WORKSPACE"
-            fi
-          done
+          cd demos/vhs
+          GENERATE_GIFS=1 ./generate-demos.sh
       
       - name: Check for changes
         id: check
