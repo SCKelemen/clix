@@ -9,12 +9,14 @@ func NewListCommand() *clix.Command {
 	cmd := clix.NewCommand("list")
 	cmd.Short = "List security vulnerabilities"
 	var severity string
-	cmd.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{
-		Name:    "severity",
-		Short:   "s",
-		Usage:   "Filter by severity (low, medium, high, critical)",
-		Default: "",
-		Value:   &severity,
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:    "severity",
+			Short:   "s",
+			Usage:   "Filter by severity (low, medium, high, critical)",
+			Default: "",
+			Value:   &severity,
+		},
 	})
 	cmd.Run = func(ctx *clix.Context) error {
 		vulns := []map[string]string{

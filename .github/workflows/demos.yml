@@ -153,6 +153,10 @@ jobs:
           TERM: xterm-256color
           COLORTERM: truecolor
         run: |
+          # Explicitly unset NO_COLOR to ensure colors work
+          unset NO_COLOR
+          export NO_COLOR=""
+          
           TAPE_FILE="${{ matrix.tape }}"
           # Use bash parameter expansion for case-sensitive path handling
           EXAMPLE_DIR="${TAPE_FILE%/*}"
@@ -167,6 +171,9 @@ jobs:
           
           echo "Working directory: $(pwd)"
           echo "PATH=$PATH"
+          echo "TERM=$TERM"
+          echo "COLORTERM=$COLORTERM"
+          echo "NO_COLOR=${NO_COLOR:-unset}"
           echo "Go version: $(go version)"
           echo "VHS path: $(which vhs)"
           echo "Contents before VHS:"
