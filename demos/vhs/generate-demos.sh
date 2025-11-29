@@ -35,6 +35,7 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 Env PATH "/usr/bin:/bin:/usr/local/bin:\$HOME/go/bin:\$PATH"
+RequireInteractive
 
 # Build the example (unset NO_COLOR and clear while hidden)
 Hide
@@ -360,6 +361,7 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 Env PATH "/usr/bin:/bin:/usr/local/bin:$HOME/go/bin:$PATH"
+RequireInteractive
 
 # Build all CLIs
 Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"

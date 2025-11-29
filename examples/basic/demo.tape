@@ -41,3 +41,6 @@ Sleep 500ms
 Type "Bob"
 Enter
 Sleep 1s
+
+# Keep terminal visible at end (prevent transparency)
+Sleep 500ms
