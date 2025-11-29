@@ -34,7 +34,7 @@ jobs:
       tapes: ${{ steps.tapes.outputs.tapes }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       
       - name: Install jq
         run: |
@@ -53,6 +53,9 @@ jobs:
   setup:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -90,7 +93,7 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           ref: ${{ github.ref }}
@@ -265,7 +268,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           ref: ${{ github.ref }}
