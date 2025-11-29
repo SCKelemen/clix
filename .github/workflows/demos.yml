@@ -232,9 +232,10 @@ jobs:
           
           echo "Generating GIF from $TAPE_FILE"
           # VHS needs Go in PATH for the build commands in tape files
-          # Set environment variables that VHS will use
+          # Set environment variables that VHS will use for color support
           export TERM=xterm-256color
           export COLORTERM=truecolor
+          unset NO_COLOR  # Ensure NO_COLOR is not set
           timeout 600 vhs < "$TAPE_NAME" || {
             echo "VHS failed or timed out, checking for errors..."
             echo "Contents after VHS:"
@@ -260,6 +261,7 @@ jobs:
           DISPLAY: :99
           TERM: xterm-256color
           COLORTERM: truecolor
+          NO_COLOR: ""  # Explicitly unset NO_COLOR
           PATH: /usr/bin:/bin:/usr/local/bin:${{ env.PATH }}:$HOME/go/bin
       
       - name: Upload generated GIF
