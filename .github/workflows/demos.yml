@@ -128,13 +128,23 @@ jobs:
       - name: Build example
         run: |
           TAPE_FILE="${{ matrix.tape }}"
-          EXAMPLE_DIR=$(dirname "$TAPE_FILE")
-          EXAMPLE_NAME=$(basename "$EXAMPLE_DIR")
+          # Use bash parameter expansion for case-sensitive path handling
+          EXAMPLE_DIR="${TAPE_FILE%/*}"
+          EXAMPLE_NAME="${EXAMPLE_DIR##*/}"
+          
+          echo "Building example: $EXAMPLE_NAME in $EXAMPLE_DIR"
+          echo "Tape file: $TAPE_FILE"
+          
+          # Verify paths exist (case-sensitive check)
+          if [ ! -d "$EXAMPLE_DIR" ]; then
+            echo "ERROR: Example directory not found: $EXAMPLE_DIR"
+            exit 1
+          fi
           
           # Build the example
           if [ -d "$EXAMPLE_DIR/cmd" ]; then
             for cmd_dir in "$EXAMPLE_DIR/cmd"/*/; do
-              if [ -f "$cmd_dir/main.go" ]; then
+              if [ -d "$cmd_dir" ] && [ -f "$cmd_dir/main.go" ]; then
                 cmd_name=$(basename "$cmd_dir")
                 binary_name="$EXAMPLE_NAME"
                 
@@ -149,13 +159,15 @@ jobs:
                 (cd "$EXAMPLE_DIR" && go build -o "$binary_name" "./cmd/$cmd_name" || true)
               fi
             done
+          else
+            echo "WARNING: cmd directory not found in $EXAMPLE_DIR"
           fi
           
           # Handle multicli separately
           if [ "$EXAMPLE_NAME" = "multicli" ] && [ -d "$EXAMPLE_DIR/cmd" ]; then
-            cd "$EXAMPLE_DIR"
+            cd "$EXAMPLE_DIR" || exit 1
             for cmd_dir in cmd/*/; do
-              if [ -f "$cmd_dir/main.go" ]; then
+              if [ -d "$cmd_dir" ] && [ -f "$cmd_dir/main.go" ]; then
                 binary=$(basename "$cmd_dir")
                 echo "Building multicli/$binary"
                 go build -o "$binary" "./$cmd_dir" || true
@@ -185,8 +197,12 @@ jobs:
           EXAMPLE_DIR="${TAPE_FILE%/*}"
           TAPE_NAME="${TAPE_FILE##*/}"
           
-          # Ensure we're in the example directory
-          cd "$EXAMPLE_DIR"
+          # Ensure we're in the example directory (case-sensitive)
+          if [ ! -d "$EXAMPLE_DIR" ]; then
+            echo "ERROR: Example directory not found: $EXAMPLE_DIR"
+            exit 1
+          fi
+          cd "$EXAMPLE_DIR" || exit 1
           echo "Working directory: $(pwd)"
           echo "Go version: $(go version)"
           echo "Go path: $(which go)"
