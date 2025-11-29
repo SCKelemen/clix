@@ -359,6 +359,7 @@ Set FontSize 18
 Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
+Env PATH "/usr/bin:/bin:/usr/local/bin:$HOME/go/bin:$PATH"
 
 # Build all CLIs
 Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
