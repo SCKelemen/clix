@@ -155,17 +155,8 @@ SURVEYEOF
             ;;
         "lipgloss")
             cat >> "$tape_file" <<'LIPGLOSSEOF'
-# Show styled help
+# Run styled (prompts for name)
 Type "./styled"
-Enter
-Sleep 1s
-
-Type "./styled --help"
-Enter
-Sleep 2s
-
-# Run style command with interactive form
-Type "./styled style"
 Enter
 Sleep 2s
 # Wait for banner and name prompt to appear, then type name
@@ -174,6 +165,11 @@ Enter
 Sleep 2s
 # Command completes and shows output, wait for it to finish
 Sleep 1s
+
+# Show help
+Type "./styled --help"
+Enter
+Sleep 2s
 
 # Show format option (non-interactive)
 Type "./styled style --format json"
