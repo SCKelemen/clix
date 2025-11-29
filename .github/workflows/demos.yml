@@ -173,6 +173,7 @@ jobs:
           sleep 2
       
       - name: Generate demo GIF
+        timeout-minutes: 10
         run: |
           export DISPLAY=:99
           export PATH="/usr/bin:/bin:/usr/local/bin:$HOME/go/bin:$PATH"
@@ -190,21 +191,21 @@ jobs:
           echo "Contents before VHS:"
           ls -la
           
-          # Pre-build the binary so VHS doesn't need to (tape files include build commands but they may fail)
-          # The tape files will still try to build, but if it's already built, that's fine
-          echo "Pre-building binary if needed..."
-          if [ -f "./cmd/${TAPE_NAME%.tape}/main.go" ] || [ -f "./cmd/demo/main.go" ] || [ -f "./cmd/styled/main.go" ] || [ -f "./cmd/gcloud/main.go" ] || [ -f "./cmd/gh/main.go" ]; then
-            # Try to build - tape file will handle the actual build command
-            echo "Binary should be built by tape file"
-          fi
+          # Update tape file to use actual PATH (VHS doesn't expand variables in Env)
+          # Replace $HOME and $PATH with actual values
+          GO_BIN_PATH="$HOME/go/bin"
+          ACTUAL_PATH="/usr/bin:/bin:/usr/local/bin:$GO_BIN_PATH:$(echo $PATH | tr ':' '\n' | grep -v "^$GO_BIN_PATH$" | tr '\n' ':' | sed 's/:$//')"
+          sed -i "s|Env PATH \".*\"|Env PATH \"$ACTUAL_PATH\"|" "$TAPE_NAME"
+          echo "Updated PATH in tape file:"
+          grep "Env PATH" "$TAPE_NAME"
           
           echo "Generating GIF from $TAPE_FILE"
           # VHS needs Go in PATH for the build commands in tape files
           # Set environment variables that VHS will use
           export TERM=xterm-256color
           export COLORTERM=truecolor
-          vhs < "$TAPE_NAME" || {
-            echo "VHS failed, checking for errors..."
+          timeout 600 vhs < "$TAPE_NAME" || {
+            echo "VHS failed or timed out, checking for errors..."
             echo "Contents after VHS:"
             ls -la
             echo "Checking if binary exists:"
