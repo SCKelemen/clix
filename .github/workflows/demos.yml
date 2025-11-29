@@ -209,10 +209,18 @@ jobs:
           PATH: /usr/bin:/bin:/usr/local/bin:${{ env.PATH }}:$HOME/go/bin
       
       - name: Upload generated GIF
-        uses: actions/upload-artifact@v4
         if: always()
+        run: |
+          # Sanitize artifact name (replace / with - and remove examples- prefix)
+          ARTIFACT_NAME=$(echo "gif-${{ matrix.tape }}" | sed 's/\//-/g' | sed 's/^gif-examples-/gif-/' | sed 's/\.tape$//')
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
+        continue-on-error: true
+      
+      - name: Upload generated GIF artifact
+        uses: actions/upload-artifact@v4
+        if: always() && env.ARTIFACT_NAME != ''
         with:
-          name: gif-${{ matrix.tape != '' && replace(replace(matrix.tape, '/', '-'), 'examples-', '') || 'unknown' }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: gifs/*.gif
           retention-days: 1
 
