@@ -78,3 +78,23 @@ jobs:
         with:
           tapes: 'examples/*/*.tape'
           token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Check for changes
+        id: check
+        run: |
+          if [ -n "$(git status --porcelain examples/*/*.gif examples/*/*.tape)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Commit changes
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          git config --local user.email "samuel.kelemen@users.noreply.github.com"
+          git config --local user.name "Samuel Kelemen"
+          git add examples/*/*.gif examples/*/*.tape
+          git commit -m "Auto-update demo GIFs [skip ci]" || exit 0
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
