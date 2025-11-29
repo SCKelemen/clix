@@ -29,7 +29,7 @@ generate_tape() {
 Output ${binary_name}.gif
 Set Width 1200
 Set Height 800
-Set Theme "Monokai Pro"
+Set Theme "nord"
 Set FontSize 18
 Set Shell "zsh"
 Env TERM "xterm-256color"
@@ -348,7 +348,7 @@ discover_examples() {
 Output multicli.gif
 Set Width 1200
 Set Height 800
-Set Theme "Monokai Pro"
+Set Theme "nord"
 Set FontSize 18
 Set Shell "zsh"
 Env TERM "xterm-256color"
