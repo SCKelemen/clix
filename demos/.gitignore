@@ -1,0 +1,6 @@
+# VHS output files (GIFs)
+*.gif
+
+# Keep the directory structure
+!.gitkeep
+
