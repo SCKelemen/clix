@@ -36,10 +36,11 @@ Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
 # Build the example (unset NO_COLOR but hide it from view)
+Hide
 Type "unset NO_COLOR"
 Enter
 Sleep 100ms
-Hide
+Show
 Type "go build -o ${binary_name} ./cmd/${main_cmd}"
 Enter
 Sleep 2s
