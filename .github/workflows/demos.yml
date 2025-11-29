@@ -152,10 +152,14 @@ jobs:
           DISPLAY: :99
           TERM: xterm-256color
           COLORTERM: truecolor
+          SHELL: /bin/zsh
         run: |
           # Explicitly unset NO_COLOR to ensure colors work
           unset NO_COLOR
           export NO_COLOR=""
+          
+          # Ensure we're using zsh for color support
+          export SHELL=/bin/zsh
           
           TAPE_FILE="${{ matrix.tape }}"
           # Use bash parameter expansion for case-sensitive path handling
