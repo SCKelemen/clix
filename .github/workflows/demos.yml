@@ -6,14 +6,15 @@ on:
       - main
     paths:
       - 'examples/**'
-      - 'demos/vhs/generate-demos.sh'
+      - 'demos/vhs/**'
       - '.github/workflows/demos.yml'
   pull_request:
     branches:
       - main
     paths:
       - 'examples/**'
-      - 'demos/vhs/generate-demos.sh'
+      - 'demos/vhs/**'
+      - '.github/workflows/demos.yml'
   workflow_dispatch:
     inputs:
       force_regenerate:
@@ -41,50 +42,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y jq
       
+      # Regenerate / refresh tape files before discovering them
+      - name: Generate / refresh tape files
+        run: |
+          cd demos/vhs
+          chmod +x ./generate-demos.sh
+          GENERATE_GIFS=0 ./generate-demos.sh
+      
       - name: Find all tape files
         id: tapes
         run: |
-          # Find all tape files and output as JSON array for matrix
           TAPES=$(find examples -name "*.tape" -type f | jq -R -s -c 'split("\n") | map(select(. != ""))')
-          echo "tapes=$TAPES" >> $GITHUB_OUTPUT
+          echo "tapes=$TAPES" >> "$GITHUB_OUTPUT"
           echo "Found tape files:"
           find examples -name "*.tape" -type f
 
-  setup:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-      
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-          cache-dependency-path: go.sum
-      
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg ttyd xvfb zsh
-      
-      - name: Cache VHS binary
-        id: cache-vhs
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.GOPATH }}/bin
-          key: vhs-${{ runner.os }}-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            vhs-${{ runner.os }}-
-      
-      - name: Install VHS
-        if: steps.cache-vhs.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p $HOME/go/bin
-          go install github.com/charmbracelet/vhs@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
-
   generate-demos:
-    needs: [prepare, setup]
+    needs: prepare
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -102,30 +76,19 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
-      
-      - name: Restore VHS from cache
-        id: cache-vhs
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.GOPATH }}/bin
-          key: vhs-${{ runner.os }}-${{ hashFiles('go.sum') }}
-          restore-keys: |
-            vhs-${{ runner.os }}-
-      
-      - name: Install VHS if not cached
-        if: steps.cache-vhs.outputs.cache-hit != 'true'
-        run: |
-          mkdir -p $HOME/go/bin
-          go install github.com/charmbracelet/vhs@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
+          go-version: '1.23.x'
       
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg ttyd xvfb zsh
       
-      - name: Build example
+      - name: Install VHS
+        run: |
+          go install github.com/charmbracelet/vhs@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      
+      - name: Build example binaries
         run: |
           TAPE_FILE="${{ matrix.tape }}"
           # Use bash parameter expansion for case-sensitive path handling
@@ -141,59 +104,57 @@ jobs:
             exit 1
           fi
           
-          # Build the example
+          # Build ./cmd/* into the expected binary names
           if [ -d "$EXAMPLE_DIR/cmd" ]; then
             for cmd_dir in "$EXAMPLE_DIR/cmd"/*/; do
               if [ -d "$cmd_dir" ] && [ -f "$cmd_dir/main.go" ]; then
                 cmd_name=$(basename "$cmd_dir")
                 binary_name="$EXAMPLE_NAME"
                 
-                # Special cases
                 case "$EXAMPLE_NAME" in
-                  "basic") binary_name="demo" ;;
-                  "survey") binary_name="demo" ;;
-                  "lipgloss") binary_name="styled" ;;
+                  basic|survey) binary_name="demo" ;;
+                  lipgloss)     binary_name="styled" ;;
                 esac
                 
                 echo "Building $cmd_name -> $binary_name"
-                (cd "$EXAMPLE_DIR" && go build -o "$binary_name" "./cmd/$cmd_name" || true)
+                (
+                  cd "$EXAMPLE_DIR" && \
+                  go build -o "$binary_name" "./cmd/$cmd_name"
+                )
               fi
             done
           else
             echo "WARNING: cmd directory not found in $EXAMPLE_DIR"
           fi
           
-          # Handle multicli separately
+          # Special handling for multicli
           if [ "$EXAMPLE_NAME" = "multicli" ] && [ -d "$EXAMPLE_DIR/cmd" ]; then
             cd "$EXAMPLE_DIR" || exit 1
             for cmd_dir in cmd/*/; do
               if [ -d "$cmd_dir" ] && [ -f "$cmd_dir/main.go" ]; then
                 binary=$(basename "$cmd_dir")
                 echo "Building multicli/$binary"
-                go build -o "$binary" "./$cmd_dir" || true
+                go build -o "$binary" "./$cmd_dir"
               fi
             done
           fi
       
-      - name: Discover and generate tape file
+      - name: Start Xvfb
+        env:
+          DISPLAY: :99
         run: |
-          cd demos/vhs
-          chmod +x generate-demos.sh
-          GENERATE_GIFS=0 ./generate-demos.sh
-      
-      - name: Setup display server
-        run: |
-          export DISPLAY=:99
-          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-          sleep 2
+          Xvfb :99 -screen 0 1280x720x24 > /dev/null 2>&1 &
+          sleep 3
       
       - name: Generate demo GIF
         timeout-minutes: 10
+        env:
+          DISPLAY: :99
+          TERM: xterm-256color
+          COLORTERM: truecolor
         run: |
-          export DISPLAY=:99
-          export PATH="/usr/bin:/bin:/usr/local/bin:$HOME/go/bin:$PATH"
           TAPE_FILE="${{ matrix.tape }}"
-          # Use bash parameter expansion instead of dirname/basename
+          # Use bash parameter expansion for case-sensitive path handling
           EXAMPLE_DIR="${TAPE_FILE%/*}"
           TAPE_NAME="${TAPE_FILE##*/}"
           
@@ -203,16 +164,17 @@ jobs:
             exit 1
           fi
           cd "$EXAMPLE_DIR" || exit 1
+          
           echo "Working directory: $(pwd)"
+          echo "PATH=$PATH"
           echo "Go version: $(go version)"
-          echo "Go path: $(which go)"
           echo "VHS path: $(which vhs)"
           echo "Contents before VHS:"
           ls -la
           
           # Update tape file to use actual PATH (VHS doesn't expand variables in Env)
           # Replace $HOME and $PATH with actual values
-          GO_BIN_PATH="$HOME/go/bin"
+          GO_BIN_PATH="$(go env GOPATH)/bin"
           ACTUAL_PATH="/usr/bin:/bin:/usr/local/bin:$GO_BIN_PATH:$(echo $PATH | tr ':' '\n' | grep -v "^$GO_BIN_PATH$" | tr '\n' ':' | sed 's/:$//')"
           # On Linux, sed -i requires a backup suffix; on macOS, empty string works
           # Try Linux style first (with .bak), then macOS style (empty string)
@@ -231,11 +193,6 @@ jobs:
           fi
           
           echo "Generating GIF from $TAPE_FILE"
-          # VHS needs Go in PATH for the build commands in tape files
-          # Set environment variables that VHS will use for color support
-          export TERM=xterm-256color
-          export COLORTERM=truecolor
-          unset NO_COLOR  # Ensure NO_COLOR is not set
           timeout 600 vhs < "$TAPE_NAME" || {
             echo "VHS failed or timed out, checking for errors..."
             echo "Contents after VHS:"
@@ -257,12 +214,6 @@ jobs:
             ls -la
             exit 1
           fi
-        env:
-          DISPLAY: :99
-          TERM: xterm-256color
-          COLORTERM: truecolor
-          NO_COLOR: ""  # Explicitly unset NO_COLOR
-          PATH: /usr/bin:/bin:/usr/local/bin:${{ env.PATH }}:$HOME/go/bin
       
       - name: Upload generated GIF
         if: always()
@@ -340,15 +291,15 @@ jobs:
         id: check
         run: |
           if [ -n "$(git status --porcelain examples/*/*.gif examples/*/*.tape)" ]; then
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> "$GITHUB_OUTPUT"
             echo "Changed files:"
             git status --porcelain examples/*/*.gif examples/*/*.tape
           else
-            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
       
       - name: Commit changes
-        if: steps.check.outputs.changed == 'true'
+        if: steps.check.outputs.changed == 'true' && github.event_name != 'pull_request'
         run: |
           # Get the branch name - use HEAD_REF for PRs, otherwise extract from GITHUB_REF
           if [ -n "${{ github.head_ref }}" ]; then
@@ -363,7 +314,7 @@ jobs:
           # Checkout the branch if we're in detached HEAD state
           git checkout -B "$BRANCH_NAME" "origin/$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
           
-          # Pull latest changes to ensure we're up to date
+          # Pull latest changes to ensure we's up to date
           git pull origin "$BRANCH_NAME" --rebase || git pull origin "$BRANCH_NAME" || true
           
           git config --local user.email "${{ secrets.GIT_USER_EMAIL || 'SCKelemen@users.noreply.github.com' }}"
