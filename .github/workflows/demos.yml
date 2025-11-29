@@ -160,10 +160,11 @@ jobs:
       - name: Generate demo GIF
         run: |
           export DISPLAY=:99
-          export PATH="$HOME/go/bin:$PATH"
+          export PATH="/usr/bin:/bin:/usr/local/bin:$HOME/go/bin:$PATH"
           TAPE_FILE="${{ matrix.tape }}"
-          EXAMPLE_DIR=$(dirname "$TAPE_FILE")
-          TAPE_NAME=$(basename "$TAPE_FILE")
+          # Use bash parameter expansion instead of dirname/basename
+          EXAMPLE_DIR="${TAPE_FILE%/*}"
+          TAPE_NAME="${TAPE_FILE##*/}"
           
           # Ensure we're in the example directory
           cd "$EXAMPLE_DIR"
@@ -182,7 +183,7 @@ jobs:
           }
         env:
           DISPLAY: :99
-          PATH: ${{ env.PATH }}:$HOME/go/bin
+          PATH: /usr/bin:/bin:/usr/local/bin:${{ env.PATH }}:$HOME/go/bin
 
   commit:
     needs: generate-demos
