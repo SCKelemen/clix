@@ -212,13 +212,14 @@ jobs:
         if: always()
         run: |
           # Sanitize artifact name (replace / with - and remove examples- prefix)
-          ARTIFACT_NAME=$(echo "gif-${{ matrix.tape }}" | sed 's/\//-/g' | sed 's/^gif-examples-/gif-/' | sed 's/\.tape$//')
+          TAPE_FILE="${{ matrix.tape }}"
+          ARTIFACT_NAME=$(echo "$TAPE_FILE" | sed 's/\//-/g' | sed 's/^examples-/gif-/' | sed 's/\.tape$//')
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
-        continue-on-error: true
+          echo "Artifact name: $ARTIFACT_NAME"
       
       - name: Upload generated GIF artifact
         uses: actions/upload-artifact@v4
-        if: always() && env.ARTIFACT_NAME != ''
+        if: always()
         with:
           name: ${{ env.ARTIFACT_NAME }}
           path: gifs/*.gif
