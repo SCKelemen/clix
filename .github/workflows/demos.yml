@@ -153,10 +153,11 @@ jobs:
           TERM: xterm-256color
           COLORTERM: truecolor
           SHELL: /bin/zsh
+          # Don't set NO_COLOR at all - unset it in the run script instead
         run: |
           # Explicitly unset NO_COLOR to ensure colors work
+          # Setting to empty string still defines the variable, so we need to unset it
           unset NO_COLOR
-          export NO_COLOR=""
           
           # Ensure we're using zsh for color support
           export SHELL=/bin/zsh
