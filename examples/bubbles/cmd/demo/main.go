@@ -135,13 +135,22 @@ func (p *BubblesPrompter) promptText(ctx context.Context, cfg *clix.PromptConfig
 		ctx:       ctx,
 	}
 
-	program := tea.NewProgram(model, tea.WithInput(p.In), tea.WithOutput(p.Out))
+	program := tea.NewProgram(
+		model,
+		tea.WithInput(p.In),
+		tea.WithOutput(p.Out),
+		tea.WithoutAltScreen(), // Don't use alternate screen buffer
+	)
 	finalModel, err := program.Run()
 	if err != nil {
+		// Ensure cursor is visible and terminal is clean
+		fmt.Fprint(p.Out, "\033[?25h\n")
 		return "", err
 	}
 
 	m := finalModel.(textInputModel)
+	// Ensure cursor is visible and add newline for clean output
+	fmt.Fprint(p.Out, "\033[?25h\n")
 	if m.textInput.Value() == "" && cfg.Default != "" {
 		return cfg.Default, nil
 	}
@@ -177,13 +186,22 @@ func (p *BubblesPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 		ctx:  ctx,
 	}
 
-	program := tea.NewProgram(model, tea.WithInput(p.In), tea.WithOutput(p.Out))
+	program := tea.NewProgram(
+		model,
+		tea.WithInput(p.In),
+		tea.WithOutput(p.Out),
+		tea.WithoutAltScreen(), // Don't use alternate screen buffer
+	)
 	finalModel, err := program.Run()
 	if err != nil {
+		// Ensure cursor is visible and terminal is clean
+		fmt.Fprint(p.Out, "\033[?25h\n")
 		return "", err
 	}
 
 	m := finalModel.(listModel)
+	// Ensure cursor is visible and add newline for clean output
+	fmt.Fprint(p.Out, "\033[?25h\n")
 	selected := m.list.SelectedItem()
 	if selected == nil {
 		return "", fmt.Errorf("no option selected")
@@ -213,13 +231,22 @@ func (p *BubblesPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 		selected: make(map[int]bool),
 	}
 
-	program := tea.NewProgram(model, tea.WithInput(p.In), tea.WithOutput(p.Out))
+	program := tea.NewProgram(
+		model,
+		tea.WithInput(p.In),
+		tea.WithOutput(p.Out),
+		tea.WithoutAltScreen(), // Don't use alternate screen buffer
+	)
 	finalModel, err := program.Run()
 	if err != nil {
+		// Ensure cursor is visible and terminal is clean
+		fmt.Fprint(p.Out, "\033[?25h\n")
 		return "", err
 	}
 
 	m := finalModel.(multiSelectModel)
+	// Ensure cursor is visible and add newline for clean output
+	fmt.Fprint(p.Out, "\033[?25h\n")
 	var selected []string
 	for i, opt := range cfg.Options {
 		if m.selected[i] {
@@ -244,13 +271,22 @@ func (p *BubblesPrompter) promptConfirm(ctx context.Context, cfg *clix.PromptCon
 		ctx:       ctx,
 	}
 
-	program := tea.NewProgram(model, tea.WithInput(p.In), tea.WithOutput(p.Out))
+	program := tea.NewProgram(
+		model,
+		tea.WithInput(p.In),
+		tea.WithOutput(p.Out),
+		tea.WithoutAltScreen(), // Don't use alternate screen buffer
+	)
 	finalModel, err := program.Run()
 	if err != nil {
+		// Ensure cursor is visible and terminal is clean
+		fmt.Fprint(p.Out, "\033[?25h\n")
 		return "", err
 	}
 
 	m := finalModel.(confirmInputModel)
+	// Ensure cursor is visible and add newline for clean output
+	fmt.Fprint(p.Out, "\033[?25h\n")
 	answer := strings.ToLower(strings.TrimSpace(m.textInput.Value()))
 	if answer == "" && cfg.Default != "" {
 		answer = strings.ToLower(cfg.Default)
