@@ -103,8 +103,12 @@ jobs:
       - name: Commit changes
         if: steps.check.outputs.changed == 'true'
         run: |
-          # Get the branch name from the ref
-          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          # Get the branch name - use HEAD_REF for PRs, otherwise extract from GITHUB_REF
+          if [ -n "${{ github.head_ref }}" ]; then
+            BRANCH_NAME="${{ github.head_ref }}"
+          else
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          fi
           # Checkout the branch if we're in detached HEAD state
           git checkout -B "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
           git config --local user.email "${{ secrets.GIT_USER_EMAIL || 'SCKelemen@users.noreply.github.com' }}"
