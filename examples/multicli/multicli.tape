@@ -7,8 +7,8 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Build all CLIs (ensure NO_COLOR is unset)
-Type "unset NO_COLOR && go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
+# Build all CLIs
+Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
 Enter
 Sleep 3s
 # Show dev CLI

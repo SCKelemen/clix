@@ -7,13 +7,13 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Ensure NO_COLOR is not set and build
-Type "unset NO_COLOR && go build -o styled ./cmd/styled"
+# Build the example
+Type "go build -o styled ./cmd/styled"
 Enter
 Sleep 2s
 
-# Run styled (prompts for name) - ensure colors are enabled
-Type "unset NO_COLOR && ./styled"
+# Run styled (prompts for name)
+Type "./styled"
 Enter
 Sleep 2s
 # Wait for banner and name prompt to appear, then type name
@@ -24,11 +24,11 @@ Sleep 2s
 Sleep 1s
 
 # Show help
-Type "unset NO_COLOR && ./styled --help"
+Type "./styled --help"
 Enter
 Sleep 2s
 
 # Show format option (non-interactive)
-Type "unset NO_COLOR && ./styled style --format json"
+Type "./styled style --format json"
 Enter
 Sleep 1s
