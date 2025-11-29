@@ -245,6 +245,13 @@ jobs:
       
       - name: Copy GIFs to example directories
         run: |
+          echo "Downloaded GIFs location:"
+          find gifs -name "*.gif" -type f || echo "No GIFs found in gifs directory"
+          echo ""
+          echo "Current example directories:"
+          ls -la examples/*/ | head -20
+          echo ""
+          
           # Copy each downloaded GIF to its corresponding example directory
           for gif_file in gifs/*.gif; do
             if [ -f "$gif_file" ]; then
@@ -257,8 +264,10 @@ jobs:
                   if [ -f "$tape_file" ]; then
                     expected_gif="${tape_file%.tape}.gif"
                     if [ "$(basename "$expected_gif")" = "$gif_name" ]; then
-                      echo "Copying $gif_name to $example_dir"
+                      echo "Copying $gif_file to $example_dir"
                       cp "$gif_file" "$example_dir/"
+                      echo "Copied! Verifying:"
+                      ls -lh "$example_dir/$gif_name"
                       break 2
                     fi
                   fi
@@ -266,6 +275,10 @@ jobs:
               done
             fi
           done
+          
+          echo ""
+          echo "GIFs after copying:"
+          find examples -name "*.gif" -type f
       
       - name: Check for changes
         id: check
