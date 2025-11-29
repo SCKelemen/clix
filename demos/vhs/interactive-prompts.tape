@@ -10,6 +10,11 @@ Type "cd examples/survey"
 Enter
 Sleep 500ms
 
+# Build the demo
+Type "go build -o demo ./cmd/demo"
+Enter
+Sleep 2s
+
 # Run simple survey
 Type "./demo simple"
 Enter

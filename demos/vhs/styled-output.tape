@@ -10,6 +10,11 @@ Type "cd examples/lipgloss"
 Enter
 Sleep 500ms
 
+# Build the demo
+Type "go build -o styled ./cmd/styled"
+Enter
+Sleep 2s
+
 # Show styled help
 Type "./styled"
 Enter

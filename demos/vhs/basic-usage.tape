@@ -5,10 +5,14 @@ Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
 
-# Show basic command structure
+# Build and show basic command structure
 Type "cd examples/basic"
 Enter
 Sleep 500ms
+
+Type "go build -o demo ./cmd/demo"
+Enter
+Sleep 2s
 
 Type "./demo"
 Enter

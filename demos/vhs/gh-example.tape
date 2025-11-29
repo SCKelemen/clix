@@ -10,6 +10,11 @@ Type "cd examples/gh"
 Enter
 Sleep 500ms
 
+# Build the demo
+Type "go build -o gh ./cmd/gh"
+Enter
+Sleep 2s
+
 # Show help
 Type "./gh"
 Enter
