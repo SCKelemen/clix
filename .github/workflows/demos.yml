@@ -15,6 +15,12 @@ on:
       - 'examples/**'
       - 'demos/vhs/generate-demos.sh'
   workflow_dispatch:
+    inputs:
+      force_regenerate:
+        description: 'Force regenerate all GIFs'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   prepare:
