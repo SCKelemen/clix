@@ -135,11 +135,11 @@ func (p *BubblesPrompter) promptText(ctx context.Context, cfg *clix.PromptConfig
 		ctx:       ctx,
 	}
 
+	// Use standard output mode (not alternate screen) to avoid terminal state issues
 	program := tea.NewProgram(
 		model,
 		tea.WithInput(p.In),
 		tea.WithOutput(p.Out),
-		tea.WithoutAltScreen(), // Don't use alternate screen buffer
 	)
 	finalModel, err := program.Run()
 	if err != nil {
@@ -186,11 +186,11 @@ func (p *BubblesPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 		ctx:  ctx,
 	}
 
+	// Use standard output mode (not alternate screen) to avoid terminal state issues
 	program := tea.NewProgram(
 		model,
 		tea.WithInput(p.In),
 		tea.WithOutput(p.Out),
-		tea.WithoutAltScreen(), // Don't use alternate screen buffer
 	)
 	finalModel, err := program.Run()
 	if err != nil {
@@ -231,11 +231,11 @@ func (p *BubblesPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 		selected: make(map[int]bool),
 	}
 
+	// Use standard output mode (not alternate screen) to avoid terminal state issues
 	program := tea.NewProgram(
 		model,
 		tea.WithInput(p.In),
 		tea.WithOutput(p.Out),
-		tea.WithoutAltScreen(), // Don't use alternate screen buffer
 	)
 	finalModel, err := program.Run()
 	if err != nil {
@@ -271,11 +271,11 @@ func (p *BubblesPrompter) promptConfirm(ctx context.Context, cfg *clix.PromptCon
 		ctx:       ctx,
 	}
 
+	// Use standard output mode (not alternate screen) to avoid terminal state issues
 	program := tea.NewProgram(
 		model,
 		tea.WithInput(p.In),
 		tea.WithOutput(p.Out),
-		tea.WithoutAltScreen(), // Don't use alternate screen buffer
 	)
 	finalModel, err := program.Run()
 	if err != nil {

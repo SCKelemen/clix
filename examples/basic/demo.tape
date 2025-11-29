@@ -5,6 +5,11 @@ Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
 
+# Debug: Print working directory
+Type "pwd"
+Enter
+Sleep 500ms
+
 # Build the example
 Type "go build -o demo ./cmd/demo"
 Enter

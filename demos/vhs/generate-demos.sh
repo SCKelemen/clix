@@ -33,6 +33,11 @@ Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
 
+# Debug: Print working directory
+Type "pwd"
+Enter
+Sleep 500ms
+
 # Build the example
 Type "go build -o ${binary_name} ./cmd/${main_cmd}"
 Enter
@@ -319,6 +324,11 @@ Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
 
+# Debug: Print working directory
+Type "pwd"
+Enter
+Sleep 500ms
+
 # Build all CLIs
 Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"
 Enter
@@ -387,21 +397,33 @@ generate_gifs() {
     
     echo -e "${GREEN}Generating GIFs...${NC}"
     
-    cd "$VHS_DIR"
-    for tape_file in *.tape; do
-        if [[ ! -f "$tape_file" ]]; then
+    # Find all tape files in examples directories
+    for example_dir in "$EXAMPLES_DIR"/*; do
+        if [[ ! -d "$example_dir" ]]; then
             continue
         fi
         
-        local example_name="${tape_file%.tape}"
-        echo -e "${GREEN}Generating ${example_name}.gif...${NC}"
-        
-        if "$vhs_cmd" < "$tape_file"; then
-            echo -e "${GREEN}✓ Generated ${example_name}.gif${NC}"
-        else
-            echo -e "${YELLOW}⚠ Failed to generate ${example_name}.gif${NC}"
-        fi
+        # Look for .tape files in this example directory
+        for tape_file in "$example_dir"/*.tape; do
+            if [[ ! -f "$tape_file" ]]; then
+                continue
+            fi
+            
+            local example_name=$(basename "$example_dir")
+            local tape_name=$(basename "$tape_file")
+            echo -e "${GREEN}Generating GIF from ${example_name}/${tape_name}...${NC}"
+            
+            # Run VHS from the example directory
+            cd "$example_dir"
+            if "$vhs_cmd" < "$tape_name"; then
+                echo -e "${GREEN}✓ Generated GIF in ${example_name}/${NC}"
+            else
+                echo -e "${YELLOW}⚠ Failed to generate GIF from ${tape_name}${NC}"
+            fi
+        done
     done
+    
+    cd "$PROJECT_ROOT"
 }
 
 # Main execution
