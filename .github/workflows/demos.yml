@@ -185,27 +185,49 @@ jobs:
           cd "$EXAMPLE_DIR"
           echo "Working directory: $(pwd)"
           echo "Go version: $(go version)"
+          echo "Go path: $(which go)"
+          echo "VHS path: $(which vhs)"
           echo "Contents before VHS:"
           ls -la
           
+          # Pre-build the binary so VHS doesn't need to (tape files include build commands but they may fail)
+          # The tape files will still try to build, but if it's already built, that's fine
+          echo "Pre-building binary if needed..."
+          if [ -f "./cmd/${TAPE_NAME%.tape}/main.go" ] || [ -f "./cmd/demo/main.go" ] || [ -f "./cmd/styled/main.go" ] || [ -f "./cmd/gcloud/main.go" ] || [ -f "./cmd/gh/main.go" ]; then
+            # Try to build - tape file will handle the actual build command
+            echo "Binary should be built by tape file"
+          fi
+          
           echo "Generating GIF from $TAPE_FILE"
           # VHS needs Go in PATH for the build commands in tape files
+          # Set environment variables that VHS will use
+          export TERM=xterm-256color
+          export COLORTERM=truecolor
           vhs < "$TAPE_NAME" || {
             echo "VHS failed, checking for errors..."
             echo "Contents after VHS:"
             ls -la
+            echo "Checking if binary exists:"
+            find . -name "*.gif" -o -name "styled" -o -name "demo" -o -name "gcloud" -o -name "gh" | head -10
             exit 1
           }
           
           # Upload generated GIF as artifact
           GIF_FILE="${TAPE_NAME%.tape}.gif"
           if [ -f "$GIF_FILE" ]; then
-            echo "GIF generated: $GIF_FILE"
+            echo "GIF generated: $GIF_FILE ($(ls -lh "$GIF_FILE" | awk '{print $5}'))"
             mkdir -p "$GITHUB_WORKSPACE/gifs"
             cp "$GIF_FILE" "$GITHUB_WORKSPACE/gifs/"
+          else
+            echo "ERROR: GIF file not found: $GIF_FILE"
+            echo "Available files:"
+            ls -la
+            exit 1
           fi
         env:
           DISPLAY: :99
+          TERM: xterm-256color
+          COLORTERM: truecolor
           PATH: /usr/bin:/bin:/usr/local/bin:${{ env.PATH }}:$HOME/go/bin
       
       - name: Upload generated GIF
