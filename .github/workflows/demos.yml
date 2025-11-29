@@ -160,31 +160,29 @@ jobs:
       - name: Generate demo GIF
         run: |
           export DISPLAY=:99
+          export PATH="$HOME/go/bin:$PATH"
           TAPE_FILE="${{ matrix.tape }}"
           EXAMPLE_DIR=$(dirname "$TAPE_FILE")
           TAPE_NAME=$(basename "$TAPE_FILE")
           
-          # Ensure we're in the example directory and binaries exist
+          # Ensure we're in the example directory
           cd "$EXAMPLE_DIR"
           echo "Working directory: $(pwd)"
-          echo "Contents:"
+          echo "Go version: $(go version)"
+          echo "Contents before VHS:"
           ls -la
           
-          # Verify binary exists before running VHS
-          if [ -f "./demo" ] || [ -f "./styled" ] || [ -f "./gcloud" ] || [ -f "./gh" ] || [ -f "./multicli" ] || [ -f "./dev" ] || [ -f "./db" ] || [ -f "./sec" ] || [ -f "./bq" ]; then
-            echo "Binary found, running VHS..."
-          else
-            echo "Warning: No binary found, VHS tape will build it"
-          fi
-          
           echo "Generating GIF from $TAPE_FILE"
+          # VHS needs Go in PATH for the build commands in tape files
           vhs < "$TAPE_NAME" || {
             echo "VHS failed, checking for errors..."
+            echo "Contents after VHS:"
             ls -la
             exit 1
           }
         env:
           DISPLAY: :99
+          PATH: ${{ env.PATH }}:$HOME/go/bin
 
   commit:
     needs: generate-demos
