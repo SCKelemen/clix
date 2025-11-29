@@ -206,11 +206,54 @@ jobs:
           ref: ${{ github.ref }}
           fetch-depth: 0
       
+      - name: Download all generated GIFs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gif-*
+          merge-multiple: true
+          path: gifs
+      
+      - name: Copy GIFs to example directories
+        run: |
+          # Copy each GIF to its corresponding example directory
+          for gif_file in gifs/*.gif; do
+            if [ -f "$gif_file" ]; then
+              gif_name=$(basename "$gif_file")
+              # Find the corresponding example directory
+              for example_dir in examples/*/; do
+                if [ -f "$example_dir/${gif_name}" ] || [ -f "$example_dir/*.tape" ]; then
+                  echo "Copying $gif_name to $example_dir"
+                  cp "$gif_file" "$example_dir/"
+                  break
+                fi
+              done
+            fi
+          done
+          # Also try direct matching by name
+          for gif_file in gifs/*.gif; do
+            if [ -f "$gif_file" ]; then
+              gif_name=$(basename "$gif_file")
+              # Try to find matching example directory
+              for example_dir in examples/*/; do
+                tape_file=$(find "$example_dir" -name "*.tape" -type f | head -1)
+                if [ -n "$tape_file" ]; then
+                  expected_gif="${tape_file%.tape}.gif"
+                  if [ "$(basename "$expected_gif")" = "$gif_name" ]; then
+                    echo "Copying $gif_name to $example_dir"
+                    cp "$gif_file" "$example_dir/"
+                  fi
+                fi
+              done
+            fi
+          done
+      
       - name: Check for changes
         id: check
         run: |
           if [ -n "$(git status --porcelain examples/*/*.gif examples/*/*.tape)" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Changed files:"
+            git status --porcelain examples/*/*.gif examples/*/*.tape
           else
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
