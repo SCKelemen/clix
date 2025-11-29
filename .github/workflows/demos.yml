@@ -195,17 +195,20 @@ jobs:
           # Replace $HOME and $PATH with actual values
           GO_BIN_PATH="$HOME/go/bin"
           ACTUAL_PATH="/usr/bin:/bin:/usr/local/bin:$GO_BIN_PATH:$(echo $PATH | tr ':' '\n' | grep -v "^$GO_BIN_PATH$" | tr '\n' ':' | sed 's/:$//')"
-          # On Linux, sed -i requires a backup suffix (empty string works)
-          if sed -i '' "s|Env PATH \".*\"|Env PATH \"$ACTUAL_PATH\"|" "$TAPE_NAME" 2>/dev/null || \
-             sed -i.bak "s|Env PATH \".*\"|Env PATH \"$ACTUAL_PATH\"|" "$TAPE_NAME"; then
-            # Remove backup file if created
-            rm -f "${TAPE_NAME}.bak"
-            echo "Updated PATH in tape file:"
-            grep "Env PATH" "$TAPE_NAME" || echo "No PATH found in tape file (may not be needed)"
+          # On Linux, sed -i requires a backup suffix; on macOS, empty string works
+          # Try Linux style first (with .bak), then macOS style (empty string)
+          if grep -q "Env PATH" "$TAPE_NAME"; then
+            if sed -i.bak "s|Env PATH \".*\"|Env PATH \"$ACTUAL_PATH\"|" "$TAPE_NAME" 2>/dev/null || \
+               sed -i '' "s|Env PATH \".*\"|Env PATH \"$ACTUAL_PATH\"|" "$TAPE_NAME" 2>/dev/null; then
+              # Remove backup file if created
+              rm -f "${TAPE_NAME}.bak"
+              echo "Updated PATH in tape file:"
+              grep "Env PATH" "$TAPE_NAME"
+            else
+              echo "Warning: Could not update PATH in tape file, continuing anyway..."
+            fi
           else
-            echo "Warning: Could not update PATH in tape file, continuing anyway..."
-            echo "Current PATH in tape:"
-            grep "Env PATH" "$TAPE_NAME" || echo "No PATH directive found"
+            echo "No Env PATH directive found in tape file (may not be needed)"
           fi
           
           echo "Generating GIF from $TAPE_FILE"
