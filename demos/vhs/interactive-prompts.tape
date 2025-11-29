@@ -1,11 +1,9 @@
 Output interactive-prompts.gif
-Width 1200
-Height 800
-Theme "Monokai Pro"
-FontSize 18
-Shell "bash"
-
-Set CWD "../../.."
+Set Width 1200
+Set Height 800
+Set Theme "Monokai Pro"
+Set FontSize 18
+Set Shell "bash"
 
 # Navigate to survey example
 Type "cd examples/survey"

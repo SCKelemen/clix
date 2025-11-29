@@ -1,5 +1,5 @@
-# VHS output files (GIFs)
-*.gif
+# VHS output files (GIFs) - commented out to allow committing demo GIFs
+# *.gif
 
 # Keep the directory structure
 !.gitkeep

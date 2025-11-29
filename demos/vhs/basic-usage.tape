@@ -1,12 +1,9 @@
 Output basic-usage.gif
-Width 1200
-Height 800
-Theme "Monokai Pro"
-FontSize 18
-Shell "bash"
-
-# Set working directory to project root
-Set CWD "../../.."
+Set Width 1200
+Set Height 800
+Set Theme "Monokai Pro"
+Set FontSize 18
+Set Shell "bash"
 
 # Show basic command structure
 Type "cd examples/basic"
