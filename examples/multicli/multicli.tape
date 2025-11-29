@@ -4,6 +4,8 @@ Set Height 800
 Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
+Env TERM "xterm-256color"
+Env COLORTERM "truecolor"
 
 # Build all CLIs
 Type "go build -o dev ./cmd/dev && go build -o db ./cmd/db && go build -o sec ./cmd/sec && go build -o bq ./cmd/bq"

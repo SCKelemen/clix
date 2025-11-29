@@ -5,6 +5,7 @@ Set Theme "Monokai Pro"
 Set FontSize 18
 Set Shell "bash"
 Env TERM "xterm-256color"
+Env COLORTERM "truecolor"
 
 # Build the example
 Type "go build -o styled ./cmd/styled"
