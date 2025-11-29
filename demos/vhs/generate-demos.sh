@@ -35,8 +35,8 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Build the example
-Type "go build -o ${binary_name} ./cmd/${main_cmd}"
+# Ensure NO_COLOR is not set and build
+Type "unset NO_COLOR; go build -o ${binary_name} ./cmd/${main_cmd}"
 Enter
 Sleep 2s
 

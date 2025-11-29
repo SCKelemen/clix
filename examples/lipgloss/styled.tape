@@ -7,8 +7,8 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Build the example
-Type "go build -o styled ./cmd/styled"
+# Ensure NO_COLOR is not set and build
+Type "unset NO_COLOR; go build -o styled ./cmd/styled"
 Enter
 Sleep 2s
 
