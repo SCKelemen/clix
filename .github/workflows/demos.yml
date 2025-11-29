@@ -22,6 +22,11 @@ on:
         default: false
         type: boolean
 
+# Prevent multiple runs from committing at the same time
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -273,12 +278,33 @@ jobs:
           else
             BRANCH_NAME=${GITHUB_REF#refs/heads/}
           fi
+          
+          # Fetch latest changes to avoid conflicts
+          git fetch origin "$BRANCH_NAME" || true
+          
           # Checkout the branch if we're in detached HEAD state
-          git checkout -B "$BRANCH_NAME" || git checkout "$BRANCH_NAME"
+          git checkout -B "$BRANCH_NAME" "origin/$BRANCH_NAME" 2>/dev/null || git checkout "$BRANCH_NAME"
+          
+          # Pull latest changes to ensure we're up to date
+          git pull origin "$BRANCH_NAME" --rebase || git pull origin "$BRANCH_NAME" || true
+          
           git config --local user.email "${{ secrets.GIT_USER_EMAIL || 'SCKelemen@users.noreply.github.com' }}"
           git config --local user.name "${{ secrets.GIT_USER_NAME || 'Samuel Kelemen' }}"
-          git add examples/*/*.gif examples/*/*.tape
-          git commit -m "Auto-update demo GIFs [skip ci]" || exit 0
-          git push origin "$BRANCH_NAME"
+          
+          # Re-check for changes after pulling (another run might have already committed)
+          if [ -n "$(git status --porcelain examples/*/*.gif examples/*/*.tape)" ]; then
+            git add examples/*/*.gif examples/*/*.tape
+            git commit -m "Auto-update demo GIFs [skip ci]" || exit 0
+            
+            # Retry push with rebase if there's a conflict
+            git pull origin "$BRANCH_NAME" --rebase || true
+            git push origin "$BRANCH_NAME" || {
+              echo "Push failed, trying with rebase..."
+              git pull origin "$BRANCH_NAME" --rebase
+              git push origin "$BRANCH_NAME" || exit 0
+            }
+          else
+            echo "No changes to commit (likely already committed by another run)"
+          fi
         env:
           GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
