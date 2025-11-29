@@ -93,7 +93,7 @@ jobs:
       - name: Commit changes
         if: steps.check.outputs.changed == 'true'
         run: |
-          git config --local user.email "${{ secrets.GIT_USER_EMAIL || 'samuel.kelemen@users.noreply.github.com' }}"
+          git config --local user.email "${{ secrets.GIT_USER_EMAIL || 'SCKelemen@users.noreply.github.com' }}"
           git config --local user.name "${{ secrets.GIT_USER_NAME || 'Samuel Kelemen' }}"
           git add examples/*/*.gif examples/*/*.tape
           git commit -m "Auto-update demo GIFs [skip ci]" || exit 0
