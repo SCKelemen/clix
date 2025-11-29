@@ -104,6 +104,11 @@ jobs:
           chmod +x generate-demos.sh
           GENERATE_GIFS=0 ./generate-demos.sh
       
+      - name: Install ffmpeg (workaround for vhs-action issue)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      
       - name: Generate demo GIF
         uses: charmbracelet/vhs-action@v1
         with:
