@@ -39,8 +39,36 @@ jobs:
           echo "Found tape files:"
           find examples -name "*.tape" -type f
 
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd xvfb
+      
+      - name: Cache VHS binary
+        id: cache-vhs
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.GOPATH }}/bin/vhs
+          key: vhs-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            vhs-${{ runner.os }}-
+      
+      - name: Install VHS
+        if: steps.cache-vhs.outputs.cache-hit != 'true'
+        run: |
+          go install github.com/charmbracelet/vhs@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+
   generate-demos:
-    needs: prepare
+    needs: [prepare, setup]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -59,6 +87,25 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.24'
+      
+      - name: Restore VHS from cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.GOPATH }}/bin/vhs
+          key: vhs-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            vhs-${{ runner.os }}-
+      
+      - name: Install VHS if not cached
+        if: steps.cache-vhs.outputs.cache-hit != 'true'
+        run: |
+          go install github.com/charmbracelet/vhs@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd xvfb
       
       - name: Build example
         run: |
@@ -103,15 +150,6 @@ jobs:
           cd demos/vhs
           chmod +x generate-demos.sh
           GENERATE_GIFS=0 ./generate-demos.sh
-      
-      - name: Install VHS and dependencies
-        run: |
-          # Install ffmpeg from Ubuntu repos (more reliable than vhs-action's method)
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg ttyd xvfb
-          # Install VHS
-          go install github.com/charmbracelet/vhs@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
       
       - name: Setup display server
         run: |
