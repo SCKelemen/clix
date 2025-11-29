@@ -7,9 +7,9 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Build the example (unset NO_COLOR but hide it from view)
+# Build the example (unset NO_COLOR and clear while hidden)
 Hide
-Type "unset NO_COLOR"
+Type "unset NO_COLOR && clear"
 Enter
 Sleep 100ms
 Show
