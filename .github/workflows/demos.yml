@@ -69,11 +69,14 @@ jobs:
             done
           fi
       
-      - name: Install VHS
-        uses: charmbracelet/vhs-action@v1
-        with:
-          path: ""
-          version: "latest"
+      - name: Install VHS and dependencies
+        run: |
+          # Install VHS dependencies
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg ttyd
+          # Install VHS
+          go install github.com/charmbracelet/vhs@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
       
       - name: Discover and generate tape files
         run: |
