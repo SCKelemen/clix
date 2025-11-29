@@ -7,13 +7,11 @@ Set Shell "zsh"
 Env TERM "xterm-256color"
 Env COLORTERM "truecolor"
 
-# Build the example (unset NO_COLOR but clear it from view)
+# Build the example (unset NO_COLOR but hide it from view)
 Type "unset NO_COLOR"
 Enter
 Sleep 100ms
-Type "\014"
-Enter
-Sleep 100ms
+Hide
 Type "go build -o gh ./cmd/gh"
 Enter
 Sleep 2s
