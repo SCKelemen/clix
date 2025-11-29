@@ -75,10 +75,16 @@ jobs:
         run: |
           # Install VHS dependencies
           sudo apt-get update
-          sudo apt-get install -y ffmpeg ttyd
+          sudo apt-get install -y ffmpeg ttyd xvfb
           # Install VHS
           go install github.com/charmbracelet/vhs@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
+      
+      - name: Setup display server
+        run: |
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+          sleep 2
       
       - name: Discover and generate tape files
         run: |
@@ -88,6 +94,7 @@ jobs:
       
       - name: Generate demo GIFs
         run: |
+          export DISPLAY=:99
           cd demos/vhs
           GENERATE_GIFS=1 ./generate-demos.sh
       
