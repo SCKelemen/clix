@@ -78,6 +78,7 @@ func NewConfigCommand(app *clix.App) *clix.Command {
 		configResetCommand(app),
 	)
 	cmd.Usage = fmt.Sprintf("%s config [command]", app.Name)
+	cmd.IsExtensionCommand = true
 	return cmd
 }
 
@@ -89,7 +90,7 @@ func configListCommand(app *clix.App) *clix.Command {
 		tree := buildConfigTree(values)
 
 		switch app.OutputFormat() {
-		case "json":
+		case clix.FormatJSON:
 			enc := json.NewEncoder(app.Out)
 			enc.SetIndent("", "  ")
 			return enc.Encode(tree)

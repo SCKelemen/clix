@@ -29,9 +29,9 @@ func TestIntVar(t *testing.T) {
 		t.Errorf("expected port 9090, got %d", port)
 	}
 
-	// Test Integer
-	if val, ok := fs.Integer("port"); !ok || val != 9090 {
-		t.Errorf("Integer returned %d, %v, expected 9090, true", val, ok)
+	// Test Int
+	if val, ok := fs.Int("port"); !ok || val != 9090 {
+		t.Errorf("Int returned %d, %v, expected 9090, true", val, ok)
 	}
 }
 

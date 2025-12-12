@@ -64,6 +64,7 @@ func NewHelpCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("help")
 	cmd.Short = "Show help for commands"
 	cmd.Usage = fmt.Sprintf("%s help [command]", app.Name)
+	cmd.IsExtensionCommand = true
 	cmd.Run = func(ctx *clix.Context) error {
 		target := app.Root
 		if len(ctx.Args) > 0 {

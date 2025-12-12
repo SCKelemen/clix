@@ -64,6 +64,7 @@ func NewAutocompleteCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("autocomplete")
 	cmd.Short = "Generate shell completion script"
 	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish]", app.Name)
+	cmd.IsExtensionCommand = true
 	cmd.Arguments = []*clix.Argument{{Name: "shell", Prompt: "Shell", Required: false}}
 	cmd.Run = func(ctx *clix.Context) error {
 		shellArg := ctx.Arg(0)

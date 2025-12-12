@@ -60,6 +60,10 @@ type Command struct {
 	// Hidden hides the command from help output and autocomplete.
 	Hidden bool
 
+	// IsExtensionCommand indicates this command was added by an extension.
+	// Extension commands are not counted when determining if a command has user-defined children.
+	IsExtensionCommand bool
+
 	// Flags is the flag set for this command. Flags defined here are scoped to this command.
 	// Use app.Flags() for flags that apply to all commands.
 	Flags *FlagSet
@@ -138,6 +142,7 @@ type CommandOption interface {
 //	)
 //	cmd.Run = func(ctx *clix.Context) error { ... }
 func NewCommand(name string, opts ...CommandOption) *Command {
+	var help bool
 	cmd := &Command{
 		Name:  name,
 		Flags: NewFlagSet(name),
@@ -149,6 +154,7 @@ func NewCommand(name string, opts ...CommandOption) *Command {
 			Short: "h",
 			Usage: "Show help information",
 		},
+		Value: &help,
 	})
 
 	for _, opt := range opts {
@@ -177,6 +183,7 @@ func NewCommand(name string, opts ...CommandOption) *Command {
 //		WithCommandLong("Detailed description..."),
 //	)
 func NewGroup(name, short string, children ...*Command) *Command {
+	var help bool
 	cmd := &Command{
 		Name:     name,
 		Short:    short,
@@ -190,6 +197,7 @@ func NewGroup(name, short string, children ...*Command) *Command {
 			Short: "h",
 			Usage: "Show help information",
 		},
+		Value: &help,
 	})
 
 	return cmd
@@ -468,66 +476,4 @@ type commandArgumentsOption struct {
 
 func (o commandArgumentsOption) ApplyCommand(cmd *Command) {
 	cmd.Arguments = o.args
-}
-
-// Builder-style methods for Command (fluent API)
-
-// SetShort sets the command short description and returns the command for method chaining.
-func (c *Command) SetShort(short string) *Command {
-	c.Short = short
-	return c
-}
-
-// SetLong sets the command long description and returns the command for method chaining.
-func (c *Command) SetLong(long string) *Command {
-	c.Long = long
-	return c
-}
-
-// SetUsage sets the command usage string and returns the command for method chaining.
-func (c *Command) SetUsage(usage string) *Command {
-	c.Usage = usage
-	return c
-}
-
-// SetExample sets the command example string and returns the command for method chaining.
-func (c *Command) SetExample(example string) *Command {
-	c.Example = example
-	return c
-}
-
-// SetAliases sets the command aliases and returns the command for method chaining.
-func (c *Command) SetAliases(aliases ...string) *Command {
-	c.Aliases = aliases
-	return c
-}
-
-// SetHidden marks the command as hidden and returns the command for method chaining.
-func (c *Command) SetHidden(hidden bool) *Command {
-	c.Hidden = hidden
-	return c
-}
-
-// SetRun sets the command run handler and returns the command for method chaining.
-func (c *Command) SetRun(run Handler) *Command {
-	c.Run = run
-	return c
-}
-
-// SetPreRun sets the command pre-run hook and returns the command for method chaining.
-func (c *Command) SetPreRun(preRun Hook) *Command {
-	c.PreRun = preRun
-	return c
-}
-
-// SetPostRun sets the command post-run hook and returns the command for method chaining.
-func (c *Command) SetPostRun(postRun Hook) *Command {
-	c.PostRun = postRun
-	return c
-}
-
-// SetArguments sets the command arguments and returns the command for method chaining.
-func (c *Command) SetArguments(args ...*Argument) *Command {
-	c.Arguments = args
-	return c
 }

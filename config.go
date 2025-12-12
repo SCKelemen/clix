@@ -1,10 +1,8 @@
 package clix
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -43,8 +41,8 @@ const (
 	ConfigString ConfigType = iota
 	// ConfigBool stores canonical boolean values ("true"/"false").
 	ConfigBool
-	// ConfigInteger stores 32-bit integers.
-	ConfigInteger
+	// ConfigInt stores 32-bit integers.
+	ConfigInt
 	// ConfigInt64 stores 64-bit integers.
 	ConfigInt64
 	// ConfigFloat64 stores floating-point numbers.
@@ -57,14 +55,14 @@ const (
 //	// Using functional options
 //	app.Config.RegisterSchema(
 //		WithConfigKey("project.retries"),
-//		WithConfigType(clix.ConfigInteger),
+//		WithConfigType(clix.ConfigInt),
 //		WithConfigValidate(validation.IntRange(1, 10)),
 //	)
 //
 //	// Using struct (primary API)
 //	app.Config.RegisterSchema(clix.ConfigSchema{
 //		Key:  "project.retries",
-//		Type: clix.ConfigInteger,
+//		Type: clix.ConfigInt,
 //		Validate: validation.IntRange(1, 10),
 //	})
 type ConfigSchemaOption interface {
@@ -82,14 +80,14 @@ type ConfigSchemaOption interface {
 //	// Struct-based (primary API)
 //	app.Config.RegisterSchema(clix.ConfigSchema{
 //		Key:  "project.retries",
-//		Type: clix.ConfigInteger,
+//		Type: clix.ConfigInt,
 //		Validate: validation.IntRange(1, 10),
 //	})
 //
 //	// Functional options
 //	app.Config.RegisterSchema(
 //		WithConfigKey("project.retries"),
-//		WithConfigType(clix.ConfigInteger),
+//		WithConfigType(clix.ConfigInt),
 //		WithConfigValidate(validation.IntRange(1, 10)),
 //	)
 type ConfigSchema struct {
@@ -121,7 +119,6 @@ func NewConfigManager(name string) *ConfigManager {
 
 // Load reads configuration from the provided path. Missing files are ignored.
 // The file format is YAML. Nested structures are flattened using dot notation.
-// If YAML parsing fails, falls back to simple line-by-line parsing for backward compatibility.
 func (m *ConfigManager) Load(path string) error {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -132,49 +129,17 @@ func (m *ConfigManager) Load(path string) error {
 	}
 	defer file.Close()
 
-	// Try YAML parsing first
 	var data map[string]interface{}
 	decoder := yaml.NewDecoder(file)
-	if err := decoder.Decode(&data); err == nil {
-		// Successfully parsed as YAML
-		if m.values == nil {
-			m.values = make(map[string]string)
-		}
-		flattenYAML("", data, m.values)
-		return nil
+	if err := decoder.Decode(&data); err != nil {
+		return fmt.Errorf("failed to parse config file as YAML: %w", err)
 	}
 
-	// YAML parsing failed, fall back to simple line-by-line parsing
-	// This maintains backward compatibility with files that have invalid YAML
-	file.Seek(0, 0)
-	return m.loadLineByLine(file)
-}
-
-// loadLineByLine parses a config file line by line (legacy format).
-// This is used as a fallback when YAML parsing fails.
-func (m *ConfigManager) loadLineByLine(file io.Reader) error {
 	if m.values == nil {
 		m.values = make(map[string]string)
 	}
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		key, value, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		value = strings.Trim(value, "\"'")
-		m.values[key] = value
-	}
-
-	return scanner.Err()
+	flattenYAML("", data, m.values)
+	return nil
 }
 
 // flattenYAML recursively flattens a nested YAML structure into dot-notation keys.
@@ -292,21 +257,21 @@ func (m *ConfigManager) Values() map[string]string {
 //	// 1. Struct-based (primary API)
 //	app.Config.RegisterSchema(clix.ConfigSchema{
 //		Key:  "project.retries",
-//		Type: clix.ConfigInteger,
+//		Type: clix.ConfigInt,
 //		Validate: validation.IntRange(1, 10),
 //	})
 //
 //	// 2. Functional options
 //	app.Config.RegisterSchema(
 //		clix.WithConfigKey("project.retries"),
-//		clix.WithConfigType(clix.ConfigInteger),
+//		clix.WithConfigType(clix.ConfigInt),
 //		clix.WithConfigValidate(validation.IntRange(1, 10)),
 //	)
 //
 //	// 3. Mixed (struct + functional options)
 //	app.Config.RegisterSchema(
 //		clix.ConfigSchema{Key: "project.retries"},
-//		clix.WithConfigType(clix.ConfigInteger),
+//		clix.WithConfigType(clix.ConfigInt),
 //	)
 func (m *ConfigManager) RegisterSchema(entries ...ConfigSchemaOption) {
 	if m.schemas == nil {
@@ -348,7 +313,7 @@ func (m *ConfigManager) NormalizeValue(key, value string) (string, error) {
 			return "", fmt.Errorf("expected boolean for %q: %w", key, err)
 		}
 		value = strconv.FormatBool(parsed)
-	case ConfigInteger:
+	case ConfigInt:
 		parsed, err := strconv.Atoi(strings.TrimSpace(value))
 		if err != nil {
 			return "", fmt.Errorf("expected integer for %q: %w", key, err)
@@ -398,8 +363,8 @@ func (m *ConfigManager) Bool(key string) (bool, bool) {
 	return parsed, true
 }
 
-// Integer retrieves an int value from persisted config.
-func (m *ConfigManager) Integer(key string) (int, bool) {
+// Int retrieves an int value from persisted config.
+func (m *ConfigManager) Int(key string) (int, bool) {
 	value, ok := m.values[key]
 	if !ok {
 		return 0, false
@@ -476,24 +441,4 @@ type configValidateOption struct {
 
 func (o configValidateOption) ApplyConfigSchema(schema *ConfigSchema) {
 	schema.Validate = o.validate
-}
-
-// Builder-style methods for ConfigSchema (fluent API)
-
-// SetKey sets the config schema key and returns the schema for method chaining.
-func (s *ConfigSchema) SetKey(key string) *ConfigSchema {
-	s.Key = key
-	return s
-}
-
-// SetType sets the config schema type and returns the schema for method chaining.
-func (s *ConfigSchema) SetType(typ ConfigType) *ConfigSchema {
-	s.Type = typ
-	return s
-}
-
-// SetValidate sets the validation function and returns the schema for method chaining.
-func (s *ConfigSchema) SetValidate(validate func(string) error) *ConfigSchema {
-	s.Validate = validate
-	return s
 }

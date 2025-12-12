@@ -40,21 +40,21 @@ func (a *App) AddExtension(ext Extension) {
 // ApplyExtensions processes all registered extensions in order. This is
 // typically called automatically during Run(), but can be called manually
 // for testing or early initialization.
+// Extensions are applied exactly once using sync.Once for thread-safety.
 func (a *App) ApplyExtensions() error {
 	if len(a.extensions) == 0 {
 		return nil
 	}
 
-	if a.extensionsApplied {
-		return nil
-	}
-
-	for _, ext := range a.extensions {
-		if err := ext.Extend(a); err != nil {
-			return err
+	var extErr error
+	a.extensionsOnce.Do(func() {
+		for _, ext := range a.extensions {
+			if err := ext.Extend(a); err != nil {
+				extErr = err
+				return
+			}
 		}
-	}
+	})
 
-	a.extensionsApplied = true
-	return nil
+	return extErr
 }

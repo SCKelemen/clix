@@ -198,7 +198,7 @@ func TestConfigExtension(t *testing.T) {
 		app := clix.NewApp("test")
 		app.Config.RegisterSchema(clix.ConfigSchema{
 			Key:  "service.retries",
-			Type: clix.ConfigInteger,
+			Type: clix.ConfigInt,
 		})
 
 		root := clix.NewCommand("test")

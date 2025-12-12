@@ -22,9 +22,9 @@ func (a *App) FormatOutput(data interface{}) error {
 // FormatData formats data to the specified output writer using the given format.
 func FormatData(w io.Writer, data interface{}, format string) error {
 	switch strings.ToLower(format) {
-	case "json":
+	case FormatJSON:
 		return formatJSON(w, data)
-	case "yaml":
+	case FormatYAML:
 		return formatYAML(w, data)
 	default:
 		return formatText(w, data)

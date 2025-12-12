@@ -74,7 +74,7 @@ Optional schemas let you enforce types:
 ```go
 app.Config.RegisterSchema(clix.ConfigSchema{
 	Key:  "project.retries",
-	Type: clix.ConfigInteger,
+	Type: clix.ConfigInt,
 })
 // cli config set project.retries 5       ✅
 // cli config set project.retries nope    ❌ (clear error)

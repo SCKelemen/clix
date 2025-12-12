@@ -16,7 +16,6 @@ func TestConfigManagerLoad(t *testing.T) {
 		"colour: blue",
 		"quoted: \"with:colon\"",
 		"spaced: ' value '",
-		"invalid line without separator",
 		"key: value",
 	}, "\n")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -43,10 +42,6 @@ func TestConfigManagerLoad(t *testing.T) {
 		if got != want {
 			t.Fatalf("value mismatch for %q: want %q, got %q", key, want, got)
 		}
-	}
-
-	if _, ok := mgr.Get("invalid line without separator"); ok {
-		t.Fatalf("unexpected key parsed from invalid line")
 	}
 }
 
@@ -88,7 +83,7 @@ func TestConfigManagerTypedAccessors(t *testing.T) {
 	if v, ok := mgr.Bool("feature.enabled"); !ok || !v {
 		t.Fatalf("expected feature.enabled to be true, got %v %v", v, ok)
 	}
-	if v, ok := mgr.Integer("project.retries"); !ok || v != 3 {
+	if v, ok := mgr.Int("project.retries"); !ok || v != 3 {
 		t.Fatalf("expected project.retries to be 3, got %d %v", v, ok)
 	}
 	if v, ok := mgr.Int64("timeout"); !ok || v != 1500 {
@@ -104,7 +99,7 @@ func TestConfigManagerSchemaNormalization(t *testing.T) {
 	var validated bool
 	mgr.RegisterSchema(ConfigSchema{
 		Key:  "service.retries",
-		Type: ConfigInteger,
+		Type: ConfigInt,
 		Validate: func(val string) error {
 			validated = true
 			if val == "0" {

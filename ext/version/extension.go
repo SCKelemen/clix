@@ -83,6 +83,7 @@ func NewVersionCommand(app *clix.App, version, commit, date string) *clix.Comman
 	cmd := clix.NewCommand("version")
 	cmd.Short = "Show version information"
 	cmd.Usage = fmt.Sprintf("%s version", app.Name)
+	cmd.IsExtensionCommand = true
 	cmd.Run = func(ctx *clix.Context) error {
 		return renderVersion(ctx.App, version, commit, date)
 	}

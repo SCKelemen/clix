@@ -527,7 +527,7 @@ func Example_declarativeStyle() {
 	// Config schema using struct-based API
 	app.Config.RegisterSchema(clix.ConfigSchema{
 		Key:  "project.retries",
-		Type: clix.ConfigInteger,
+		Type: clix.ConfigInt,
 	})
 
 	// Build command tree
@@ -611,7 +611,7 @@ func Example_functionalStyle() {
 	// Config schema using functional options
 	app.Config.RegisterSchema(
 		clix.WithConfigKey("project.retries"),
-		clix.WithConfigType(clix.ConfigInteger),
+		clix.WithConfigType(clix.ConfigInt),
 	)
 
 	// Build command tree
@@ -627,88 +627,6 @@ func Example_functionalStyle() {
 	)
 
 	app.Root = root
-
-	// Run the app
-	_ = app
-	// Output:
-}
-
-// Example_fluentStyle demonstrates a fully fluent-style CLI app using
-// only builder-style (method chaining) APIs throughout.
-func Example_fluentStyle() {
-	var (
-		project string
-		verbose bool
-		port    int
-	)
-
-	// Create app using builder-style
-	app := clix.NewApp("myapp").
-		SetDescription("A fluent-style CLI application").
-		SetVersion("1.0.0")
-
-	// Global flags using builder-style
-	projectFlagOpts := &clix.StringVarOptions{}
-	projectFlagOpts.SetName("project").
-		SetShort("p").
-		SetUsage("Project to operate on").
-		SetEnvVar("MYAPP_PROJECT").
-		SetDefault("default-project").
-		SetValue(&project)
-	app.Flags().StringVar(*projectFlagOpts)
-
-	verboseFlagOpts := &clix.BoolVarOptions{}
-	verboseFlagOpts.SetName("verbose").
-		SetShort("v").
-		SetUsage("Enable verbose output").
-		SetValue(&verbose)
-	app.Flags().BoolVar(*verboseFlagOpts)
-
-	// Commands using builder-style
-	createCmd := clix.NewCommand("create").
-		SetShort("Create a new resource").
-		SetRun(func(ctx *clix.Context) error {
-			name, _ := ctx.String("project")
-			fmt.Fprintf(ctx.App.Out, "Creating resource in project: %s\n", name)
-			return nil
-		})
-
-	// Command flags using builder-style
-	portFlagOpts := &clix.IntVarOptions{}
-	portFlagOpts.SetName("port").
-		SetUsage("Server port").
-		SetDefault("8080").
-		SetValue(&port)
-	createCmd.Flags.IntVar(*portFlagOpts)
-
-	// Arguments using builder-style
-	createCmd.Arguments = []*clix.Argument{
-		clix.NewArgument().
-			SetName("name").
-			SetPrompt("Enter resource name").
-			SetRequired(),
-		clix.NewArgument().
-			SetName("email").
-			SetPrompt("Enter email address").
-			SetDefault("user@example.com"),
-	}
-
-	// Config schema using builder-style
-	schema := &clix.ConfigSchema{}
-	schema.SetKey("project.retries").
-		SetType(clix.ConfigInteger)
-	app.Config.RegisterSchema(*schema)
-
-	// Build command tree using builder-style
-	listCmd := clix.NewCommand("list").
-		SetShort("List resources").
-		SetRun(func(ctx *clix.Context) error {
-			fmt.Fprintln(ctx.App.Out, "Listing resources...")
-			return nil
-		})
-
-	root := clix.NewGroup("myapp", "My application", createCmd, listCmd)
-	app.SetRoot(root)
 
 	// Run the app
 	_ = app

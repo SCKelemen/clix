@@ -15,7 +15,7 @@ func ExampleExtension() {
 	app.Config.RegisterSchema(
 		clix.ConfigSchema{
 			Key:  "project.retries",
-			Type: clix.ConfigInteger,
+			Type: clix.ConfigInt,
 		},
 	)
 

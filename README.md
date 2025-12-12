@@ -259,7 +259,7 @@ app.Flags().StringVar(clix.StringVarOptions{
 When you read persisted configuration directly, you can use typed helpers:
 
 ```go
-if retries, ok := app.Config.Integer("project.retries"); ok {
+if retries, ok := app.Config.Int("project.retries"); ok {
         fmt.Fprintf(app.Out, "Retry count: %d\n", retries)
 }
 if enabled, ok := app.Config.Bool("feature.enabled"); ok && enabled {
@@ -273,7 +273,7 @@ If you want `cli config set` to enforce types, register an optional schema:
 app.Config.RegisterSchema(
         clix.ConfigSchema{
                 Key:  "project.retries",
-                Type: clix.ConfigInteger,
+                Type: clix.ConfigInt,
                 Validate: func(value string) error {
                         if value == "0" {
                                 return fmt.Errorf("retries must be positive")
@@ -415,7 +415,7 @@ Styling is optional—applications without styling still work perfectly.
 Command handlers receive a `*clix.Context` that embeds `context.Context` and provides:
 - Access to the active command and arguments
 - Application instance and configuration
-- Hydrated flag/config values via type-specific getters: `String()`, `Bool()`, `Integer()`, `Int64()`, `Float64()`
+- Hydrated flag/config values via type-specific getters: `String()`, `Bool()`, `Int()`, `Int64()`, `Float64()`
 - Argument access: `Arg(index)`, `ArgNamed(name)`, `AllArgs()`
 - Standard output/error streams
 - Standard context.Context functionality (cancellation, deadlines, values)
@@ -439,11 +439,11 @@ cmd.Run = func(ctx *clix.Context) error {
         if verbose, ok := ctx.Bool("verbose"); ok && verbose {
                 fmt.Fprintf(ctx.App.Out, "Verbose mode enabled\n")
         }
-        
-        if port, ok := ctx.Integer("port"); ok {
+
+        if port, ok := ctx.Int("port"); ok {
                 fmt.Fprintf(ctx.App.Out, "Port: %d\n", port)
         }
-        
+
         if timeout, ok := ctx.Int64("timeout"); ok {
                 fmt.Fprintf(ctx.App.Out, "Timeout: %d\n", timeout)
         }
@@ -547,7 +547,7 @@ Optional schemas can enforce types when setting values:
 ```go
 app.Config.RegisterSchema(clix.ConfigSchema{
         Key:  "project.retries",
-        Type: clix.ConfigInteger,
+        Type: clix.ConfigInt,
 })
 ```
 
