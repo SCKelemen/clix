@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestOutputFormat(t *testing.T) {
@@ -223,9 +225,18 @@ func TestFormatData(t *testing.T) {
 		}
 
 		output := buf.String()
-		// YAML should quote values with spaces
-		if !strings.Contains(output, `"value with spaces"`) {
-			t.Errorf("expected quoted value in YAML, got: %s", output)
+		// YAML encoder may quote values with spaces, or use other valid YAML syntax
+		// Just verify the value is present and the output is valid YAML
+		if !strings.Contains(output, "value with spaces") {
+			t.Errorf("expected value with spaces in YAML output, got: %s", output)
+		}
+		// Verify it can be parsed back
+		var parsed map[string]string
+		if err := yaml.Unmarshal(buf.Bytes(), &parsed); err != nil {
+			t.Errorf("output is not valid YAML: %v", err)
+		}
+		if parsed["key"] != "value with spaces" {
+			t.Errorf("round-trip failed: want %q, got %q", "value with spaces", parsed["key"])
 		}
 	})
 }

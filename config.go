@@ -4,16 +4,20 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
-// ConfigManager loads and stores configuration from YAML files and environment
-// variables. Configuration values are automatically loaded when App.Run is called
+// ConfigManager loads and stores configuration from YAML files and environment variables.
+// Configuration values are automatically loaded when App.Run is called
 // and are accessible via Context getters with precedence: command flags > app flags > env > config > defaults.
+// The config file uses YAML format. Nested structures are flattened using dot notation
+// (e.g., "project.name" for nested "project: name: value").
 //
 // Example:
 //
@@ -116,6 +120,8 @@ func NewConfigManager(name string) *ConfigManager {
 }
 
 // Load reads configuration from the provided path. Missing files are ignored.
+// The file format is YAML. Nested structures are flattened using dot notation.
+// If YAML parsing fails, falls back to simple line-by-line parsing for backward compatibility.
 func (m *ConfigManager) Load(path string) error {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -125,6 +131,31 @@ func (m *ConfigManager) Load(path string) error {
 		return err
 	}
 	defer file.Close()
+
+	// Try YAML parsing first
+	var data map[string]interface{}
+	decoder := yaml.NewDecoder(file)
+	if err := decoder.Decode(&data); err == nil {
+		// Successfully parsed as YAML
+		if m.values == nil {
+			m.values = make(map[string]string)
+		}
+		flattenYAML("", data, m.values)
+		return nil
+	}
+
+	// YAML parsing failed, fall back to simple line-by-line parsing
+	// This maintains backward compatibility with files that have invalid YAML
+	file.Seek(0, 0)
+	return m.loadLineByLine(file)
+}
+
+// loadLineByLine parses a config file line by line (legacy format).
+// This is used as a fallback when YAML parsing fails.
+func (m *ConfigManager) loadLineByLine(file io.Reader) error {
+	if m.values == nil {
+		m.values = make(map[string]string)
+	}
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -146,7 +177,34 @@ func (m *ConfigManager) Load(path string) error {
 	return scanner.Err()
 }
 
+// flattenYAML recursively flattens a nested YAML structure into dot-notation keys.
+func flattenYAML(prefix string, data map[string]interface{}, result map[string]string) {
+	for key, value := range data {
+		fullKey := key
+		if prefix != "" {
+			fullKey = prefix + "." + key
+		}
+
+		switch v := value.(type) {
+		case map[string]interface{}:
+			// Recurse into nested maps
+			flattenYAML(fullKey, v, result)
+		case []interface{}:
+			// For arrays, convert to comma-separated string
+			parts := make([]string, len(v))
+			for i, item := range v {
+				parts[i] = fmt.Sprintf("%v", item)
+			}
+			result[fullKey] = strings.Join(parts, ",")
+		default:
+			// Convert value to string
+			result[fullKey] = fmt.Sprintf("%v", v)
+		}
+	}
+}
+
 // Save writes the configuration to the provided path in YAML format.
+// Dot-notation keys (e.g., "project.name") are saved as flat key:value pairs.
 func (m *ConfigManager) Save(path string) error {
 	if m.values == nil {
 		return nil
@@ -164,16 +222,17 @@ func (m *ConfigManager) Save(path string) error {
 	}
 	defer file.Close()
 
-	keys := make([]string, 0, len(m.values))
-	for k := range m.values {
-		keys = append(keys, k)
+	// Convert flat map[string]string to map[string]interface{} for YAML encoding
+	data := make(map[string]interface{})
+	for k, v := range m.values {
+		data[k] = v
 	}
-	sort.Strings(keys)
 
-	for _, key := range keys {
-		if _, err := fmt.Fprintf(file, "%s: %s\n", key, quoteIfNeeded(m.values[key])); err != nil {
-			return err
-		}
+	encoder := yaml.NewEncoder(file)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(data); err != nil {
+		file.Close()
+		return err
 	}
 
 	if err := file.Close(); err != nil {
@@ -181,13 +240,6 @@ func (m *ConfigManager) Save(path string) error {
 	}
 
 	return os.Rename(tmp, path)
-}
-
-func quoteIfNeeded(value string) string {
-	if strings.ContainsAny(value, ":#") || strings.HasPrefix(value, " ") || strings.HasSuffix(value, " ") {
-		return fmt.Sprintf("%q", value)
-	}
-	return value
 }
 
 // Get retrieves a value.

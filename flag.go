@@ -35,14 +35,28 @@ import (
 //		Value: &verbose,
 //	})
 type FlagSet struct {
-	name  string
-	flags []*Flag
-	index map[string]*Flag
+	name   string
+	flags  []*Flag
+	index  map[string]*Flag
+	strict bool // If true, unknown flags cause errors instead of being treated as positionals
 }
 
 // NewFlagSet initialises an empty flag set.
+// By default, strict mode is enabled, so unknown flags cause errors.
 func NewFlagSet(name string) *FlagSet {
-	return &FlagSet{name: name, index: make(map[string]*Flag)}
+	return &FlagSet{name: name, index: make(map[string]*Flag), strict: true}
+}
+
+// SetStrict enables or disables strict mode. When strict mode is enabled (the default),
+// unknown flags cause Parse to return an error instead of being treated as positional arguments.
+// Set to false to allow unknown flags to be treated as positional arguments.
+func (fs *FlagSet) SetStrict(strict bool) {
+	fs.strict = strict
+}
+
+// Strict returns whether strict mode is enabled.
+func (fs *FlagSet) Strict() bool {
+	return fs.strict
 }
 
 // Flag describes a single CLI flag.
@@ -652,6 +666,13 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 
 // Parse consumes recognised flags from args, returning remaining positional
 // arguments.
+//
+// By default, strict mode is enabled, so unknown flags (those not defined in this FlagSet)
+// cause Parse to return an error. This helps catch typos and unexpected flags.
+//
+// If strict mode is disabled (via SetStrict(false)), unknown flags are treated as
+// positional arguments, allowing commands to accept arbitrary positional arguments
+// even when they look like flags.
 func (fs *FlagSet) Parse(args []string) ([]string, error) {
 	rest := args
 	var positionals []string
@@ -673,6 +694,9 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 
 		flag, ok := fs.index[name]
 		if !ok {
+			if fs.strict {
+				return nil, fmt.Errorf("unknown flag: %s", name)
+			}
 			positionals = append(positionals, current)
 			rest = rest[1:]
 			continue

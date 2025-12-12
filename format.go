@@ -6,6 +6,8 @@ import (
 	"io"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // FormatOutput formats data according to the app's output format setting.
@@ -36,67 +38,12 @@ func formatJSON(w io.Writer, data interface{}) error {
 	return enc.Encode(data)
 }
 
-// formatYAML formats data as YAML.
+// formatYAML formats data as YAML using yaml.v3.
 func formatYAML(w io.Writer, data interface{}) error {
-	switch v := data.(type) {
-	case map[string]interface{}:
-		return formatYAMLMap(w, v)
-	case map[string]string:
-		// Convert map[string]string to map[string]interface{}
-		m := make(map[string]interface{})
-		for k, val := range v {
-			m[k] = val
-		}
-		return formatYAMLMap(w, m)
-	case []interface{}:
-		return formatYAMLList(w, v)
-	case []string:
-		// Convert []string to []interface{}
-		list := make([]interface{}, len(v))
-		for i, val := range v {
-			list[i] = val
-		}
-		return formatYAMLList(w, list)
-	default:
-		// For other types, try to format as YAML map/struct-like
-		// If it's not a recognized type, fall back to text
-		fmt.Fprintf(w, "%v\n", v)
-		return nil
-	}
-}
-
-func formatYAMLMap(w io.Writer, m map[string]interface{}) error {
-	// Sort keys for consistent output
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, key := range keys {
-		value := m[key]
-		formattedValue := formatValue(value)
-		// Quote if contains spaces, colons, or special YAML characters
-		if strings.ContainsAny(formattedValue, " :") || strings.HasPrefix(formattedValue, ":") {
-			fmt.Fprintf(w, "%s: %q\n", key, formattedValue)
-		} else {
-			fmt.Fprintf(w, "%s: %s\n", key, formattedValue)
-		}
-	}
-	return nil
-}
-
-func formatYAMLList(w io.Writer, list []interface{}) error {
-	for _, item := range list {
-		formattedValue := formatValue(item)
-		// Use simple quoting for YAML list items
-		if strings.ContainsAny(formattedValue, ":#") || strings.HasPrefix(formattedValue, " ") || strings.HasSuffix(formattedValue, " ") {
-			fmt.Fprintf(w, "- %q\n", formattedValue)
-		} else {
-			fmt.Fprintf(w, "- %s\n", formattedValue)
-		}
-	}
-	return nil
+	encoder := yaml.NewEncoder(w)
+	encoder.SetIndent(2)
+	defer encoder.Close()
+	return encoder.Encode(data)
 }
 
 // formatText formats data as plain text (default).

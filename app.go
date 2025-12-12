@@ -137,14 +137,26 @@ func NewApp(name string, opts ...AppOption) *App {
 	app.DefaultTheme = DefaultPromptTheme
 	app.Styles = DefaultStyles
 
-	// Apply functional options
+	// Create a default root command before applying options
+	// This allows WithAppRoot to override it
+	app.Root = NewCommand(name)
+
+	// Apply functional options (including WithAppRoot if provided)
 	for _, opt := range opts {
 		opt.ApplyApp(app)
 	}
 
-	// Create a minimal root command to hold default flags
-	// Users can replace this with their own root command
-	app.Root = NewCommand(name)
+	// Ensure root exists (in case WithAppRoot set it to nil)
+	if app.Root == nil {
+		app.Root = NewCommand(name)
+	}
+
+	// Ensure root has a FlagSet initialized
+	// Root flags are non-strict by default to allow test flags and other system flags
+	if app.Root.Flags == nil {
+		app.Root.Flags = NewFlagSet(app.Root.Name)
+		app.Root.Flags.SetStrict(false)
+	}
 
 	// Standard flags on root command (accessible via app.Flags()).
 	var format = "text"
@@ -172,12 +184,20 @@ func NewApp(name string, opts ...AppOption) *App {
 // Flags returns the flag set for the root command. Flags defined on the root
 // command apply to all commands (they are "global" by virtue of being on the root).
 // This provides a symmetric API with cmd.Flags.
+// Flags() always returns a non-nil FlagSet, creating one if necessary.
+// Root flags are non-strict by default to allow test flags and other system flags.
 func (a *App) Flags() *FlagSet {
 	if a.Root == nil {
 		// Create a minimal root if one doesn't exist
 		// This should rarely happen since NewApp creates one
 		a.Root = NewCommand(a.Name)
 	}
+	if a.Root.Flags == nil {
+		// Ensure FlagSet is initialized even if root was created manually
+		a.Root.Flags = NewFlagSet(a.Root.Name)
+	}
+	// Ensure root flags are non-strict (they may receive test flags or other system flags)
+	a.Root.Flags.SetStrict(false)
 	return a.Root.Flags
 }
 
@@ -318,18 +338,22 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		// Has Run handler, will execute it below
 	}
 
-	// If command has no user-defined children and required args are missing, prompt for them
-	if len(resultArgs) < cmd.RequiredArgs() {
-		if err := a.promptForArguments(nil, cmd, &resultArgs); err != nil {
-			return err
-		}
-	}
-
+	// Create context early so we can use it for prompting
+	// This ensures prompts respect cancellation from the caller's context
 	runCtx := &Context{
 		Context: ctx,
 		App:     a,
 		Command: cmd,
 		Args:    resultArgs,
+	}
+
+	// If command has no user-defined children and required args are missing, prompt for them
+	if len(resultArgs) < cmd.RequiredArgs() {
+		if err := a.promptForArguments(runCtx, cmd, &resultArgs); err != nil {
+			return err
+		}
+		// Update args in context after prompting
+		runCtx.Args = resultArgs
 	}
 
 	if cmd.PreRun != nil {
@@ -339,7 +363,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	if cmd.Run == nil {
-		return fmt.Errorf("command %s has no run handler", cmd.Path())
+		return fmt.Errorf("command %s has no run handler (did you intend this to be a group?)", cmd.Path())
 	}
 
 	if err := cmd.Run(runCtx); err != nil {
@@ -444,10 +468,11 @@ func (a *App) promptForArguments(ctx *Context, cmd *Command, args *[]string) err
 		return nil
 	}
 
-	// Create a temporary context for prompting if one wasn't provided
+	// Use the provided context (which embeds context.Context) for prompting
+	// This ensures prompts respect cancellation and deadlines from the caller
 	var promptCtx context.Context
 	if ctx != nil {
-		promptCtx = ctx
+		promptCtx = ctx.Context
 	} else {
 		promptCtx = context.Background()
 	}
@@ -500,6 +525,40 @@ func (a *App) countUserChildren(cmd *Command) int {
 		}
 	}
 	return count
+}
+
+// Source indicates where a configuration value originated from.
+type Source int
+
+const (
+	// SourceCommandFlag indicates the value came from a command-level flag.
+	SourceCommandFlag Source = iota
+	// SourceAppFlag indicates the value came from an app-level (root) flag.
+	SourceAppFlag
+	// SourceEnvVar indicates the value came from an environment variable.
+	SourceEnvVar
+	// SourceConfigFile indicates the value came from the config file.
+	SourceConfigFile
+	// SourceDefault indicates the value came from a flag's default value.
+	SourceDefault
+)
+
+// String returns a human-readable representation of the source.
+func (s Source) String() string {
+	switch s {
+	case SourceCommandFlag:
+		return "command flag"
+	case SourceAppFlag:
+		return "app flag"
+	case SourceEnvVar:
+		return "environment variable"
+	case SourceConfigFile:
+		return "config file"
+	case SourceDefault:
+		return "default"
+	default:
+		return "unknown"
+	}
 }
 
 // Context is passed to command handlers and provides convenient access to the
@@ -557,7 +616,19 @@ type Context struct {
 
 // ConfigDir returns the absolute path to the application's configuration
 // directory. The directory will be created if it does not already exist.
+// On Unix systems, respects XDG_CONFIG_HOME if set, otherwise uses ~/.config.
+// On Windows, uses %AppData% (or %LocalAppData% if preferred).
 func (a *App) ConfigDir() (string, error) {
+	// Check for XDG_CONFIG_HOME on Unix systems
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		dir := filepath.Join(xdg, a.Name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return "", err
+		}
+		return dir, nil
+	}
+
+	// Fall back to standard location
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -614,9 +685,11 @@ func (a *App) OutputFormat() string {
 // Precedence: command flags > app flags > env > config > defaults
 func (ctx *Context) String(key string) (string, bool) {
 	// First check command-level flags (only if explicitly set)
-	if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
-		if v, ok := ctx.Command.Flags.String(key); ok {
-			return v, true
+	if ctx.Command != nil && ctx.Command.Flags != nil {
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
+			if v, ok := ctx.Command.Flags.String(key); ok {
+				return v, true
+			}
 		}
 	}
 
@@ -636,9 +709,11 @@ func (ctx *Context) String(key string) (string, bool) {
 	// First check if any flag defines an EnvVar for this key
 	if ctx.App != nil {
 		// Check command flags for EnvVar
-		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
-			if val, ok := os.LookupEnv(flag.EnvVar); ok {
-				return val, true
+		if ctx.Command != nil && ctx.Command.Flags != nil {
+			if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
+				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+					return val, true
+				}
 			}
 		}
 		// Check root flags for EnvVar
@@ -666,8 +741,10 @@ func (ctx *Context) String(key string) (string, bool) {
 
 	// Finally check defaults from flags (only if flag exists but wasn't set)
 	// Check command flag default first
-	if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
-		return flag.Default, true
+	if ctx.Command != nil && ctx.Command.Flags != nil {
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+			return flag.Default, true
+		}
 	}
 	// Then check root flag default
 	if ctx.App != nil {
@@ -688,9 +765,11 @@ func (ctx *Context) String(key string) (string, bool) {
 // Precedence: command flags > app flags > env > config > defaults
 func (ctx *Context) Bool(key string) (bool, bool) {
 	// First check command-level flags (only if explicitly set)
-	if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
-		if v, ok := ctx.Command.Flags.Bool(key); ok {
-			return v, true
+	if ctx.Command != nil && ctx.Command.Flags != nil {
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
+			if v, ok := ctx.Command.Flags.Bool(key); ok {
+				return v, true
+			}
 		}
 	}
 
@@ -709,10 +788,12 @@ func (ctx *Context) Bool(key string) (bool, bool) {
 	// Then check environment variables
 	if ctx.App != nil {
 		// Check command flags for EnvVar
-		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
-			if val, ok := os.LookupEnv(flag.EnvVar); ok {
-				if parsed, err := strconv.ParseBool(val); err == nil {
-					return parsed, true
+		if ctx.Command != nil && ctx.Command.Flags != nil {
+			if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
+				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+					if parsed, err := strconv.ParseBool(val); err == nil {
+						return parsed, true
+					}
 				}
 			}
 		}
@@ -745,9 +826,11 @@ func (ctx *Context) Bool(key string) (bool, bool) {
 
 	// Finally check defaults from flags (only if flag exists but wasn't set)
 	// Check command flag default first
-	if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
-		if parsed, err := strconv.ParseBool(flag.Default); err == nil {
-			return parsed, true
+	if ctx.Command != nil && ctx.Command.Flags != nil {
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+			if parsed, err := strconv.ParseBool(flag.Default); err == nil {
+				return parsed, true
+			}
 		}
 	}
 	// Then check root flag default
@@ -763,6 +846,172 @@ func (ctx *Context) Bool(key string) (bool, bool) {
 	}
 
 	return false, false
+}
+
+// EffectiveString retrieves a string configuration value and returns both the value
+// and its source. This is useful for debugging and understanding where values come from.
+// Precedence: command flags > app flags > env > config > defaults
+func (ctx *Context) EffectiveString(key string) (string, Source, bool) {
+	// First check command-level flags (only if explicitly set)
+	if ctx.Command != nil && ctx.Command.Flags != nil {
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
+			if v, ok := ctx.Command.Flags.String(key); ok {
+				return v, SourceCommandFlag, true
+			}
+		}
+	}
+
+	// Then check root flags (only if explicitly set)
+	if ctx.App != nil {
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && flag.set {
+				if v, ok := rootFlags.String(key); ok {
+					return v, SourceAppFlag, true
+				}
+			}
+		}
+	}
+
+	// Then check environment variables
+	if ctx.App != nil {
+		// Check command flags for EnvVar
+		if ctx.Command != nil && ctx.Command.Flags != nil {
+			if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
+				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+					return val, SourceEnvVar, true
+				}
+			}
+		}
+		// Check root flags for EnvVar
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && flag.EnvVar != "" {
+				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+					return val, SourceEnvVar, true
+				}
+			}
+		}
+		// Check default env var pattern (APP_KEY)
+		upper := fmt.Sprintf("%s_%s", ctx.App.EnvPrefix, strings.ToUpper(strings.ReplaceAll(key, "-", "_")))
+		if val, ok := os.LookupEnv(upper); ok {
+			return val, SourceEnvVar, true
+		}
+	}
+
+	// Then check config
+	if ctx.App != nil && ctx.App.Config != nil {
+		if v, ok := ctx.App.Config.Get(key); ok {
+			return v, SourceConfigFile, true
+		}
+	}
+
+	// Finally check defaults from flags (only if flag exists but wasn't set)
+	// Check command flag default first
+	if ctx.Command != nil && ctx.Command.Flags != nil {
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+			return flag.Default, SourceDefault, true
+		}
+	}
+	// Then check root flag default
+	if ctx.App != nil {
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+				return flag.Default, SourceDefault, true
+			}
+		}
+	}
+
+	return "", 0, false
+}
+
+// EffectiveBool retrieves a boolean configuration value and returns both the value
+// and its source. This is useful for debugging and understanding where values come from.
+// Precedence: command flags > app flags > env > config > defaults
+func (ctx *Context) EffectiveBool(key string) (bool, Source, bool) {
+	// First check command-level flags (only if explicitly set)
+	if ctx.Command != nil && ctx.Command.Flags != nil {
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
+			if v, ok := ctx.Command.Flags.Bool(key); ok {
+				return v, SourceCommandFlag, true
+			}
+		}
+	}
+
+	// Then check root flags (only if explicitly set)
+	if ctx.App != nil {
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && flag.set {
+				if v, ok := rootFlags.Bool(key); ok {
+					return v, SourceAppFlag, true
+				}
+			}
+		}
+	}
+
+	// Then check environment variables
+	if ctx.App != nil {
+		// Check command flags for EnvVar
+		if ctx.Command != nil && ctx.Command.Flags != nil {
+			if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
+				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+					if parsed, err := strconv.ParseBool(val); err == nil {
+						return parsed, SourceEnvVar, true
+					}
+				}
+			}
+		}
+		// Check root flags for EnvVar
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && flag.EnvVar != "" {
+				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+					if parsed, err := strconv.ParseBool(val); err == nil {
+						return parsed, SourceEnvVar, true
+					}
+				}
+			}
+		}
+		// Check default env var pattern (APP_KEY)
+		upper := fmt.Sprintf("%s_%s", ctx.App.EnvPrefix, strings.ToUpper(strings.ReplaceAll(key, "-", "_")))
+		if val, ok := os.LookupEnv(upper); ok {
+			if parsed, err := strconv.ParseBool(val); err == nil {
+				return parsed, SourceEnvVar, true
+			}
+		}
+	}
+
+	// Then check config
+	if ctx.App != nil && ctx.App.Config != nil {
+		if v, ok := ctx.App.Config.Get(key); ok {
+			return strings.EqualFold(v, "true"), SourceConfigFile, true
+		}
+	}
+
+	// Finally check defaults from flags (only if flag exists but wasn't set)
+	// Check command flag default first
+	if ctx.Command != nil && ctx.Command.Flags != nil {
+		if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+			if parsed, err := strconv.ParseBool(flag.Default); err == nil {
+				return parsed, SourceDefault, true
+			}
+		}
+	}
+	// Then check root flag default
+	if ctx.App != nil {
+		rootFlags := ctx.App.Flags()
+		if rootFlags != nil {
+			if flag := rootFlags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+				if parsed, err := strconv.ParseBool(flag.Default); err == nil {
+					return parsed, SourceDefault, true
+				}
+			}
+		}
+	}
+
+	return false, 0, false
 }
 
 // Arg returns the positional argument at the given index.
