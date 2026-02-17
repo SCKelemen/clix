@@ -66,6 +66,11 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 		if err := flag.Value.Set(value); err != nil {
 			return nil, fmt.Errorf("invalid value for %s: %w", flag.Name, err)
 		}
+		if flag.Validate != nil {
+			if err := flag.Validate(value); err != nil {
+				return nil, fmt.Errorf("invalid value for %s: %w", flag.Name, err)
+			}
+		}
 		flag.set = true
 		flag.cliSet = true
 	}

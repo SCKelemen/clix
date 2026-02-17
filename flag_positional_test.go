@@ -1,6 +1,8 @@
 package clix
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -243,6 +245,60 @@ func TestWithFlagPositionalOption(t *testing.T) {
 		}
 		if a != "sckelemen/clix" {
 			t.Errorf("expected repo = sckelemen/clix, got %q", a)
+		}
+	})
+}
+
+func TestMapPositionalsValidate(t *testing.T) {
+	t.Run("validate rejects bad positional value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var name string
+		fs.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "name",
+				Positional: true,
+				Validate: func(s string) error {
+					if s == "" || s[0] == '-' {
+						return fmt.Errorf("name must not start with a dash")
+					}
+					return nil
+				},
+			},
+			Value: &name,
+		})
+
+		_, err := fs.MapPositionals([]string{"-bad"})
+		if err == nil {
+			t.Fatal("expected validation error for bad positional value")
+		}
+		if !strings.Contains(err.Error(), "name must not start with a dash") {
+			t.Errorf("expected validation message, got: %v", err)
+		}
+	})
+
+	t.Run("validate passes for good positional value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var name string
+		fs.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "name",
+				Positional: true,
+				Validate: func(s string) error {
+					if s == "" {
+						return fmt.Errorf("name must not be empty")
+					}
+					return nil
+				},
+			},
+			Value: &name,
+		})
+
+		_, err := fs.MapPositionals([]string{"alice"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if name != "alice" {
+			t.Errorf("expected name = alice, got %q", name)
 		}
 	})
 }

@@ -317,6 +317,11 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 		if err := flag.Value.Set(value); err != nil {
 			return err
 		}
+		if flag.Validate != nil {
+			if err := flag.Validate(value); err != nil {
+				return err
+			}
+		}
 		flag.set = true
 	}
 	return nil

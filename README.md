@@ -311,6 +311,7 @@ cannot be positional.
 - **Smart labels**: Prompt labels default to title-cased flag names (e.g., `project-id` → `Project id`)
 - **Registration order**: First `Positional: true` flag = position 0, second = position 1, etc.
 - **Named precedence**: If `--flag value` is passed, the flag is skipped during positional assignment
+- **Validation**: Custom validation functions run before execution
 
 ```go
 var repository string

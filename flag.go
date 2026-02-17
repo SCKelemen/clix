@@ -84,6 +84,10 @@ type Flag struct {
 	// Positional allows this flag to be set by position in addition to by name.
 	Positional bool
 
+	// Validate is an optional function that validates the raw string value
+	// after it has been successfully parsed by Value.Set.
+	Validate func(string) error
+
 	// Value is the flag value implementation.
 	Value Value
 
@@ -137,6 +141,11 @@ type FlagOptions struct {
 	// Both forms work: `cmd <value>` and `cmd --flag <value>`.
 	// Boolean flags cannot be positional.
 	Positional bool
+
+	// Validate is an optional function that validates the raw string value
+	// after it has been successfully parsed by Value.Set. If non-nil, it is
+	// called with the raw input string; returning a non-nil error rejects the value.
+	Validate func(string) error
 }
 
 // StringVarOptions describes the configuration for adding a string flag.
@@ -257,6 +266,7 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 		Required:   stringOpts.Required,
 		Prompt:     stringOpts.Prompt,
 		Positional: stringOpts.Positional,
+		Validate:   stringOpts.Validate,
 		Value:      value,
 	}
 	fs.addFlag(flag)
@@ -406,6 +416,7 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 		Required:   boolOpts.Required,
 		Prompt:     boolOpts.Prompt,
 		Positional: boolOpts.Positional,
+		Validate:   boolOpts.Validate,
 		Value:      value,
 	}
 	fs.addFlag(flag)
@@ -437,6 +448,7 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 		Required:   durationOpts.Required,
 		Prompt:     durationOpts.Prompt,
 		Positional: durationOpts.Positional,
+		Validate:   durationOpts.Validate,
 		Value:      value,
 	}
 	fs.addFlag(flag)
@@ -524,6 +536,7 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 		Required:   intOpts.Required,
 		Prompt:     intOpts.Prompt,
 		Positional: intOpts.Positional,
+		Validate:   intOpts.Validate,
 		Value:      value,
 	}
 	fs.addFlag(flag)
@@ -611,6 +624,7 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 		Required:   int64Opts.Required,
 		Prompt:     int64Opts.Prompt,
 		Positional: int64Opts.Positional,
+		Validate:   int64Opts.Validate,
 		Value:      value,
 	}
 	fs.addFlag(flag)
@@ -698,6 +712,7 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 		Required:   float64Opts.Required,
 		Prompt:     float64Opts.Prompt,
 		Positional: float64Opts.Positional,
+		Validate:   float64Opts.Validate,
 		Value:      value,
 	}
 	fs.addFlag(flag)
@@ -782,6 +797,11 @@ func WithFlagPrompt(prompt string) FlagOption {
 // WithFlagPositional marks the flag as accepting positional arguments.
 func WithFlagPositional() FlagOption {
 	return flagPositionalOption(true)
+}
+
+// WithFlagValidate sets a custom validation function for the flag value.
+func WithFlagValidate(fn func(string) error) FlagOption {
+	return flagValidateOption{fn: fn}
 }
 
 // WithStringValue sets the string flag value pointer.
@@ -887,6 +907,14 @@ type flagPositionalOption bool
 
 func (o flagPositionalOption) ApplyFlag(fo *FlagOptions) {
 	fo.Positional = bool(o)
+}
+
+type flagValidateOption struct {
+	fn func(string) error
+}
+
+func (o flagValidateOption) ApplyFlag(fo *FlagOptions) {
+	fo.Validate = o.fn
 }
 
 type boolValueOption struct {
