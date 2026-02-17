@@ -52,6 +52,8 @@ func TestConfigExtension(t *testing.T) {
 	})
 
 	t.Run("config command shows help", func(t *testing.T) {
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 		app := clix.NewApp("test")
 		root := clix.NewCommand("test")
 		app.Root = root
@@ -77,13 +79,11 @@ func TestConfigExtension(t *testing.T) {
 	})
 
 	t.Run("config list command lists values", func(t *testing.T) {
-		// Use a temporary home directory for config
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-		defer os.Unsetenv("HOME")
+		tempDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 		app := clix.NewApp("test")
-		configDir := filepath.Join(tempHome, ".config", "test")
+		configDir := filepath.Join(tempDir, "test")
 		os.MkdirAll(configDir, 0755)
 		configPath := filepath.Join(configDir, "config.yaml")
 		os.WriteFile(configPath, []byte("api.timeout: 30\nproject.default: dev\n"), 0644)
@@ -109,13 +109,11 @@ func TestConfigExtension(t *testing.T) {
 	})
 
 	t.Run("config get command works", func(t *testing.T) {
-		// Use a temporary home directory for config
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-		defer os.Unsetenv("HOME")
+		tempDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 		app := clix.NewApp("test")
-		configDir := filepath.Join(tempHome, ".config", "test")
+		configDir := filepath.Join(tempDir, "test")
 		os.MkdirAll(configDir, 0755)
 		configPath := filepath.Join(configDir, "config.yaml")
 		os.WriteFile(configPath, []byte("project.default: dev\n"), 0644)
@@ -140,9 +138,8 @@ func TestConfigExtension(t *testing.T) {
 	})
 
 	t.Run("config get missing key returns error", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-		defer os.Unsetenv("HOME")
+		tempDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 		app := clix.NewApp("test")
 		root := clix.NewCommand("test")
@@ -160,10 +157,8 @@ func TestConfigExtension(t *testing.T) {
 	})
 
 	t.Run("config set command works", func(t *testing.T) {
-		// Use a temporary home directory for config
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-		defer os.Unsetenv("HOME")
+		tempDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 		app := clix.NewApp("test")
 		root := clix.NewCommand("test")
@@ -191,9 +186,8 @@ func TestConfigExtension(t *testing.T) {
 	})
 
 	t.Run("config set enforces schema when registered", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-		defer os.Unsetenv("HOME")
+		tempDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 		app := clix.NewApp("test")
 		app.Config.RegisterSchema(clix.ConfigSchema{
@@ -221,9 +215,8 @@ func TestConfigExtension(t *testing.T) {
 	})
 
 	t.Run("config unset command removes value", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-		defer os.Unsetenv("HOME")
+		tempDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 		app := clix.NewApp("test")
 		app.Config.Set("project.default", "beta")
@@ -251,9 +244,8 @@ func TestConfigExtension(t *testing.T) {
 	})
 
 	t.Run("config reset clears persisted config", func(t *testing.T) {
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-		defer os.Unsetenv("HOME")
+		tempDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 		app := clix.NewApp("test")
 		app.Config.Set("api.timeout", "30")

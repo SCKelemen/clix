@@ -9,13 +9,14 @@ import (
 
 func TestConfigurationPrecedence(t *testing.T) {
 	t.Run("Flag > Env > Config > Default", func(t *testing.T) {
-		// Use a temporary home directory for config
-		tempHome := t.TempDir()
-		t.Setenv("HOME", tempHome)
-		defer os.Unsetenv("HOME")
+		// Use XDG_CONFIG_HOME for reliable config isolation across environments.
+		// ConfigDir() checks XDG_CONFIG_HOME first, so this avoids any
+		// dependency on HOME or os.UserHomeDir() behavior.
+		tempDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tempDir)
 
 		app := NewApp("test")
-		configDir := filepath.Join(tempHome, ".config", "test")
+		configDir := filepath.Join(tempDir, "test")
 		os.MkdirAll(configDir, 0755)
 		configPath := filepath.Join(configDir, "config.yaml")
 
@@ -37,7 +38,6 @@ func TestConfigurationPrecedence(t *testing.T) {
 		// Test 1: Flag should override everything
 		value = ""
 		t.Setenv("TEST_VALUE", "from-env")
-		defer os.Unsetenv("TEST_VALUE")
 
 		app.configLoaded = false // Force reload
 		if err := app.Run(context.Background(), []string{"--value", "from-flag"}); err != nil {
