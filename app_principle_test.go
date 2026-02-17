@@ -452,6 +452,144 @@ func TestPositionalIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("mixed named and positional in single invocation", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("action")
+		cmd.Short = "Do something"
+
+		var first, second string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "first",
+				Positional: true,
+			},
+			Value: &first,
+		})
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "second",
+				Positional: true,
+			},
+			Value: &second,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		// --second is named, positional-for-first is leftover
+		if err := app.Run(context.Background(), []string{"action", "--second", "bar", "positional-for-first"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if first != "positional-for-first" {
+			t.Errorf("expected first = positional-for-first, got %q", first)
+		}
+		if second != "bar" {
+			t.Errorf("expected second = bar, got %q", second)
+		}
+	})
+
+	t.Run("help shows ARGUMENTS section for positional flags", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("clone")
+		cmd.Short = "Clone a repo"
+
+		var repo string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "repository",
+				Usage:      "Repository to clone",
+				Required:   true,
+				Positional: true,
+			},
+			Value: &repo,
+		})
+
+		var branch string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:  "branch",
+				Usage: "Branch to check out",
+			},
+			Value: &branch,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		var output bytes.Buffer
+		app.Out = &output
+
+		// Trigger help
+		if err := app.Run(context.Background(), []string{"clone", "--help"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := output.String()
+		if !strings.Contains(out, "ARGUMENTS") {
+			t.Errorf("help should contain ARGUMENTS section, got:\n%s", out)
+		}
+		if !strings.Contains(out, "<repository>") {
+			t.Errorf("help should show <repository> in ARGUMENTS, got:\n%s", out)
+		}
+		if !strings.Contains(out, "FLAGS") {
+			t.Errorf("help should still contain FLAGS section, got:\n%s", out)
+		}
+	})
+
+	t.Run("help usage line includes positional placeholders", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("set")
+		cmd.Short = "Set a property"
+
+		var prop, value string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "property",
+				Required:   true,
+				Positional: true,
+			},
+			Value: &prop,
+		})
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "value",
+				Positional: true,
+			},
+			Value: &value,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		var output bytes.Buffer
+		app.Out = &output
+
+		if err := app.Run(context.Background(), []string{"set", "--help"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		out := output.String()
+		// Required positional → <property>, optional → [value]
+		if !strings.Contains(out, "<property>") {
+			t.Errorf("usage line should contain <property>, got:\n%s", out)
+		}
+		if !strings.Contains(out, "[value]") {
+			t.Errorf("usage line should contain [value], got:\n%s", out)
+		}
+	})
+
 	t.Run("positional with interactive prompting", func(t *testing.T) {
 		app := NewApp("test")
 		root := NewCommand("test")

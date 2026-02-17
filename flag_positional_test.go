@@ -203,6 +203,50 @@ func TestMapPositionals(t *testing.T) {
 	})
 }
 
+func TestWithFlagPositionalOption(t *testing.T) {
+	t.Run("functional option sets Positional on flag", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var a string
+		fs.StringVar(
+			WithFlagName("alpha"),
+			WithStringValue(&a),
+			WithFlagPositional(),
+		)
+
+		pos := fs.PositionalFlags()
+		if len(pos) != 1 {
+			t.Fatalf("expected 1 positional flag, got %d", len(pos))
+		}
+		if pos[0].Name != "alpha" {
+			t.Errorf("expected positional flag named alpha, got %s", pos[0].Name)
+		}
+		if !pos[0].Positional {
+			t.Error("expected Positional to be true")
+		}
+	})
+
+	t.Run("functional option works with MapPositionals", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var a string
+		fs.StringVar(
+			WithFlagName("repo"),
+			WithStringValue(&a),
+			WithFlagPositional(),
+		)
+
+		excess, err := fs.MapPositionals([]string{"sckelemen/clix"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(excess) != 0 {
+			t.Errorf("expected no excess, got %v", excess)
+		}
+		if a != "sckelemen/clix" {
+			t.Errorf("expected repo = sckelemen/clix, got %q", a)
+		}
+	})
+}
+
 func TestBooleanPositionalPanics(t *testing.T) {
 	defer func() {
 		r := recover()

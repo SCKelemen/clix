@@ -166,17 +166,25 @@ import (
 func NewCommand(project *string) *clix.Command {
         cmd := clix.NewCommand("greet")
         cmd.Short = "Print a friendly greeting"
-        cmd.Arguments = []*clix.Argument{{
-                Name:     "name",
-                Required: true,
-                Prompt:   "Name of the person to greet",
-        }}
+
+        var name string
+        cmd.Flags.StringVar(clix.StringVarOptions{
+                FlagOptions: clix.FlagOptions{
+                        Name:       "name",
+                        Usage:      "Name of the person to greet",
+                        Required:   true,
+                        Prompt:     "Name of the person to greet",
+                        Positional: true,
+                },
+                Value: &name,
+        })
+
         cmd.PreRun = func(ctx *clix.Context) error {
                 fmt.Fprintf(ctx.App.Out, "Using project %s\n", *project)
                 return nil
         }
         cmd.Run = func(ctx *clix.Context) error {
-                fmt.Fprintf(ctx.App.Out, "Hello %s!\n", ctx.Args[0])
+                fmt.Fprintf(ctx.App.Out, "Hello %s!\n", name)
                 return nil
         }
         cmd.PostRun = func(ctx *clix.Context) error {
@@ -187,7 +195,7 @@ func NewCommand(project *string) *clix.Command {
 }
 ```
 
-When no positional arguments are provided, `clix` will prompt the user for any required values. For example `demo greet` will prompt for the `name` argument before executing the command handler. Because the root command's `Run` handler renders the help surface, invoking `demo` on its own prints the full set of available commands.
+When no arguments are provided, `clix` will prompt the user for any required values. For example `demo greet` will prompt for the `name` flag before executing the command handler. You can also pass it positionally (`demo greet Alice`) or as a named flag (`demo greet --name Alice`). Because the root command's `Run` handler renders the help surface, invoking `demo` on its own prints the full set of available commands.
 
 The full runnable version of this example (including additional flags and configuration usage) can be found in [`examples/basic`](examples/basic).
 
@@ -292,24 +300,32 @@ With a schema in place, `cli config set project.retries 10` is accepted, while n
 
 ### Positional Arguments
 
-Commands can define required or optional positional arguments with:
-- **Automatic prompting**: Missing required arguments trigger interactive prompts
-- **Validation**: Custom validation functions run before execution
-- **Default values**: Optional arguments can have defaults
-- **Smart labels**: Prompt labels default to title-cased argument names
+Flags marked `Positional: true` accept values by position in addition to by name.
+Both forms work: `cmd <value>` and `cmd --flag <value>`. Positional flags are assigned
+left-to-right in registration order; named flags always take precedence. Boolean flags
+cannot be positional.
+
+- **Dual syntax**: Use positional or named form interchangeably
+- **Automatic prompting**: Missing required positional flags trigger interactive prompts
+- **Registration order**: First `Positional: true` flag = position 0, second = position 1, etc.
+- **Named precedence**: If `--flag value` is passed, the flag is skipped during positional assignment
 
 ```go
-cmd.Arguments = []*clix.Argument{{
-        Name:     "email",
-        Prompt:   "Email address",
-        Required: true,
-        Validate: func(value string) error {
-                if !strings.Contains(value, "@") {
-                        return fmt.Errorf("invalid email")
-                }
-                return nil
+var repository string
+cmd.Flags.StringVar(clix.StringVarOptions{
+        FlagOptions: clix.FlagOptions{
+                Name:       "repository",
+                Usage:      "Repository to clone (OWNER/REPO)",
+                Required:   true,
+                Prompt:     "OWNER/REPO",
+                Positional: true,
         },
-}}
+        Value: &repository,
+})
+
+// All of these work:
+// gh repo clone sckelemen/clix
+// gh repo clone --repository sckelemen/clix
 ```
 
 ### Interactive Prompting
@@ -413,10 +429,9 @@ Styling is optional—applications without styling still work perfectly.
 ### Command Context
 
 Command handlers receive a `*clix.Context` that embeds `context.Context` and provides:
-- Access to the active command and arguments
+- Access to the active command
 - Application instance and configuration
 - Hydrated flag/config values via type-specific getters: `String()`, `Bool()`, `Int()`, `Int64()`, `Float64()`
-- Argument access: `Arg(index)`, `ArgNamed(name)`, `AllArgs()`
 - Standard output/error streams
 - Standard context.Context functionality (cancellation, deadlines, values)
 
@@ -653,7 +668,6 @@ type Command struct {
         Example     string
         Hidden      bool
         Flags       *FlagSet
-        Arguments   []*Argument
         Children    []*Command // Children of this command (groups or commands)
 
         Run     Handler
@@ -672,23 +686,6 @@ Key methods:
 - `Commands() []*Command` - Returns only executable child commands
 - `VisibleChildren() []*Command` - Returns all visible child commands and groups
 - `Path() string` - Get the full command path from root
-
-### `clix.Argument`
-
-An `Argument` describes a positional argument for a command.
-
-```go
-type Argument struct {
-        Name     string
-        Prompt   string
-        Default  string
-        Required bool
-        Validate func(string) error
-}
-```
-
-Methods:
-- `PromptLabel() string` - Get the prompt label (defaults to title-cased name)
 
 ### `clix.PromptRequest`
 
