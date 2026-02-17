@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 	"io"
 	"testing"
 )

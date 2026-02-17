@@ -3,7 +3,7 @@ package auth
 import (
 	"fmt"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand() *clix.Command {
@@ -15,7 +15,17 @@ func NewCommand() *clix.Command {
 
 	login := clix.NewCommand("login")
 	login.Short = "Authorize access to Google Cloud"
-	login.Arguments = []*clix.Argument{{Name: "account", Prompt: "Google account", Required: true}}
+
+	var account string
+	login.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "account",
+			Usage:    "Google account",
+			Required: true,
+			Prompt:   "Google account",
+		},
+		Value: &account,
+	})
 
 	var brief bool
 	login.Flags.BoolVar(clix.BoolVarOptions{
@@ -31,13 +41,23 @@ func NewCommand() *clix.Command {
 		if brief {
 			summary = "brief"
 		}
-		fmt.Fprintf(ctx.App.Out, "Logged in as %s with %s output.\n", ctx.Args[0], summary)
+		fmt.Fprintf(ctx.App.Out, "Logged in as %s with %s output.\n", account, summary)
 		return nil
 	}
 
 	activate := clix.NewCommand("activate-service-account")
 	activate.Short = "Activate service account credentials"
-	activate.Arguments = []*clix.Argument{{Name: "account", Prompt: "Service account email", Required: true}}
+
+	var saAccount string
+	activate.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "account",
+			Usage:    "Service account email",
+			Required: true,
+			Prompt:   "Service account email",
+		},
+		Value: &saAccount,
+	})
 
 	var keyFile string
 	activate.Flags.StringVar(clix.StringVarOptions{
@@ -49,7 +69,7 @@ func NewCommand() *clix.Command {
 	})
 
 	activate.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Activated %s using key %s\n", ctx.Args[0], keyFile)
+		fmt.Fprintf(ctx.App.Out, "Activated %s using key %s\n", saAccount, keyFile)
 		return nil
 	}
 

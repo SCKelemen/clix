@@ -3,7 +3,6 @@ package clix
 import (
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // ConfigDir returns the absolute path to the application's configuration
@@ -50,23 +49,3 @@ func (a *App) SaveConfig() error {
 	return a.Config.Save(path)
 }
 
-// OutputFormat returns the currently selected output format.
-// Valid values are "json", "yaml", or "text" (default).
-func (a *App) OutputFormat() string {
-	flags := a.Flags()
-	if flags == nil {
-		return FormatText
-	}
-	if v, ok := flags.String("format"); ok && v != "" {
-		format := strings.ToLower(v)
-		// Validate format
-		switch format {
-		case FormatJSON, FormatYAML, FormatText:
-			return format
-		default:
-			// Invalid format, default to text
-			return FormatText
-		}
-	}
-	return FormatText
-}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func TestPromptSelect(t *testing.T) {

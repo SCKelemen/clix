@@ -3,7 +3,7 @@ package repo
 import (
 	"fmt"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand() *clix.Command {
@@ -15,15 +15,35 @@ func NewCommand() *clix.Command {
 
 	clone := clix.NewCommand("clone")
 	clone.Short = "Clone a repository"
-	clone.Arguments = []*clix.Argument{{Name: "repository", Prompt: "OWNER/REPO", Required: true}}
+
+	var repository string
+	clone.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "repository",
+			Usage:    "Repository to clone (OWNER/REPO)",
+			Required: true,
+			Prompt:   "OWNER/REPO",
+		},
+		Value: &repository,
+	})
 	clone.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Cloning %s...\n", ctx.Args[0])
+		fmt.Fprintf(ctx.App.Out, "Cloning %s...\n", repository)
 		return nil
 	}
 
 	create := clix.NewCommand("create")
 	create.Short = "Create a new repository"
-	create.Arguments = []*clix.Argument{{Name: "name", Prompt: "Repository name", Required: true}}
+
+	var repoName string
+	create.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "name",
+			Usage:    "Repository name",
+			Required: true,
+			Prompt:   "Repository name",
+		},
+		Value: &repoName,
+	})
 
 	var visibility string
 	create.Flags.StringVar(clix.StringVarOptions{
@@ -35,7 +55,7 @@ func NewCommand() *clix.Command {
 		Value:   &visibility,
 	})
 	create.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Creating %s repository %s\n", visibility, ctx.Args[0])
+		fmt.Fprintf(ctx.App.Out, "Creating %s repository %s\n", visibility, repoName)
 		return nil
 	}
 	cmd.Children = []*clix.Command{

@@ -2,8 +2,8 @@ package survey
 
 import (
 	"bytes"
-	"github.com/SCKelemen/clix"
-	"github.com/SCKelemen/clix/ext/prompt"
+	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/prompt"
 	"context"
 	"testing"
 )

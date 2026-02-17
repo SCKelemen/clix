@@ -9,18 +9,18 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 // Extension adds configuration management commands to a clix app.
 // Commands are organised under the `config` group:
 //
-//   - cli config                   - Show help/usage for the config group
-//   - cli config list              - List persisted configuration as YAML (json via --format=json)
-//   - cli config get <key_path>    - Print the value stored at the dot-separated path
-//   - cli config set <key_path> <value>   - Persist a value at the given path
-//   - cli config unset <key_path>  - Remove a value from persisted config (no-op if missing)
-//   - cli config reset             - Remove all persisted configuration
+//   - cli config                              - Show help/usage for the config group
+//   - cli config list                         - List persisted configuration as YAML (json via --format=json)
+//   - cli config get --key <key_path>         - Print the value stored at the dot-separated path
+//   - cli config set --key <key_path> --value <value>  - Persist a value at the given path
+//   - cli config unset --key <key_path>       - Remove a value from persisted config (no-op if missing)
+//   - cli config reset                        - Remove all persisted configuration
 //
 // Key paths use dot notation (e.g. "project.default", "api.timeout").
 // List/get/set/unset/reset operate purely on persisted config—they do not reflect flags or env vars.
@@ -29,8 +29,8 @@ import (
 // Example:
 //
 //	import (
-//		"github.com/SCKelemen/clix"
-//		"github.com/SCKelemen/clix/ext/config"
+//		"github.com/SCKelemen/clix/v2"
+//		"github.com/SCKelemen/clix/v2/ext/config"
 //	)
 //
 //	app := clix.NewApp("myapp")
@@ -38,8 +38,8 @@ import (
 //	// Now your app has config commands!
 //
 //	// Users can now manage configuration:
-//	//   myapp config set project my-project
-//	//   myapp config get project
+//	//   myapp config set --key project --value my-project
+//	//   myapp config get --key project
 //	//   myapp config list
 type Extension struct {
 	// Extension has no configuration options.
@@ -89,7 +89,12 @@ func configListCommand(app *clix.App) *clix.Command {
 		values := app.Config.Values()
 		tree := buildConfigTree(values)
 
-		switch app.OutputFormat() {
+		format := clix.FormatText
+		if v, ok := app.Flags().String("format"); ok && v != "" {
+			format = v
+		}
+
+		switch format {
 		case clix.FormatJSON:
 			enc := json.NewEncoder(app.Out)
 			enc.SetIndent("", "  ")
@@ -104,13 +109,20 @@ func configListCommand(app *clix.App) *clix.Command {
 func configGetCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("get")
 	cmd.Short = "Print a configuration value"
-	cmd.Arguments = []*clix.Argument{{
-		Name:     "key_path",
-		Prompt:   "Configuration key (dot-separated)",
-		Required: true,
-	}}
+
+	var key string
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "key",
+			Usage:    "Configuration key (dot-separated)",
+			Required: true,
+			Prompt:   "Configuration key (dot-separated)",
+		},
+		Value: &key,
+	})
+
 	cmd.Run = func(ctx *clix.Context) error {
-		keyPath, err := requireKeyPath(ctx, "key_path")
+		keyPath, err := validateKeyPath(key)
 		if err != nil {
 			return err
 		}
@@ -126,18 +138,34 @@ func configGetCommand(app *clix.App) *clix.Command {
 func configSetCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("set")
 	cmd.Short = "Update a configuration value"
-	cmd.Arguments = []*clix.Argument{
-		{Name: "key_path", Prompt: "Configuration key (dot-separated)", Required: true},
-		{Name: "value", Prompt: "Value", Required: true},
-	}
+
+	var key, value string
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "key",
+			Usage:    "Configuration key (dot-separated)",
+			Required: true,
+			Prompt:   "Configuration key (dot-separated)",
+		},
+		Value: &key,
+	})
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "value",
+			Usage:    "Value to set",
+			Required: true,
+			Prompt:   "Value",
+		},
+		Value: &value,
+	})
+
 	cmd.Run = func(ctx *clix.Context) error {
-		keyPath, err := requireKeyPath(ctx, "key_path")
+		keyPath, err := validateKeyPath(key)
 		if err != nil {
 			return err
 		}
-		value, ok := ctx.ArgNamed("value")
-		if !ok || strings.TrimSpace(value) == "" {
-			return errors.New("value argument required")
+		if strings.TrimSpace(value) == "" {
+			return errors.New("value cannot be empty")
 		}
 
 		if app.Config != nil {
@@ -161,13 +189,20 @@ func configSetCommand(app *clix.App) *clix.Command {
 func configUnsetCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("unset")
 	cmd.Short = "Remove a persisted configuration value"
-	cmd.Arguments = []*clix.Argument{{
-		Name:     "key_path",
-		Prompt:   "Configuration key (dot-separated)",
-		Required: true,
-	}}
+
+	var key string
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "key",
+			Usage:    "Configuration key (dot-separated)",
+			Required: true,
+			Prompt:   "Configuration key (dot-separated)",
+		},
+		Value: &key,
+	})
+
 	cmd.Run = func(ctx *clix.Context) error {
-		keyPath, err := requireKeyPath(ctx, "key_path")
+		keyPath, err := validateKeyPath(key)
 		if err != nil {
 			return err
 		}
@@ -205,14 +240,10 @@ func quoteIfNeeded(value string) string {
 	return value
 }
 
-func requireKeyPath(ctx *clix.Context, argName string) (string, error) {
-	raw, ok := ctx.ArgNamed(argName)
-	if !ok {
-		return "", errors.New("key path argument required")
-	}
+func validateKeyPath(raw string) (string, error) {
 	key := strings.TrimSpace(raw)
 	if key == "" {
-		return "", errors.New("key path argument required")
+		return "", errors.New("key path cannot be empty")
 	}
 	if strings.Contains(key, " ") {
 		return "", fmt.Errorf("key path %q must not contain spaces", key)

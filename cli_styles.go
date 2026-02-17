@@ -21,7 +21,7 @@ type Styles struct {
 	// CommandTitle styles command names in help output.
 	CommandTitle TextStyle
 
-	// SectionHeading styles section headings (e.g., "FLAGS", "ARGUMENTS") in help output.
+	// SectionHeading styles section headings (e.g., "FLAGS", "COMMANDS") in help output.
 	SectionHeading TextStyle
 
 	// Usage styles usage strings in help output.
@@ -50,12 +50,6 @@ type Styles struct {
 	// CommandFlagUsage styles command-level flag usage text.
 	// Falls back to FlagUsage when unset.
 	CommandFlagUsage TextStyle
-
-	// ArgumentName styles argument names in help output.
-	ArgumentName TextStyle
-
-	// ArgumentMarker styles argument markers (e.g., "<name>", "[name]") in help output.
-	ArgumentMarker TextStyle
 
 	// ChildName styles child command and group names in help output.
 	// Used for both groups and commands in the GROUPS and COMMANDS sections.
@@ -132,16 +126,6 @@ func WithCommandFlagUsage(style TextStyle) StyleOption {
 	return styleCommandFlagUsageOption{style: style}
 }
 
-// WithArgumentName sets the argument name style.
-func WithArgumentName(style TextStyle) StyleOption {
-	return styleArgumentNameOption{style: style}
-}
-
-// WithArgumentMarker sets the argument marker style.
-func WithArgumentMarker(style TextStyle) StyleOption {
-	return styleArgumentMarkerOption{style: style}
-}
-
 // WithChildName sets the child name style.
 func WithChildName(style TextStyle) StyleOption {
 	return styleChildNameOption{style: style}
@@ -202,14 +186,6 @@ func (o styleCommandFlagNameOption) ApplyStyle(s *Styles) { s.CommandFlagName = 
 type styleCommandFlagUsageOption struct{ style TextStyle }
 
 func (o styleCommandFlagUsageOption) ApplyStyle(s *Styles) { s.CommandFlagUsage = o.style }
-
-type styleArgumentNameOption struct{ style TextStyle }
-
-func (o styleArgumentNameOption) ApplyStyle(s *Styles) { s.ArgumentName = o.style }
-
-type styleArgumentMarkerOption struct{ style TextStyle }
-
-func (o styleArgumentMarkerOption) ApplyStyle(s *Styles) { s.ArgumentMarker = o.style }
 
 type styleChildNameOption struct{ style TextStyle }
 

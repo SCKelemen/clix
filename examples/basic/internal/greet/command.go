@@ -3,18 +3,24 @@ package greet
 import (
 	"fmt"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand(project *string) *clix.Command {
 	cmd := clix.NewCommand("greet")
 	cmd.Short = "Print a greeting"
-	cmd.Usage = "demo greet [name]"
-	cmd.Arguments = []*clix.Argument{{
-		Name:     "name",
-		Prompt:   "Name of the person to greet",
-		Required: true,
-	}}
+	cmd.Usage = "demo greet --name [name]"
+
+	var name string
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "name",
+			Usage:    "Name of the person to greet",
+			Required: true,
+			Prompt:   "Name of the person to greet",
+		},
+		Value: &name,
+	})
 
 	var salutation string
 	cmd.Flags.StringVar(clix.StringVarOptions{
@@ -33,7 +39,6 @@ func NewCommand(project *string) *clix.Command {
 	}
 
 	cmd.Run = func(ctx *clix.Context) error {
-		name := ctx.Args[0]
 		fmt.Fprintf(ctx.App.Out, "%s %s!\n", salutation, name)
 		return nil
 	}

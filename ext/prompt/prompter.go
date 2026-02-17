@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 
 	"golang.org/x/term"
 )

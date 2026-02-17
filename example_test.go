@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 // ExampleNewApp demonstrates how to create a new CLI application.
@@ -144,35 +144,24 @@ func ExampleFlagSet_BoolVar() {
 	})
 }
 
-// ExampleArgument demonstrates how to define positional arguments with prompting.
-func ExampleArgument() {
+// ExampleFlagOptions_Required demonstrates required flags with interactive prompting.
+func ExampleFlagOptions_Required() {
 	cmd := clix.NewCommand("greet")
 	cmd.Short = "Print a greeting"
 
-	// Required argument with automatic prompting
-	cmd.Arguments = []*clix.Argument{
-		{
+	var name string
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
 			Name:     "name",
-			Prompt:   "What is your name?",
+			Usage:    "Name of the person to greet",
 			Required: true,
-			Validate: func(value string) error {
-				if len(value) < 2 {
-					return fmt.Errorf("name must be at least 2 characters")
-				}
-				return nil
-			},
+			Prompt:   "What is your name?",
 		},
-		{
-			Name:    "title",
-			Prompt:  "What is your title?",
-			Default: "Developer",
-		},
-	}
+		Value: &name,
+	})
 
 	cmd.Run = func(ctx *clix.Context) error {
-		name := ctx.Args[0]
-		title := ctx.Args[1]
-		fmt.Fprintf(ctx.App.Out, "Hello %s, %s!\n", title, name)
+		fmt.Fprintf(ctx.App.Out, "Hello %s!\n", name)
 		return nil
 	}
 }
@@ -321,8 +310,8 @@ func ExampleContext_Bool() {
 	}
 }
 
-// ExampleApp_FormatOutput demonstrates how to use structured output formatting.
-func ExampleApp_FormatOutput() {
+// ExampleFormatData demonstrates how to use structured output formatting.
+func ExampleFormatData() {
 	app := clix.NewApp("myapp")
 	root := clix.NewCommand("myapp")
 	app.Root = root
@@ -335,9 +324,9 @@ func ExampleApp_FormatOutput() {
 			"tags":   []string{"developer", "golang"},
 		}
 
-		// FormatOutput respects the --format flag (json, yaml, or text)
-		// Users can run: myapp --format=json
-		return ctx.App.FormatOutput(data)
+		// FormatData writes data in the given format to the writer.
+		// Pair with the ext/format extension to let users choose via --format flag.
+		return clix.FormatData(ctx.App.Out, data, clix.FormatText)
 	}
 }
 
@@ -363,12 +352,6 @@ func ExampleApp_Run() {
 		fmt.Fprintf(ctx.App.Out, "Hello, %s!\n", name)
 		return nil
 	}
-
-	// In a real application, you would call:
-	// if err := app.Run(context.Background(), nil); err != nil {
-	//     fmt.Fprintln(app.Err, err)
-	//     os.Exit(1)
-	// }
 
 	// For this example, we'll simulate running with arguments
 	ctx := context.Background()
@@ -418,36 +401,23 @@ func ExampleStyleFunc() {
 	// Apply to app styles
 	app.Styles.SectionHeading = style
 	app.Styles.CommandTitle = style
-
-	// StyleFunc is compatible with lipgloss.Style
-	// You can use lipgloss styles directly:
-	// import "github.com/charmbracelet/lipgloss"
-	// lipglossStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	// app.Styles.SectionHeading = clix.StyleFunc(lipglossStyle.Render)
 }
 
 // ExampleExtension demonstrates how to create and use extensions.
-// Extensions implement the clix.Extension interface to add optional features.
 func ExampleExtension() {
-	// Define a custom extension type
 	type MyExtension struct {
 		FeatureEnabled bool
 	}
 
-	// Implement the Extension interface
 	var ext clix.Extension = extensionImpl{enabled: true}
 
-	// Use the extension
 	app := clix.NewApp("myapp")
 	app.Root = clix.NewCommand("myapp")
 	app.AddExtension(ext)
 
-	// Extensions are applied when app.Run() is called
-	// They can add commands, modify behavior, etc.
 	_ = MyExtension{FeatureEnabled: true}
 }
 
-// extensionImpl is a helper type for the example
 type extensionImpl struct {
 	enabled bool
 }
@@ -465,7 +435,6 @@ func Example_declarativeStyle() {
 		port    int
 	)
 
-	// Create app using struct fields
 	app := clix.NewApp("myapp")
 	app.Description = "A declarative-style CLI application"
 	app.Version = "1.0.0"
@@ -510,19 +479,17 @@ func Example_declarativeStyle() {
 		Value:   &port,
 	})
 
-	// Arguments using struct-based API
-	createCmd.Arguments = []*clix.Argument{
-		{
+	// Required flags using struct-based API (replaces Arguments in v2)
+	var resourceName string
+	createCmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
 			Name:     "name",
-			Prompt:   "Enter resource name",
+			Usage:    "Resource name",
 			Required: true,
+			Prompt:   "Enter resource name",
 		},
-		{
-			Name:    "email",
-			Prompt:  "Enter email address",
-			Default: "user@example.com",
-		},
-	}
+		Value: &resourceName,
+	})
 
 	// Config schema using struct-based API
 	app.Config.RegisterSchema(clix.ConfigSchema{
@@ -541,7 +508,6 @@ func Example_declarativeStyle() {
 	root := clix.NewGroup("myapp", "My application", createCmd, listCmd)
 	app.Root = root
 
-	// Run the app
 	_ = app
 	// Output:
 }
@@ -555,7 +521,6 @@ func Example_functionalStyle() {
 		port    int
 	)
 
-	// Create app with functional options
 	app := clix.NewApp("myapp")
 	app.Description = "A fully functional-style CLI application"
 
@@ -594,19 +559,15 @@ func Example_functionalStyle() {
 		clix.WithIntegerDefault("8080"),
 	)
 
-	// Arguments using functional options
-	createCmd.Arguments = []*clix.Argument{
-		clix.NewArgument(
-			clix.WithArgName("name"),
-			clix.WithArgPrompt("Enter resource name"),
-			clix.WithArgRequired(),
-		),
-		clix.NewArgument(
-			clix.WithArgName("email"),
-			clix.WithArgPrompt("Enter email address"),
-			clix.WithArgDefault("user@example.com"),
-		),
-	}
+	// Required flags using functional options (replaces Arguments in v2)
+	var resourceName string
+	createCmd.Flags.StringVar(
+		clix.WithFlagName("name"),
+		clix.WithFlagUsage("Resource name"),
+		clix.WithFlagRequired(),
+		clix.WithFlagPrompt("Enter resource name"),
+		clix.WithStringValue(&resourceName),
+	)
 
 	// Config schema using functional options
 	app.Config.RegisterSchema(
@@ -628,7 +589,6 @@ func Example_functionalStyle() {
 
 	app.Root = root
 
-	// Run the app
 	_ = app
 	// Output:
 }
@@ -637,7 +597,6 @@ func Example_functionalStyle() {
 func ExampleApp_ConfigDir() {
 	app := clix.NewApp("myapp")
 
-	// Get the config directory (creates if it doesn't exist)
 	configDir, err := app.ConfigDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -645,7 +604,6 @@ func ExampleApp_ConfigDir() {
 	}
 	fmt.Printf("Config directory: %s\n", configDir)
 
-	// Get the config file path
 	configFile, err := app.ConfigFile()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -653,10 +611,8 @@ func ExampleApp_ConfigDir() {
 	}
 	fmt.Printf("Config file: %s\n", configFile)
 
-	// Set a config value
 	app.Config.Set("project", "my-project")
 
-	// Save to disk
 	if err := app.SaveConfig(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 	}

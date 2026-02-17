@@ -3,7 +3,7 @@ package pr
 import (
 	"fmt"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand() *clix.Command {
@@ -16,15 +16,35 @@ func NewCommand() *clix.Command {
 	checkout := clix.NewCommand("checkout")
 	checkout.Short = "Check out a pull request"
 	checkout.Aliases = []string{"co"}
-	checkout.Arguments = []*clix.Argument{{Name: "number", Prompt: "Pull request number", Required: true}}
+
+	var checkoutNumber string
+	checkout.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "number",
+			Usage:    "Pull request number",
+			Required: true,
+			Prompt:   "Pull request number",
+		},
+		Value: &checkoutNumber,
+	})
 	checkout.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Checking out PR #%s\n", ctx.Args[0])
+		fmt.Fprintf(ctx.App.Out, "Checking out PR #%s\n", checkoutNumber)
 		return nil
 	}
 
 	merge := clix.NewCommand("merge")
 	merge.Short = "Merge a pull request"
-	merge.Arguments = []*clix.Argument{{Name: "number", Prompt: "Pull request number", Required: true}}
+
+	var mergeNumber string
+	merge.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "number",
+			Usage:    "Pull request number",
+			Required: true,
+			Prompt:   "Pull request number",
+		},
+		Value: &mergeNumber,
+	})
 
 	var rebase bool
 	merge.Flags.BoolVar(clix.BoolVarOptions{
@@ -40,7 +60,7 @@ func NewCommand() *clix.Command {
 		if rebase {
 			strategy = "rebase"
 		}
-		fmt.Fprintf(ctx.App.Out, "Merging PR #%s using %s strategy\n", ctx.Args[0], strategy)
+		fmt.Fprintf(ctx.App.Out, "Merging PR #%s using %s strategy\n", mergeNumber, strategy)
 		return nil
 	}
 	cmd.Children = []*clix.Command{

@@ -3,12 +3,12 @@ package main
 import (
 	"strings"
 
-	"github.com/SCKelemen/clix"
-	authcmd "github.com/SCKelemen/clix/examples/gh/internal/auth"
-	orgcmd "github.com/SCKelemen/clix/examples/gh/internal/org"
-	prcmd "github.com/SCKelemen/clix/examples/gh/internal/pr"
-	repocmd "github.com/SCKelemen/clix/examples/gh/internal/repo"
-	simplecmd "github.com/SCKelemen/clix/examples/gh/internal/simple"
+	"github.com/SCKelemen/clix/v2"
+	authcmd "github.com/SCKelemen/clix/v2/examples/gh/internal/auth"
+	orgcmd "github.com/SCKelemen/clix/v2/examples/gh/internal/org"
+	prcmd "github.com/SCKelemen/clix/v2/examples/gh/internal/pr"
+	repocmd "github.com/SCKelemen/clix/v2/examples/gh/internal/repo"
+	simplecmd "github.com/SCKelemen/clix/v2/examples/gh/internal/simple"
 )
 
 func newApp() *clix.App {

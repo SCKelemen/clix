@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/SCKelemen/clix"
-	"github.com/SCKelemen/clix/ext/prompt"
+	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/prompt"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"

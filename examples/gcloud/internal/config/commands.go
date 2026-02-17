@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand(project *string) *clix.Command {
@@ -16,27 +16,53 @@ func NewCommand(project *string) *clix.Command {
 
 	set := clix.NewCommand("set")
 	set.Short = "Set a property"
-	set.Arguments = []*clix.Argument{
-		{Name: "property", Prompt: "Property name", Required: true},
-		{Name: "value", Prompt: "Value", Required: true},
-	}
+
+	var setProp, setValue string
+	set.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "property",
+			Usage:    "Property name",
+			Required: true,
+			Prompt:   "Property name",
+		},
+		Value: &setProp,
+	})
+	set.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "value",
+			Usage:    "Property value",
+			Required: true,
+			Prompt:   "Value",
+		},
+		Value: &setValue,
+	})
 	set.Run = func(ctx *clix.Context) error {
-		if strings.EqualFold(ctx.Args[0], "project") {
-			*project = ctx.Args[1]
+		if strings.EqualFold(setProp, "project") {
+			*project = setValue
 		}
-		fmt.Fprintf(ctx.App.Out, "Set %s to %s\n", ctx.Args[0], ctx.Args[1])
+		fmt.Fprintf(ctx.App.Out, "Set %s to %s\n", setProp, setValue)
 		return nil
 	}
 
 	get := clix.NewCommand("get")
 	get.Short = "Get a property"
-	get.Arguments = []*clix.Argument{{Name: "property", Prompt: "Property name", Required: true}}
+
+	var getProp string
+	get.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "property",
+			Usage:    "Property name",
+			Required: true,
+			Prompt:   "Property name",
+		},
+		Value: &getProp,
+	})
 	get.Run = func(ctx *clix.Context) error {
-		if strings.EqualFold(ctx.Args[0], "project") {
+		if strings.EqualFold(getProp, "project") {
 			fmt.Fprintf(ctx.App.Out, "project = %s\n", valueOrDefault(project, ""))
 			return nil
 		}
-		fmt.Fprintf(ctx.App.Out, "%s is not set\n", ctx.Args[0])
+		fmt.Fprintf(ctx.App.Out, "%s is not set\n", getProp)
 		return nil
 	}
 	cmd.Children = []*clix.Command{

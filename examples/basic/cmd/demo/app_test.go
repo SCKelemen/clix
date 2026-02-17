@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SCKelemen/clix"
-	demoapp "github.com/SCKelemen/clix/examples/basic/internal/app"
+	"github.com/SCKelemen/clix/v2"
+	demoapp "github.com/SCKelemen/clix/v2/examples/basic/internal/app"
 )
 
 func TestDemoGreetCommand(t *testing.T) {
@@ -20,7 +20,7 @@ func TestDemoGreetCommand(t *testing.T) {
 	app.In = strings.NewReader("")
 	app.Prompter = clix.TextPrompter{In: app.In, Out: app.Out}
 
-	if err := app.Run(context.Background(), []string{"greet", "Alice"}); err != nil {
+	if err := app.Run(context.Background(), []string{"greet", "--name", "Alice"}); err != nil {
 		t.Fatalf("app.Run returned error: %v", err)
 	}
 

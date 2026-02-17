@@ -11,26 +11,17 @@ import (
 )
 
 // Validator is a function that validates a string value and returns an error if invalid.
-// Validators can be used with prompts, arguments, and flags.
+// Validators can be used with prompts and flags.
 //
 // Example:
 //
-//	import "github.com/SCKelemen/clix/ext/validation"
+//	import "github.com/SCKelemen/clix/v2/ext/validation"
 //
 //	// Use with prompts
 //	result, err := prompter.Prompt(ctx, clix.PromptRequest{
-//		Label:   "Email",
+//		Label:    "Email",
 //		Validate: validation.Email,
 //	})
-//
-//	// Use with arguments
-//	cmd.Arguments = []*clix.Argument{
-//		{
-//			Name:     "email",
-//			Required: true,
-//			Validate: validation.Email,
-//		},
-//	}
 //
 //	// Combine validators
 //	validate := validation.All(

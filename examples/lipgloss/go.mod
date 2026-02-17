@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.2
 
 require (
-	github.com/SCKelemen/clix v0.0.0
+	github.com/SCKelemen/clix/v2 v0.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
 )
 
@@ -25,4 +25,4 @@ require (
 	golang.org/x/term v0.36.0 // indirect
 )
 
-replace github.com/SCKelemen/clix => ../..
+replace github.com/SCKelemen/clix/v2 => ../..

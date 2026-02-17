@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/SCKelemen/clix"
-	"github.com/SCKelemen/clix/examples/basic/internal/greet"
+	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/examples/basic/internal/greet"
 )
 
 const demoBanner = `

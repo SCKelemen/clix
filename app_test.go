@@ -48,46 +48,6 @@ func TestAppRunAppliesConfigurationPrecedence(t *testing.T) {
 	}
 }
 
-func TestAppGlobalFormatFlagVariants(t *testing.T) {
-	tcases := []struct {
-		name string
-		args []string
-	}{
-		{name: "long with equals", args: []string{"--format=json"}},
-		{name: "long with space", args: []string{"--format", "json"}},
-		{name: "short with equals", args: []string{"-f=json"}},
-		{name: "short with space", args: []string{"-f", "json"}},
-	}
-
-	for _, tc := range tcases {
-		t.Run(tc.name, func(t *testing.T) {
-			app := NewApp("demo")
-			app.configLoaded = true
-
-			// Use the root created by NewApp (it has the format flag)
-			executed := false
-			app.Root.Run = func(ctx *Context) error {
-				executed = true
-				if format := ctx.App.OutputFormat(); format != "json" {
-					t.Fatalf("expected output format to be json, got %q", format)
-				}
-				if value, ok := ctx.App.Flags().String("format"); !ok || value != "json" {
-					t.Fatalf("unexpected global flag value: %q, %v", value, ok)
-				}
-				return nil
-			}
-
-			if err := app.Run(context.Background(), tc.args); err != nil {
-				t.Fatalf("app run failed: %v", err)
-			}
-
-			if !executed {
-				t.Fatalf("expected command to execute")
-			}
-		})
-	}
-}
-
 // TestFlagPrecedenceWithGlobalFlags tests that command flags take precedence over
 // global flags when both exist with the same name. This documents the expected
 // behavior: command flags > app flags > env > config > defaults

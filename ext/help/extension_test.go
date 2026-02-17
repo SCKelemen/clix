@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func TestHelpExtension(t *testing.T) {
@@ -74,7 +74,7 @@ func TestHelpExtension(t *testing.T) {
 		}
 	})
 
-	t.Run("help command with child works", func(t *testing.T) {
+	t.Run("help command with --command flag works", func(t *testing.T) {
 		app := clix.NewApp("test")
 		root := clix.NewCommand("test")
 		app.Root = root
@@ -88,9 +88,9 @@ func TestHelpExtension(t *testing.T) {
 
 		app.AddExtension(Extension{})
 
-		// Run help for child command
-		if err := app.Run(context.Background(), []string{"help", "child"}); err != nil {
-			t.Fatalf("help child command failed: %v", err)
+		// Run help for child command using --command flag
+		if err := app.Run(context.Background(), []string{"help", "--command", "child"}); err != nil {
+			t.Fatalf("help --command child failed: %v", err)
 		}
 
 		outputStr := output.String()

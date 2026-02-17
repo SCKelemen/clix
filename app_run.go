@@ -59,23 +59,23 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		// so we show help for that command instead of root
 		if len(remaining) > 0 {
 			if cmd, _ := a.matchCommand(remaining); cmd != nil {
-				return a.printCommandHelp(cmd, nil)
+				return a.printCommandHelp(cmd)
 			}
 		}
-		return a.printCommandHelp(a.Root, remaining)
+		return a.printCommandHelp(a.Root)
 	}
 
 	cmd, rest := a.matchCommand(remaining)
 	if cmd == nil {
 		if len(remaining) == 0 {
-			return a.printCommandHelp(a.Root, remaining)
+			return a.printCommandHelp(a.Root)
 		}
 		// Unknown command - show help for parent or error
 		// Try to find the parent command to show its help
 		if len(remaining) > 1 {
 			// Try to match parent command
 			if parentCmd, _ := a.matchCommand(remaining[:len(remaining)-1]); parentCmd != nil {
-				return a.printCommandHelp(parentCmd, nil)
+				return a.printCommandHelp(parentCmd)
 			}
 		}
 		return fmt.Errorf("unknown command: %s", strings.Join(remaining, " "))
@@ -108,45 +108,53 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
+	// Reject unexpected positional args — everything is named flags now
+	if len(resultArgs) > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(resultArgs, " "))
+	}
+
 	// Check for --help/-h flag at command level (automatic for all commands)
 	// Help flags are automatically added to every command in NewCommand/prepare
 	// This takes precedence over everything else - no need to implement per command
 	if help, _ := cmd.Flags.Bool("help"); help {
-		return a.printCommandHelp(cmd, resultArgs)
+		return a.printCommandHelp(cmd)
 	}
 
 	// Count user-defined children (groups or commands, excluding default commands like help, config, autocomplete)
 	userChildren := a.countUserChildren(cmd)
 
-	// If command has user-defined children and no positional arguments were provided:
+	// If command has user-defined children:
 	// - If it has a Run handler, execute it (command with children can have default behavior)
 	// - If it has no Run handler, show help (group behavior)
-	// If positional arguments are provided, we'll execute the Run handler.
-	// If a child command was matched, we would have already routed to it in matchCommand.
-	if userChildren > 0 && len(resultArgs) == 0 {
-		if cmd.Run == nil {
-			// No Run handler, show help (group behavior)
-			return a.printCommandHelp(cmd, resultArgs)
-		}
-		// Has Run handler, will execute it below
+	if userChildren > 0 && cmd.Run == nil {
+		return a.printCommandHelp(cmd)
 	}
 
-	// Create context early so we can use it for prompting
-	// This ensures prompts respect cancellation from the caller's context
+	// Three-way mode detection for required flags:
+	// 1. No CLI flags passed + required missing → interactive prompting
+	// 2. All required satisfied (from any source) → run
+	// 3. Some CLI flags passed + required missing → error
+	missing := cmd.Flags.MissingRequired()
+	if len(missing) > 0 {
+		if cmd.Flags.AnyCLISet() {
+			// Mode 3: some flags provided, required missing → error
+			names := make([]string, len(missing))
+			for i, f := range missing {
+				names[i] = "--" + f.Name
+			}
+			return fmt.Errorf("missing required flags: %s", strings.Join(names, ", "))
+		}
+		// Mode 1: no CLI flags → interactive prompting
+		if err := a.promptForRequiredFlags(ctx, cmd, missing); err != nil {
+			return err
+		}
+	}
+
+	// Create context for handler execution
 	runCtx := &Context{
 		Context: ctx,
 		App:     a,
 		Command: cmd,
-		Args:    resultArgs,
-	}
-
-	// If command has no user-defined children and required args are missing, prompt for them
-	if len(resultArgs) < cmd.RequiredArgs() {
-		if err := a.promptForArguments(runCtx, cmd, &resultArgs); err != nil {
-			return err
-		}
-		// Update args in context after prompting
-		runCtx.Args = resultArgs
 	}
 
 	if cmd.PreRun != nil {
@@ -282,44 +290,33 @@ func (a *App) trySetFromDefault(flag *Flag) {
 	}
 }
 
-func (a *App) promptForArguments(ctx *Context, cmd *Command, args *[]string) error {
-	missing := cmd.RequiredArgs() - len(*args)
-	if missing <= 0 {
-		return nil
-	}
-
-	// Use the provided context (which embeds context.Context) for prompting
-	// This ensures prompts respect cancellation and deadlines from the caller
-	var promptCtx context.Context
-	if ctx != nil {
-		promptCtx = ctx.Context
-	} else {
-		promptCtx = context.Background()
-	}
-
-	for i := len(*args); i < len(cmd.Arguments); i++ {
-		arg := cmd.Arguments[i]
-		if !arg.Required {
-			break
+// promptForRequiredFlags interactively prompts for each missing required flag.
+func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing []*Flag) error {
+	for _, flag := range missing {
+		label := flag.Prompt
+		if label == "" {
+			label = strings.ReplaceAll(flag.Name, "-", " ")
+			if len(label) > 0 {
+				label = strings.ToUpper(label[:1]) + label[1:]
+			}
 		}
 
-		// Use struct-based API for consistency with rest of codebase
-		value, err := a.Prompter.Prompt(promptCtx, PromptRequest{
-			Label:    arg.PromptLabel(),
-			Default:  arg.Default,
-			Validate: arg.Validate,
-			Theme:    a.DefaultTheme,
+		value, err := a.Prompter.Prompt(ctx, PromptRequest{
+			Label: label,
+			Theme: a.DefaultTheme,
 		})
 		if err != nil {
 			return err
 		}
-		*args = append(*args, value)
+		if err := flag.Value.Set(value); err != nil {
+			return err
+		}
+		flag.set = true
 	}
-
 	return nil
 }
 
-func (a *App) printCommandHelp(cmd *Command, args []string) error {
+func (a *App) printCommandHelp(cmd *Command) error {
 	helper := HelpRenderer{App: a, Command: cmd}
 	return helper.Render(a.Out)
 }

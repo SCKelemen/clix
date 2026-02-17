@@ -10,15 +10,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// FormatOutput formats data according to the app's output format setting.
-// It supports "json", "yaml", and "text" formats.
-// For maps/slices, it automatically formats them appropriately.
-// For other types, it falls back to text formatting.
-func (a *App) FormatOutput(data interface{}) error {
-	format := a.OutputFormat()
-	return FormatData(a.Out, data, format)
-}
-
 // FormatData formats data to the specified output writer using the given format.
 func FormatData(w io.Writer, data interface{}, format string) error {
 	switch strings.ToLower(format) {

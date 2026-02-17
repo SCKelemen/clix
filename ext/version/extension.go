@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 // Extension adds the version command and --version flag to a clix app.
@@ -17,8 +17,8 @@ import (
 // Example:
 //
 //	import (
-//		"github.com/SCKelemen/clix"
-//		"github.com/SCKelemen/clix/ext/version"
+//		"github.com/SCKelemen/clix/v2"
+//		"github.com/SCKelemen/clix/v2/ext/version"
 //	)
 //
 //	app := clix.NewApp("myapp")
@@ -95,7 +95,10 @@ func renderVersion(app *clix.App, version, commit, date string) error {
 		version = "dev"
 	}
 
-	format := app.OutputFormat()
+	format := clix.FormatText
+	if v, ok := app.Flags().String("format"); ok && v != "" {
+		format = v
+	}
 
 	// Build version data structure
 	versionData := map[string]interface{}{

@@ -3,7 +3,7 @@ package prompt
 import (
 	"testing"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func TestSuggestionText(t *testing.T) {

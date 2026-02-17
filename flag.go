@@ -75,10 +75,17 @@ type Flag struct {
 	// Default is the default value for this flag (as a string).
 	Default string
 
+	// Required indicates this flag must be provided or resolved from another source.
+	Required bool
+
+	// Prompt is the label shown when interactively prompting for this flag's value.
+	Prompt string
+
 	// Value is the flag value implementation.
 	Value Value
 
-	set bool // Internal: tracks if flag was explicitly set
+	set    bool // Internal: tracks if flag was explicitly set (any source)
+	cliSet bool // Internal: tracks if flag was set via CLI argument (not env/config/default)
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.
@@ -111,6 +118,16 @@ type FlagOptions struct {
 	// EnvVars are optional additional environment variable aliases.
 	// All listed environment variables are checked in order.
 	EnvVars []string
+
+	// Required indicates this flag must be provided (or resolved from Default/env/config).
+	// When required flags are missing and no CLI flags were passed, the user is
+	// prompted interactively. When some CLI flags were passed but required flags
+	// are still missing, an error is returned.
+	Required bool
+
+	// Prompt is the label shown when interactively prompting for this flag's value.
+	// If empty, a title-cased version of Name is used (e.g., "project" -> "Project").
+	Prompt string
 }
 
 // StringVarOptions describes the configuration for adding a string flag.
@@ -220,12 +237,14 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 	}
 	value := &StringValue{target: stringOpts.Value}
 	flag := &Flag{
-		Name:    stringOpts.Name,
-		Short:   stringOpts.Short,
-		Usage:   stringOpts.Usage,
-		EnvVar:  stringOpts.EnvVar,
-		Default: stringOpts.Default,
-		Value:   value,
+		Name:     stringOpts.Name,
+		Short:    stringOpts.Short,
+		Usage:    stringOpts.Usage,
+		EnvVar:   stringOpts.EnvVar,
+		Default:  stringOpts.Default,
+		Required: stringOpts.Required,
+		Prompt:   stringOpts.Prompt,
+		Value:    value,
 	}
 	fs.addFlag(flag)
 	if stringOpts.Default != "" {
@@ -361,11 +380,13 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 	}
 	value := &BoolValue{target: boolOpts.Value}
 	flag := &Flag{
-		Name:   boolOpts.Name,
-		Short:  boolOpts.Short,
-		Usage:  boolOpts.Usage,
-		EnvVar: boolOpts.EnvVar,
-		Value:  value,
+		Name:     boolOpts.Name,
+		Short:    boolOpts.Short,
+		Usage:    boolOpts.Usage,
+		EnvVar:   boolOpts.EnvVar,
+		Required: boolOpts.Required,
+		Prompt:   boolOpts.Prompt,
+		Value:    value,
 	}
 	fs.addFlag(flag)
 }
@@ -388,12 +409,14 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 	}
 	value := &DurationValue{target: durationOpts.Value}
 	flag := &Flag{
-		Name:    durationOpts.Name,
-		Short:   durationOpts.Short,
-		Usage:   durationOpts.Usage,
-		EnvVar:  durationOpts.EnvVar,
-		Default: durationOpts.Default,
-		Value:   value,
+		Name:     durationOpts.Name,
+		Short:    durationOpts.Short,
+		Usage:    durationOpts.Usage,
+		EnvVar:   durationOpts.EnvVar,
+		Default:  durationOpts.Default,
+		Required: durationOpts.Required,
+		Prompt:   durationOpts.Prompt,
+		Value:    value,
 	}
 	fs.addFlag(flag)
 	if durationOpts.Default != "" {
@@ -469,12 +492,14 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 	}
 	value := &IntValue{target: intOpts.Value}
 	flag := &Flag{
-		Name:    intOpts.Name,
-		Short:   intOpts.Short,
-		Usage:   intOpts.Usage,
-		EnvVar:  intOpts.EnvVar,
-		Default: intOpts.Default,
-		Value:   value,
+		Name:     intOpts.Name,
+		Short:    intOpts.Short,
+		Usage:    intOpts.Usage,
+		EnvVar:   intOpts.EnvVar,
+		Default:  intOpts.Default,
+		Required: intOpts.Required,
+		Prompt:   intOpts.Prompt,
+		Value:    value,
 	}
 	fs.addFlag(flag)
 	if intOpts.Default != "" {
@@ -550,12 +575,14 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 	}
 	value := &Int64Value{target: int64Opts.Value}
 	flag := &Flag{
-		Name:    int64Opts.Name,
-		Short:   int64Opts.Short,
-		Usage:   int64Opts.Usage,
-		EnvVar:  int64Opts.EnvVar,
-		Default: int64Opts.Default,
-		Value:   value,
+		Name:     int64Opts.Name,
+		Short:    int64Opts.Short,
+		Usage:    int64Opts.Usage,
+		EnvVar:   int64Opts.EnvVar,
+		Default:  int64Opts.Default,
+		Required: int64Opts.Required,
+		Prompt:   int64Opts.Prompt,
+		Value:    value,
 	}
 	fs.addFlag(flag)
 	if int64Opts.Default != "" {
@@ -631,12 +658,14 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 	}
 	value := &Float64Value{target: float64Opts.Value}
 	flag := &Flag{
-		Name:    float64Opts.Name,
-		Short:   float64Opts.Short,
-		Usage:   float64Opts.Usage,
-		EnvVar:  float64Opts.EnvVar,
-		Default: float64Opts.Default,
-		Value:   value,
+		Name:     float64Opts.Name,
+		Short:    float64Opts.Short,
+		Usage:    float64Opts.Usage,
+		EnvVar:   float64Opts.EnvVar,
+		Default:  float64Opts.Default,
+		Required: float64Opts.Required,
+		Prompt:   float64Opts.Prompt,
+		Value:    value,
 	}
 	fs.addFlag(flag)
 	if float64Opts.Default != "" {
@@ -700,6 +729,16 @@ func WithFlagEnvVar(envVar string) FlagOption {
 // WithFlagEnvVars sets additional environment variable aliases.
 func WithFlagEnvVars(envVars ...string) FlagOption {
 	return flagEnvVarsOption(envVars)
+}
+
+// WithFlagRequired marks the flag as required.
+func WithFlagRequired() FlagOption {
+	return flagRequiredOption(true)
+}
+
+// WithFlagPrompt sets the interactive prompt label for a required flag.
+func WithFlagPrompt(prompt string) FlagOption {
+	return flagPromptOption(prompt)
 }
 
 // WithStringValue sets the string flag value pointer.
@@ -787,6 +826,18 @@ type flagEnvVarsOption []string
 
 func (o flagEnvVarsOption) ApplyFlag(fo *FlagOptions) {
 	fo.EnvVars = []string(o)
+}
+
+type flagRequiredOption bool
+
+func (o flagRequiredOption) ApplyFlag(fo *FlagOptions) {
+	fo.Required = bool(o)
+}
+
+type flagPromptOption string
+
+func (o flagPromptOption) ApplyFlag(fo *FlagOptions) {
+	fo.Prompt = string(o)
 }
 
 type boolValueOption struct {

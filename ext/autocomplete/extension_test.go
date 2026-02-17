@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func TestAutocompleteExtension(t *testing.T) {
@@ -57,8 +57,8 @@ func TestAutocompleteExtension(t *testing.T) {
 		var output bytes.Buffer
 		app.Out = &output
 
-		// Test bash completion
-		if err := app.Run(context.Background(), []string{"autocomplete", "bash"}); err != nil {
+		// Test bash completion with --shell flag
+		if err := app.Run(context.Background(), []string{"autocomplete", "--shell", "bash"}); err != nil {
 			t.Fatalf("autocomplete command failed: %v", err)
 		}
 
@@ -111,7 +111,7 @@ func TestAutocompleteExtension(t *testing.T) {
 			var output bytes.Buffer
 			app.Out = &output
 
-			if err := app.Run(context.Background(), []string{"autocomplete", shell}); err != nil {
+			if err := app.Run(context.Background(), []string{"autocomplete", "--shell", shell}); err != nil {
 				t.Errorf("autocomplete for %s failed: %v", shell, err)
 			}
 
@@ -133,7 +133,7 @@ func TestAutocompleteExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		err := app.Run(context.Background(), []string{"autocomplete", "powershell"})
+		err := app.Run(context.Background(), []string{"autocomplete", "--shell", "powershell"})
 		if err == nil {
 			t.Fatal("autocomplete should fail for unsupported shell")
 		}

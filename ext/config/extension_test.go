@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func TestConfigExtension(t *testing.T) {
@@ -128,8 +128,8 @@ func TestConfigExtension(t *testing.T) {
 
 		app.AddExtension(Extension{})
 
-		// Run config get command
-		if err := app.Run(context.Background(), []string{"config", "get", "project.default"}); err != nil {
+		// Run config get command with --key flag
+		if err := app.Run(context.Background(), []string{"config", "get", "--key", "project.default"}); err != nil {
 			t.Fatalf("config get command failed: %v", err)
 		}
 
@@ -150,7 +150,7 @@ func TestConfigExtension(t *testing.T) {
 
 		app.AddExtension(Extension{})
 
-		err := app.Run(context.Background(), []string{"config", "get", "does.not.exist"})
+		err := app.Run(context.Background(), []string{"config", "get", "--key", "does.not.exist"})
 		if err == nil {
 			t.Fatalf("expected error for missing key")
 		}
@@ -174,8 +174,8 @@ func TestConfigExtension(t *testing.T) {
 
 		app.AddExtension(Extension{})
 
-		// Run config set command
-		if err := app.Run(context.Background(), []string{"config", "set", "project.default", "staging"}); err != nil {
+		// Run config set command with --key and --value flags
+		if err := app.Run(context.Background(), []string{"config", "set", "--key", "project.default", "--value", "staging"}); err != nil {
 			t.Fatalf("config set command failed: %v", err)
 		}
 
@@ -206,13 +206,13 @@ func TestConfigExtension(t *testing.T) {
 		app.AddExtension(Extension{})
 
 		// Non-integer should fail.
-		err := app.Run(context.Background(), []string{"config", "set", "service.retries", "abc"})
+		err := app.Run(context.Background(), []string{"config", "set", "--key", "service.retries", "--value", "abc"})
 		if err == nil {
 			t.Fatalf("expected schema enforcement error")
 		}
 
-		// Valid integer should be accepted and canonicalised.
-		if err := app.Run(context.Background(), []string{"config", "set", "service.retries", "08"}); err != nil {
+		// Valid integer should be accepted and canonicalized.
+		if err := app.Run(context.Background(), []string{"config", "set", "--key", "service.retries", "--value", "08"}); err != nil {
 			t.Fatalf("config set should accept canonical integer: %v", err)
 		}
 		if val, ok := app.Config.Get("service.retries"); !ok || val != "8" {
@@ -237,7 +237,7 @@ func TestConfigExtension(t *testing.T) {
 
 		app.AddExtension(Extension{})
 
-		if err := app.Run(context.Background(), []string{"config", "unset", "project.default"}); err != nil {
+		if err := app.Run(context.Background(), []string{"config", "unset", "--key", "project.default"}); err != nil {
 			t.Fatalf("config unset failed: %v", err)
 		}
 

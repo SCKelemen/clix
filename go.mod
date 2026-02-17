@@ -1,4 +1,4 @@
-module github.com/SCKelemen/clix
+module github.com/SCKelemen/clix/v2
 
 go 1.24.0
 

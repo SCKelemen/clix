@@ -215,6 +215,41 @@ func (fs *FlagSet) Int64(name string) (int64, bool) {
 	return 0, false
 }
 
+// AnyCLISet reports whether any flag was explicitly set via CLI arguments.
+// This distinguishes "user passed flags on the command line" from
+// "flags were resolved from env/config/defaults only".
+func (fs *FlagSet) AnyCLISet() bool {
+	for _, flag := range fs.flags {
+		if flag.cliSet {
+			return true
+		}
+	}
+	return false
+}
+
+// MissingRequired returns required flags whose value is still empty
+// (not satisfied by CLI, env, config, or default).
+func (fs *FlagSet) MissingRequired() []*Flag {
+	var missing []*Flag
+	for _, flag := range fs.flags {
+		if flag.Required && flag.Value.String() == "" {
+			missing = append(missing, flag)
+		}
+	}
+	return missing
+}
+
+// RequiredFlags returns all flags marked as Required.
+func (fs *FlagSet) RequiredFlags() []*Flag {
+	var required []*Flag
+	for _, flag := range fs.flags {
+		if flag.Required {
+			required = append(required, flag)
+		}
+	}
+	return required
+}
+
 // Float64 fetches a float64 flag value.
 func (fs *FlagSet) Float64(name string) (float64, bool) {
 	flag := fs.lookup(name)

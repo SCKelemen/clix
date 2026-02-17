@@ -3,7 +3,7 @@ package prompt
 import (
 	"bytes"
 	"context"
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 	"os"
 	"strings"
 	"testing"

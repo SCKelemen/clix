@@ -68,10 +68,6 @@ type Command struct {
 	// Use app.Flags() for flags that apply to all commands.
 	Flags *FlagSet
 
-	// Arguments defines the positional arguments this command accepts.
-	// Arguments can be required or optional, and can prompt for missing values.
-	Arguments []*Argument
-
 	// Children are the child commands or groups of this command.
 	// Use NewGroup() to create groups, NewCommand() to create executable commands.
 	Children []*Command
@@ -254,17 +250,6 @@ func (c *Command) Path() string {
 	return fmt.Sprintf("%s %s", c.parent.Path(), c.Name)
 }
 
-// RequiredArgs returns the number of required positional arguments.
-func (c *Command) RequiredArgs() int {
-	count := 0
-	for _, arg := range c.Arguments {
-		if arg.Required {
-			count++
-		}
-	}
-	return count
-}
-
 // findChild returns the first matching child command or group by name or alias.
 func (c *Command) findChild(name string) *Command {
 	name = strings.ToLower(name)
@@ -403,11 +388,6 @@ func WithCommandPostRun(postRun Hook) CommandOption {
 	return commandPostRunOption{postRun: postRun}
 }
 
-// WithCommandArguments sets the command arguments.
-func WithCommandArguments(args ...*Argument) CommandOption {
-	return commandArgumentsOption{args: args}
-}
-
 // Internal option types
 
 type commandShortOption string
@@ -470,10 +450,3 @@ func (o commandPostRunOption) ApplyCommand(cmd *Command) {
 	cmd.PostRun = o.postRun
 }
 
-type commandArgumentsOption struct {
-	args []*Argument
-}
-
-func (o commandArgumentsOption) ApplyCommand(cmd *Command) {
-	cmd.Arguments = o.args
-}

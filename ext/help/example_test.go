@@ -1,8 +1,8 @@
 package help_test
 
 import (
-	"github.com/SCKelemen/clix"
-	"github.com/SCKelemen/clix/ext/help"
+	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/help"
 )
 
 func ExampleExtension() {
@@ -15,8 +15,8 @@ func ExampleExtension() {
 	app.Root = root
 
 	// Now the app will have:
-	//   example help          - Show root help
-	//   example help [command] - Show command help
+	//   example help                    - Show root help
+	//   example help --command [name]   - Show command help
 	//
 	// Flag-based help still works without the extension:
 	//   example -h, example --help

@@ -50,7 +50,6 @@ func (h HelpRenderer) Render(w io.Writer) error {
 	}
 
 	h.renderFlags(w, cmd)
-	h.renderArguments(w, cmd)
 	h.renderChildren(w, cmd)
 
 	if cmd.Example != "" {
@@ -77,7 +76,11 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 		}
 		names = append(names, "--"+flag.Name)
 		renderedNames := renderText(nameStyle, strings.Join(names, ", "))
-		usage := renderText(usageStyle, flag.Usage)
+		usage := flag.Usage
+		if flag.Required {
+			usage += " (required)"
+		}
+		usage = renderText(usageStyle, usage)
 		fmt.Fprintf(w, "  %-20s %s\n", renderedNames, usage)
 	}
 	fmt.Fprintln(w)
@@ -111,23 +114,6 @@ func (h HelpRenderer) flagStylesFor(isGlobal bool) (name TextStyle, usage TextSt
 	}
 
 	return
-}
-
-func (h HelpRenderer) renderArguments(w io.Writer, cmd *Command) {
-	if len(cmd.Arguments) == 0 {
-		return
-	}
-	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "ARGUMENTS"))
-	for _, arg := range cmd.Arguments {
-		marker := "optional"
-		if arg.Required {
-			marker = "required"
-		}
-		name := renderText(h.App.Styles.ArgumentName, arg.Name)
-		marker = renderText(h.App.Styles.ArgumentMarker, marker)
-		fmt.Fprintf(w, "  %-20s %s\n", name, marker)
-	}
-	fmt.Fprintln(w)
 }
 
 // renderChildren renders both groups and commands, showing them in separate sections.

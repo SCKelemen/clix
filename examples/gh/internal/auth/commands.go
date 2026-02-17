@@ -3,7 +3,7 @@ package auth
 import (
 	"fmt"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand() *clix.Command {
@@ -15,10 +15,29 @@ func NewCommand() *clix.Command {
 
 	login := clix.NewCommand("login")
 	login.Short = "Authenticate with GitHub"
-	login.Arguments = []*clix.Argument{
-		{Name: "hostname", Prompt: "GitHub hostname", Default: "github.com", Required: true},
-		{Name: "username", Prompt: "GitHub username", Required: true},
-	}
+
+	var hostname string
+	login.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "hostname",
+			Usage:    "GitHub hostname",
+			Required: true,
+			Prompt:   "GitHub hostname",
+		},
+		Default: "github.com",
+		Value:   &hostname,
+	})
+
+	var username string
+	login.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "username",
+			Usage:    "GitHub username",
+			Required: true,
+			Prompt:   "GitHub username",
+		},
+		Value: &username,
+	})
 
 	var web bool
 	login.Flags.BoolVar(clix.BoolVarOptions{
@@ -29,13 +48,11 @@ func NewCommand() *clix.Command {
 		Value: &web,
 	})
 	login.Run = func(ctx *clix.Context) error {
-		host := ctx.Args[0]
-		user := ctx.Args[1]
 		mode := "device"
 		if web {
 			mode = "web"
 		}
-		fmt.Fprintf(ctx.App.Out, "Logging into %s as %s using %s flow...\n", host, user, mode)
+		fmt.Fprintf(ctx.App.Out, "Logging into %s as %s using %s flow...\n", hostname, username, mode)
 		return nil
 	}
 

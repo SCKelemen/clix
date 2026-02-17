@@ -52,6 +52,7 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 					return nil, err
 				}
 				flag.set = true
+				flag.cliSet = true
 				continue
 			}
 
@@ -66,6 +67,7 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 			return nil, fmt.Errorf("invalid value for %s: %w", flag.Name, err)
 		}
 		flag.set = true
+		flag.cliSet = true
 	}
 
 	return positionals, nil

@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/format"
 )
 
 func TestVersionExtension(t *testing.T) {
@@ -183,8 +184,7 @@ func TestVersionExtension(t *testing.T) {
 
 	t.Run("version command supports json format", func(t *testing.T) {
 		app := clix.NewApp("test")
-		// Use the root created by NewApp (it has the format flag)
-		// app.Root is already set by NewApp
+		app.AddExtension(format.Extension{})
 
 		app.AddExtension(Extension{
 			Version: "1.2.3",
@@ -210,8 +210,7 @@ func TestVersionExtension(t *testing.T) {
 
 	t.Run("version command supports yaml format", func(t *testing.T) {
 		app := clix.NewApp("test")
-		// Use the root created by NewApp (it has the format flag)
-		// app.Root is already set by NewApp
+		app.AddExtension(format.Extension{})
 
 		app.AddExtension(Extension{
 			Version: "1.2.3",

@@ -3,7 +3,7 @@ package database
 import (
 	"fmt"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 // NewCreateCommand creates a "create" command for databases.
@@ -11,11 +11,19 @@ import (
 func NewCreateCommand() *clix.Command {
 	cmd := clix.NewCommand("create")
 	cmd.Short = "Create a new database"
-	cmd.Arguments = []*clix.Argument{
-		{Name: "name", Required: true, Prompt: "Database name"},
-	}
+
+	var name string
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "name",
+			Usage:    "Database name",
+			Required: true,
+			Prompt:   "Database name",
+		},
+		Value: &name,
+	})
+
 	cmd.Run = func(ctx *clix.Context) error {
-		name := ctx.Args[0]
 		fmt.Fprintf(ctx.App.Out, "Creating database: %s\n", name)
 		fmt.Fprintf(ctx.App.Out, "✓ Database '%s' created successfully\n", name)
 		return nil
@@ -49,4 +57,3 @@ func NewDatabaseCommand() *clix.Command {
 	cmd.AddCommand(NewListCommand())
 	return cmd
 }
-

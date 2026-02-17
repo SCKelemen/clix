@@ -3,7 +3,7 @@ package org
 import (
 	"fmt"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand() *clix.Command {
@@ -23,9 +23,19 @@ func NewCommand() *clix.Command {
 
 	view := clix.NewCommand("view")
 	view.Short = "Show organization details"
-	view.Arguments = []*clix.Argument{{Name: "organization", Prompt: "Organization login", Required: true}}
+
+	var organization string
+	view.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "organization",
+			Usage:    "Organization login",
+			Required: true,
+			Prompt:   "Organization login",
+		},
+		Value: &organization,
+	})
 	view.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Organization: %s\n", ctx.Args[0])
+		fmt.Fprintf(ctx.App.Out, "Organization: %s\n", organization)
 		return nil
 	}
 	cmd.Children = []*clix.Command{

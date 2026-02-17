@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	demoapp "github.com/SCKelemen/clix/examples/basic/internal/app"
+	demoapp "github.com/SCKelemen/clix/v2/examples/basic/internal/app"
 )
 
 func main() {

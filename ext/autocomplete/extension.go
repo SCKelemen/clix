@@ -5,14 +5,15 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 // Extension adds the autocomplete command to a clix app.
 // This provides shell completion script generation for bash, zsh, and fish.
 //
 // The extension adds:
-//   - cli autocomplete [bash|zsh|fish] - Generate completion script for the specified shell
+//
+//	cli autocomplete --shell [bash|zsh|fish] - Generate completion script for the specified shell
 //
 // The generated scripts include all commands, groups, flags, and aliases
 // from your application's command tree.
@@ -20,18 +21,18 @@ import (
 // Example:
 //
 //	import (
-//		"github.com/SCKelemen/clix"
-//		"github.com/SCKelemen/clix/ext/autocomplete"
+//		"github.com/SCKelemen/clix/v2"
+//		"github.com/SCKelemen/clix/v2/ext/autocomplete"
 //	)
 //
 //	app := clix.NewApp("myapp")
 //	app.AddExtension(autocomplete.Extension{})
-//	// Now your app has: myapp autocomplete [shell]
+//	// Now your app has: myapp autocomplete --shell [shell]
 //
 //	// Users can generate and install completion:
-//	//   myapp autocomplete bash > /etc/bash_completion.d/myapp
-//	//   myapp autocomplete zsh > ~/.zsh/completions/_myapp
-//	//   myapp autocomplete fish > ~/.config/fish/completions/myapp.fish
+//	//   myapp autocomplete --shell bash > /etc/bash_completion.d/myapp
+//	//   myapp autocomplete --shell zsh > ~/.zsh/completions/_myapp
+//	//   myapp autocomplete --shell fish > ~/.config/fish/completions/myapp.fish
 type Extension struct {
 	// Extension has no configuration options.
 	// Simply add it to your app to enable autocomplete command generation.
@@ -63,17 +64,25 @@ func findChild(cmd *clix.Command, name string) *clix.Command {
 func NewAutocompleteCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("autocomplete")
 	cmd.Short = "Generate shell completion script"
-	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish]", app.Name)
+	cmd.Usage = fmt.Sprintf("%s autocomplete --shell [bash|zsh|fish]", app.Name)
 	cmd.IsExtensionCommand = true
-	cmd.Arguments = []*clix.Argument{{Name: "shell", Prompt: "Shell", Required: false}}
+
+	var shell string
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:  "shell",
+			Usage: "Shell type (bash, zsh, fish)",
+		},
+		Value: &shell,
+	})
+
 	cmd.Run = func(ctx *clix.Context) error {
-		shellArg := ctx.Arg(0)
-		if shellArg == "" {
+		if shell == "" {
 			// Show help if no shell provided
 			helper := clix.HelpRenderer{App: app, Command: cmd}
 			return helper.Render(app.Out)
 		}
-		shell := strings.ToLower(shellArg)
+		shell = strings.ToLower(shell)
 		script, err := generateCompletionScript(app, shell)
 		if err != nil {
 			return err

@@ -1,8 +1,8 @@
 package config_test
 
 import (
-	"github.com/SCKelemen/clix"
-	"github.com/SCKelemen/clix/ext/config"
+	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/config"
 )
 
 func ExampleExtension() {
@@ -23,10 +23,10 @@ func ExampleExtension() {
 	app.Root = root
 
 	// Now the app will have:
-	//   example config                  - Show help for config commands
-	//   example config list             - List persisted config as YAML
-	//   example config get project.default
-	//   example config set project.default staging
-	//   example config unset project.default
-	//   example config reset            - Remove all persisted config
+	//   example config                                           - Show help for config commands
+	//   example config list                                      - List persisted config as YAML
+	//   example config get --key project.default                 - Print a config value
+	//   example config set --key project.default --value staging - Update a config value
+	//   example config unset --key project.default               - Remove a config value
+	//   example config reset                                     - Remove all persisted config
 }

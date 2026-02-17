@@ -108,7 +108,7 @@ type AppOption interface {
 }
 
 // NewApp constructs an application with sensible defaults. A minimal root command
-// is created automatically to hold default flags (format, help). You can replace
+// is created automatically to hold default flags (help). You can replace
 // it with your own root command if needed: app.Root = clix.NewCommand("myroot")
 //
 // Example - three API styles:
@@ -167,18 +167,7 @@ func NewApp(name string, opts ...AppOption) *App {
 	}
 
 	// Standard flags on root command (accessible via app.Flags()).
-	var format = FormatText
 	var help bool
-	app.Flags().StringVar(StringVarOptions{
-		FlagOptions: FlagOptions{
-			Name:  "format",
-			Short: "f",
-			Usage: "Output format (json, yaml, text)",
-		},
-		Default: FormatText,
-		Value:   &format,
-	})
-
 	app.Flags().BoolVar(BoolVarOptions{
 		FlagOptions: FlagOptions{
 			Name:  "help",
@@ -261,14 +250,11 @@ func (s Source) String() string {
 }
 
 // Context is passed to command handlers and provides convenient access to the
-// resolved command, arguments, configuration and flags.
-// Context provides CLI-specific context for command execution.
-// It embeds context.Context for cancellation and deadlines, and adds
-// CLI-specific data like the active command, arguments, and app instance.
+// resolved command, configuration and flags.
 //
 // Context is passed to all command handlers (Run, PreRun, PostRun) and
-// provides access to flags, arguments, and configuration via type-specific
-// getters that respect precedence: command flags > app flags > env > config > defaults.
+// provides access to flags and configuration via type-specific getters that
+// respect precedence: command flags > app flags > env > config > defaults.
 //
 // Example:
 //
@@ -276,11 +262,6 @@ func (s Source) String() string {
 //		// Access flags with precedence
 //		if project, ok := ctx.String("project"); ok {
 //			fmt.Printf("Using project: %s\n", project)
-//		}
-//
-//		// Access arguments
-//		if name, ok := ctx.ArgNamed("name"); ok {
-//			fmt.Printf("Hello, %s!\n", name)
 //		}
 //
 //		// Use context.Context for cancellation
@@ -307,10 +288,6 @@ type Context struct {
 
 	// Command is the currently executing command.
 	Command *Command
-
-	// Args contains positional arguments passed to the command.
-	// Use Arg(index) or ArgNamed(name) for safer access with bounds checking.
-	Args []string
 }
 
 // resolveValue retrieves a configuration value following the precedence chain:
@@ -482,40 +459,6 @@ func (ctx *Context) EffectiveFloat64(key string) (float64, Source, bool) {
 		return 0, 0, false
 	}
 	return parsed, source, true
-}
-
-// Arg returns the positional argument at the given index.
-// Returns empty string if index is out of bounds.
-func (ctx *Context) Arg(index int) string {
-	if index < 0 || index >= len(ctx.Args) {
-		return ""
-	}
-	return ctx.Args[index]
-}
-
-// ArgNamed returns the value of a named argument by its name.
-// Returns the value and true if found, empty string and false otherwise.
-// This looks up arguments by the Name field in the command's Arguments definition.
-func (ctx *Context) ArgNamed(name string) (string, bool) {
-	if ctx.Command == nil || len(ctx.Command.Arguments) == 0 {
-		return "", false
-	}
-
-	// Check if any argument matches the name
-	for i, arg := range ctx.Command.Arguments {
-		if arg.Name == name && i < len(ctx.Args) {
-			return ctx.Args[i], true
-		}
-	}
-
-	return "", false
-}
-
-// AllArgs returns all positional arguments as a slice.
-// This provides a symmetric API with String()/Bool() for flags.
-// You can also access ctx.Args directly if preferred.
-func (ctx *Context) AllArgs() []string {
-	return ctx.Args
 }
 
 // Functional option helpers for App

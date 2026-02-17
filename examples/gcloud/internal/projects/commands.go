@@ -3,7 +3,7 @@ package projects
 import (
 	"fmt"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand(project *string) *clix.Command {
@@ -23,9 +23,19 @@ func NewCommand(project *string) *clix.Command {
 
 	create := clix.NewCommand("create")
 	create.Short = "Create a project"
-	create.Arguments = []*clix.Argument{{Name: "project-id", Prompt: "New project ID", Required: true}}
+
+	var projectID string
+	create.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:     "project-id",
+			Usage:    "New project ID",
+			Required: true,
+			Prompt:   "New project ID",
+		},
+		Value: &projectID,
+	})
 	create.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Creating project %s\n", ctx.Args[0])
+		fmt.Fprintf(ctx.App.Out, "Creating project %s\n", projectID)
 		return nil
 	}
 	cmd.Children = []*clix.Command{

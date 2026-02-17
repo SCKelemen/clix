@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/SCKelemen/clix"
+	"github.com/SCKelemen/clix/v2"
 )
 
 func TestGitHubAuthLogin(t *testing.T) {
@@ -19,7 +19,7 @@ func TestGitHubAuthLogin(t *testing.T) {
 	app.In = strings.NewReader("")
 	app.Prompter = clix.TextPrompter{In: app.In, Out: app.Out}
 
-	if err := app.Run(context.Background(), []string{"auth", "login", "github.com", "monalisa"}); err != nil {
+	if err := app.Run(context.Background(), []string{"auth", "login", "--hostname", "github.com", "--username", "monalisa"}); err != nil {
 		t.Fatalf("app.Run returned error: %v", err)
 	}
 

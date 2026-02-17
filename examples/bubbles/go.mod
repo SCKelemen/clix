@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.2
 
 require (
-	github.com/SCKelemen/clix v0.0.0
+	github.com/SCKelemen/clix/v2 v0.0.0
 	github.com/charmbracelet/bubbles v0.20.0
 	github.com/charmbracelet/bubbletea v1.1.0
 )
@@ -35,4 +35,4 @@ require (
 	golang.org/x/text v0.3.8 // indirect
 )
 
-replace github.com/SCKelemen/clix => ../..
+replace github.com/SCKelemen/clix/v2 => ../..
