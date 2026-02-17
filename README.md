@@ -307,6 +307,8 @@ cannot be positional.
 
 - **Dual syntax**: Use positional or named form interchangeably
 - **Automatic prompting**: Missing required positional flags trigger interactive prompts
+- **Default values**: Optional positional flags can have defaults
+- **Smart labels**: Prompt labels default to title-cased flag names (e.g., `project-id` → `Project id`)
 - **Registration order**: First `Positional: true` flag = position 0, second = position 1, etc.
 - **Named precedence**: If `--flag value` is passed, the flag is skipped during positional assignment
 
