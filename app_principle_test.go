@@ -704,6 +704,125 @@ func TestValidateIntegration(t *testing.T) {
 		}
 	})
 
+	t.Run("validate rejects bad prompted value", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("action")
+		cmd.Short = "Do something"
+
+		var name string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:     "name",
+				Required: true,
+				Validate: func(s string) error {
+					if len(s) < 3 {
+						return fmt.Errorf("name must be at least 3 characters")
+					}
+					return nil
+				},
+			},
+			Value: &name,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
+			return "ab", nil
+		})
+
+		err := app.Run(context.Background(), []string{"action"})
+		if err == nil {
+			t.Fatal("expected validation error for prompted value")
+		}
+		if !strings.Contains(err.Error(), "name must be at least 3 characters") {
+			t.Errorf("expected validation message, got: %v", err)
+		}
+	})
+
+	t.Run("validate passes for good prompted value", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("action")
+		cmd.Short = "Do something"
+
+		var name string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:     "name",
+				Required: true,
+				Validate: func(s string) error {
+					if len(s) < 3 {
+						return fmt.Errorf("name must be at least 3 characters")
+					}
+					return nil
+				},
+			},
+			Value: &name,
+		})
+
+		var executed bool
+		cmd.Run = func(ctx *Context) error {
+			executed = true
+			return nil
+		}
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
+			return "alice", nil
+		})
+
+		if err := app.Run(context.Background(), []string{"action"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !executed {
+			t.Error("expected command to execute")
+		}
+		if name != "alice" {
+			t.Errorf("expected name = alice, got %q", name)
+		}
+	})
+
+	t.Run("validate with functional option rejects bad value", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("action")
+		cmd.Short = "Do something"
+
+		var name string
+		cmd.Flags.StringVar(
+			WithFlagName("name"),
+			WithStringValue(&name),
+			WithFlagValidate(func(s string) error {
+				if len(s) < 3 {
+					return fmt.Errorf("name must be at least 3 characters")
+				}
+				return nil
+			}),
+		)
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		err := app.Run(context.Background(), []string{"action", "--name", "ab"})
+		if err == nil {
+			t.Fatal("expected validation error via functional option")
+		}
+		if !strings.Contains(err.Error(), "name must be at least 3 characters") {
+			t.Errorf("expected validation message, got: %v", err)
+		}
+	})
+
 	t.Run("validate passes for good value", func(t *testing.T) {
 		app := NewApp("test")
 		root := NewCommand("test")

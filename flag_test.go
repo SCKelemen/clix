@@ -1,6 +1,7 @@
 package clix
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -55,6 +56,100 @@ func TestFlagSetParse(t *testing.T) {
 	if !reflect.DeepEqual(rest, want) {
 		t.Fatalf("unexpected remaining args: want %v, got %v", want, rest)
 	}
+}
+
+func TestFlagSetParseValidate(t *testing.T) {
+	t.Run("validate rejects bad named flag value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var name string
+		fs.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name: "name",
+				Validate: func(s string) error {
+					if len(s) < 3 {
+						return fmt.Errorf("name must be at least 3 characters")
+					}
+					return nil
+				},
+			},
+			Value: &name,
+		})
+
+		_, err := fs.Parse([]string{"--name", "ab"})
+		if err == nil {
+			t.Fatal("expected validation error")
+		}
+		if !strings.Contains(err.Error(), "name must be at least 3 characters") {
+			t.Errorf("expected validation message, got: %v", err)
+		}
+	})
+
+	t.Run("validate passes for good named flag value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var name string
+		fs.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name: "name",
+				Validate: func(s string) error {
+					if len(s) < 3 {
+						return fmt.Errorf("name must be at least 3 characters")
+					}
+					return nil
+				},
+			},
+			Value: &name,
+		})
+
+		_, err := fs.Parse([]string{"--name", "alice"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if name != "alice" {
+			t.Errorf("expected name = alice, got %q", name)
+		}
+	})
+
+	t.Run("validate works with equals syntax", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var name string
+		fs.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name: "name",
+				Validate: func(s string) error {
+					if len(s) < 3 {
+						return fmt.Errorf("name must be at least 3 characters")
+					}
+					return nil
+				},
+			},
+			Value: &name,
+		})
+
+		_, err := fs.Parse([]string{"--name=ab"})
+		if err == nil {
+			t.Fatal("expected validation error for equals syntax")
+		}
+		if !strings.Contains(err.Error(), "name must be at least 3 characters") {
+			t.Errorf("expected validation message, got: %v", err)
+		}
+	})
+
+	t.Run("nil validate is a no-op", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var name string
+		fs.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{Name: "name"},
+			Value:       &name,
+		})
+
+		_, err := fs.Parse([]string{"--name", "anything"})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if name != "anything" {
+			t.Errorf("expected name = anything, got %q", name)
+		}
+	})
 }
 
 func TestFlagSetParseMissingValue(t *testing.T) {

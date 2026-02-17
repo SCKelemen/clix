@@ -246,6 +246,7 @@ Global and command-level flags support:
 - **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml`
 - **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`)
 - **Type support**: String, bool, int, int64, float64
+- **Custom validation**: Optional `Validate` function runs after parsing to reject invalid values
 - **Precedence**: Command flags > App flags > Environment variables > Config file > Defaults
 
 ```go
@@ -322,6 +323,12 @@ cmd.Flags.StringVar(clix.StringVarOptions{
                 Required:   true,
                 Prompt:     "OWNER/REPO",
                 Positional: true,
+                Validate: func(s string) error {
+                        if !strings.Contains(s, "/") {
+                                return fmt.Errorf("repository must be in OWNER/REPO format")
+                        }
+                        return nil
+                },
         },
         Value: &repository,
 })

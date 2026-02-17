@@ -249,6 +249,75 @@ func TestWithFlagPositionalOption(t *testing.T) {
 	})
 }
 
+func TestWithFlagValidateOption(t *testing.T) {
+	t.Run("functional option sets Validate on flag", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var name string
+		fs.StringVar(
+			WithFlagName("name"),
+			WithStringValue(&name),
+			WithFlagValidate(func(s string) error {
+				if s == "" {
+					return fmt.Errorf("must not be empty")
+				}
+				return nil
+			}),
+		)
+
+		f := fs.lookup("name")
+		if f.Validate == nil {
+			t.Fatal("expected Validate to be set via functional option")
+		}
+	})
+
+	t.Run("functional option validate rejects bad value in Parse", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var port int
+		fs.IntVar(
+			WithFlagName("port"),
+			WithIntegerValue(&port),
+			WithFlagValidate(func(s string) error {
+				if s == "0" {
+					return fmt.Errorf("port must not be zero")
+				}
+				return nil
+			}),
+		)
+
+		_, err := fs.Parse([]string{"--port", "0"})
+		if err == nil {
+			t.Fatal("expected validation error for port 0")
+		}
+		if !strings.Contains(err.Error(), "port must not be zero") {
+			t.Errorf("expected validation message, got: %v", err)
+		}
+	})
+
+	t.Run("functional option validate rejects bad positional value", func(t *testing.T) {
+		fs := NewFlagSet("test")
+		var name string
+		fs.StringVar(
+			WithFlagName("name"),
+			WithStringValue(&name),
+			WithFlagPositional(),
+			WithFlagValidate(func(s string) error {
+				if len(s) < 2 {
+					return fmt.Errorf("too short")
+				}
+				return nil
+			}),
+		)
+
+		_, err := fs.MapPositionals([]string{"x"})
+		if err == nil {
+			t.Fatal("expected validation error for short positional value")
+		}
+		if !strings.Contains(err.Error(), "too short") {
+			t.Errorf("expected validation message, got: %v", err)
+		}
+	})
+}
+
 func TestMapPositionalsValidate(t *testing.T) {
 	t.Run("validate rejects bad positional value", func(t *testing.T) {
 		fs := NewFlagSet("test")
