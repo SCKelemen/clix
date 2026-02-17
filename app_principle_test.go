@@ -283,6 +283,217 @@ func TestPrincipleRequiredFlagsPrompt(t *testing.T) {
 	})
 }
 
+func TestPositionalIntegration(t *testing.T) {
+	t.Run("positional sets flag value", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("greet")
+		cmd.Short = "Greet someone"
+
+		var name string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "name",
+				Usage:      "Name to greet",
+				Required:   true,
+				Positional: true,
+			},
+			Value: &name,
+		})
+
+		cmd.Run = func(ctx *Context) error {
+			fmt.Fprintf(ctx.App.Out, "Hello %s!\n", name)
+			return nil
+		}
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		var output bytes.Buffer
+		app.Out = &output
+
+		if err := app.Run(context.Background(), []string{"greet", "Alice"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if name != "Alice" {
+			t.Errorf("expected name = Alice, got %q", name)
+		}
+		if !strings.Contains(output.String(), "Hello Alice!") {
+			t.Errorf("expected output to contain greeting, got: %s", output.String())
+		}
+	})
+
+	t.Run("named flag takes precedence over positional", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("greet")
+		cmd.Short = "Greet someone"
+
+		var name string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "name",
+				Positional: true,
+			},
+			Value: &name,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		var output bytes.Buffer
+		app.Out = &output
+
+		if err := app.Run(context.Background(), []string{"greet", "--name", "Bob"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if name != "Bob" {
+			t.Errorf("expected name = Bob, got %q", name)
+		}
+	})
+
+	t.Run("positional counts as cliSet for three-way detection", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("action")
+		cmd.Short = "Do something"
+
+		var first, second string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "first",
+				Required:   true,
+				Positional: true,
+			},
+			Value: &first,
+		})
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:     "second",
+				Required: true,
+			},
+			Value: &second,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		// Positional sets first, but second is missing and cliSet is true → error
+		err := app.Run(context.Background(), []string{"action", "value1"})
+		if err == nil {
+			t.Fatal("expected error for missing required flag")
+		}
+		if !strings.Contains(err.Error(), "missing required flags") {
+			t.Errorf("expected 'missing required flags' error, got: %v", err)
+		}
+	})
+
+	t.Run("excess positional args rejected", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("action")
+		cmd.Short = "Do something"
+
+		var name string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "name",
+				Positional: true,
+			},
+			Value: &name,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		err := app.Run(context.Background(), []string{"action", "hello", "extra"})
+		if err == nil {
+			t.Fatal("expected error for excess positional args")
+		}
+		if !strings.Contains(err.Error(), "unexpected arguments") {
+			t.Errorf("expected 'unexpected arguments' error, got: %v", err)
+		}
+	})
+
+	t.Run("no positional flags preserves existing rejection", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("action")
+		cmd.Short = "Do something"
+
+		var name string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{Name: "name"},
+			Value:       &name,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		err := app.Run(context.Background(), []string{"action", "unexpected"})
+		if err == nil {
+			t.Fatal("expected error for unexpected positional args")
+		}
+		if !strings.Contains(err.Error(), "unexpected arguments") {
+			t.Errorf("expected 'unexpected arguments' error, got: %v", err)
+		}
+	})
+
+	t.Run("positional with interactive prompting", func(t *testing.T) {
+		app := NewApp("test")
+		root := NewCommand("test")
+
+		cmd := NewCommand("action")
+		cmd.Short = "Do something"
+
+		var name string
+		cmd.Flags.StringVar(StringVarOptions{
+			FlagOptions: FlagOptions{
+				Name:       "name",
+				Required:   true,
+				Prompt:     "Enter name",
+				Positional: true,
+			},
+			Value: &name,
+		})
+
+		cmd.Run = func(ctx *Context) error { return nil }
+
+		root.AddCommand(cmd)
+		app.Root = root
+
+		// No args → should prompt
+		var prompted bool
+		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
+			prompted = true
+			return "prompted-value", nil
+		})
+
+		if err := app.Run(context.Background(), []string{"action"}); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !prompted {
+			t.Error("expected prompt for missing positional flag with no args")
+		}
+		if name != "prompted-value" {
+			t.Errorf("expected name = prompted-value, got %q", name)
+		}
+	})
+}
+
 // prompterFunc is a helper for testing
 type prompterFunc func(context.Context, ...PromptOption) (string, error)
 

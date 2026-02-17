@@ -108,9 +108,15 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 
-	// Reject unexpected positional args — everything is named flags now
+	// Map leftover positional args to flags marked Positional: true
 	if len(resultArgs) > 0 {
-		return fmt.Errorf("unexpected arguments: %s", strings.Join(resultArgs, " "))
+		excess, err := cmd.Flags.MapPositionals(resultArgs)
+		if err != nil {
+			return err
+		}
+		if len(excess) > 0 {
+			return fmt.Errorf("unexpected arguments: %s", strings.Join(excess, " "))
+		}
 	}
 
 	// Check for --help/-h flag at command level (automatic for all commands)

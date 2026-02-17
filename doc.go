@@ -45,7 +45,16 @@
 //
 // # v2 Changes
 //
-// In v2, positional arguments have been removed. All parameters are named flags:
+// In v2, all parameters are named flags. Flags marked Positional: true also
+// accept values by position, so both forms work:
+//
+//	cmd clone sckelemen/clix              # positional
+//	cmd clone --repository sckelemen/clix # named flag
+//
+// Positional flags are assigned left-to-right in registration order. Named
+// flags (--flag) always take precedence. Boolean flags cannot be positional.
+//
+// Additional v2 changes:
 //
 //   - Use Required: true on FlagOptions to mark a flag as mandatory
 //   - Use Prompt: "label" to set the interactive prompt label

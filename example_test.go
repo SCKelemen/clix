@@ -166,6 +166,32 @@ func ExampleFlagOptions_Required() {
 	}
 }
 
+// ExampleFlagOptions_Positional demonstrates flags that accept positional arguments.
+func ExampleFlagOptions_Positional() {
+	cmd := clix.NewCommand("clone")
+	cmd.Short = "Clone a repository"
+
+	var repository string
+	cmd.Flags.StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:       "repository",
+			Usage:      "Repository to clone (OWNER/REPO)",
+			Required:   true,
+			Positional: true,
+		},
+		Value: &repository,
+	})
+
+	cmd.Run = func(ctx *clix.Context) error {
+		fmt.Fprintf(ctx.App.Out, "Cloning %s...\n", repository)
+		return nil
+	}
+
+	// Both forms work:
+	//   clone sckelemen/clix          (positional)
+	//   clone --repository sckelemen/clix  (named flag)
+}
+
 // ExamplePromptRequest demonstrates how to use the struct-based prompt API.
 func ExamplePromptRequest() {
 	app := clix.NewApp("myapp")

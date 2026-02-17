@@ -81,6 +81,9 @@ type Flag struct {
 	// Prompt is the label shown when interactively prompting for this flag's value.
 	Prompt string
 
+	// Positional allows this flag to be set by position in addition to by name.
+	Positional bool
+
 	// Value is the flag value implementation.
 	Value Value
 
@@ -128,6 +131,12 @@ type FlagOptions struct {
 	// Prompt is the label shown when interactively prompting for this flag's value.
 	// If empty, a title-cased version of Name is used (e.g., "project" -> "Project").
 	Prompt string
+
+	// Positional allows this flag to be set by position in addition to by name.
+	// Positional flags are assigned left-to-right in registration order.
+	// Both forms work: `cmd <value>` and `cmd --flag <value>`.
+	// Boolean flags cannot be positional.
+	Positional bool
 }
 
 // StringVarOptions describes the configuration for adding a string flag.
@@ -190,6 +199,9 @@ func (o StringVarOptions) ApplyFlag(fo *FlagOptions) {
 	if len(o.EnvVars) > 0 {
 		fo.EnvVars = o.EnvVars
 	}
+	if o.Positional {
+		fo.Positional = true
+	}
 }
 
 // FlagOption configures a flag using the functional options pattern.
@@ -237,14 +249,15 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 	}
 	value := &StringValue{target: stringOpts.Value}
 	flag := &Flag{
-		Name:     stringOpts.Name,
-		Short:    stringOpts.Short,
-		Usage:    stringOpts.Usage,
-		EnvVar:   stringOpts.EnvVar,
-		Default:  stringOpts.Default,
-		Required: stringOpts.Required,
-		Prompt:   stringOpts.Prompt,
-		Value:    value,
+		Name:       stringOpts.Name,
+		Short:      stringOpts.Short,
+		Usage:      stringOpts.Usage,
+		EnvVar:     stringOpts.EnvVar,
+		Default:    stringOpts.Default,
+		Required:   stringOpts.Required,
+		Prompt:     stringOpts.Prompt,
+		Positional: stringOpts.Positional,
+		Value:      value,
 	}
 	fs.addFlag(flag)
 	if stringOpts.Default != "" {
@@ -314,6 +327,9 @@ func (o DurationVarOptions) ApplyFlag(fo *FlagOptions) {
 	if len(o.EnvVars) > 0 {
 		fo.EnvVars = o.EnvVars
 	}
+	if o.Positional {
+		fo.Positional = true
+	}
 }
 
 // BoolVarOptions describes the configuration for adding a bool flag.
@@ -362,6 +378,9 @@ func (o BoolVarOptions) ApplyFlag(fo *FlagOptions) {
 	if len(o.EnvVars) > 0 {
 		fo.EnvVars = o.EnvVars
 	}
+	if o.Positional {
+		fo.Positional = true
+	}
 }
 
 // BoolVar registers a boolean flag. Accepts either a BoolVarOptions struct
@@ -380,13 +399,14 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 	}
 	value := &BoolValue{target: boolOpts.Value}
 	flag := &Flag{
-		Name:     boolOpts.Name,
-		Short:    boolOpts.Short,
-		Usage:    boolOpts.Usage,
-		EnvVar:   boolOpts.EnvVar,
-		Required: boolOpts.Required,
-		Prompt:   boolOpts.Prompt,
-		Value:    value,
+		Name:       boolOpts.Name,
+		Short:      boolOpts.Short,
+		Usage:      boolOpts.Usage,
+		EnvVar:     boolOpts.EnvVar,
+		Required:   boolOpts.Required,
+		Prompt:     boolOpts.Prompt,
+		Positional: boolOpts.Positional,
+		Value:      value,
 	}
 	fs.addFlag(flag)
 }
@@ -409,14 +429,15 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 	}
 	value := &DurationValue{target: durationOpts.Value}
 	flag := &Flag{
-		Name:     durationOpts.Name,
-		Short:    durationOpts.Short,
-		Usage:    durationOpts.Usage,
-		EnvVar:   durationOpts.EnvVar,
-		Default:  durationOpts.Default,
-		Required: durationOpts.Required,
-		Prompt:   durationOpts.Prompt,
-		Value:    value,
+		Name:       durationOpts.Name,
+		Short:      durationOpts.Short,
+		Usage:      durationOpts.Usage,
+		EnvVar:     durationOpts.EnvVar,
+		Default:    durationOpts.Default,
+		Required:   durationOpts.Required,
+		Prompt:     durationOpts.Prompt,
+		Positional: durationOpts.Positional,
+		Value:      value,
 	}
 	fs.addFlag(flag)
 	if durationOpts.Default != "" {
@@ -472,6 +493,9 @@ func (o IntVarOptions) ApplyFlag(fo *FlagOptions) {
 	if len(o.EnvVars) > 0 {
 		fo.EnvVars = o.EnvVars
 	}
+	if o.Positional {
+		fo.Positional = true
+	}
 }
 
 // IntVar registers an int flag. Accepts either an IntVarOptions struct
@@ -492,14 +516,15 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 	}
 	value := &IntValue{target: intOpts.Value}
 	flag := &Flag{
-		Name:     intOpts.Name,
-		Short:    intOpts.Short,
-		Usage:    intOpts.Usage,
-		EnvVar:   intOpts.EnvVar,
-		Default:  intOpts.Default,
-		Required: intOpts.Required,
-		Prompt:   intOpts.Prompt,
-		Value:    value,
+		Name:       intOpts.Name,
+		Short:      intOpts.Short,
+		Usage:      intOpts.Usage,
+		EnvVar:     intOpts.EnvVar,
+		Default:    intOpts.Default,
+		Required:   intOpts.Required,
+		Prompt:     intOpts.Prompt,
+		Positional: intOpts.Positional,
+		Value:      value,
 	}
 	fs.addFlag(flag)
 	if intOpts.Default != "" {
@@ -555,6 +580,9 @@ func (o Int64VarOptions) ApplyFlag(fo *FlagOptions) {
 	if len(o.EnvVars) > 0 {
 		fo.EnvVars = o.EnvVars
 	}
+	if o.Positional {
+		fo.Positional = true
+	}
 }
 
 // Int64Var registers an int64 flag. Accepts either an Int64VarOptions struct
@@ -575,14 +603,15 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 	}
 	value := &Int64Value{target: int64Opts.Value}
 	flag := &Flag{
-		Name:     int64Opts.Name,
-		Short:    int64Opts.Short,
-		Usage:    int64Opts.Usage,
-		EnvVar:   int64Opts.EnvVar,
-		Default:  int64Opts.Default,
-		Required: int64Opts.Required,
-		Prompt:   int64Opts.Prompt,
-		Value:    value,
+		Name:       int64Opts.Name,
+		Short:      int64Opts.Short,
+		Usage:      int64Opts.Usage,
+		EnvVar:     int64Opts.EnvVar,
+		Default:    int64Opts.Default,
+		Required:   int64Opts.Required,
+		Prompt:     int64Opts.Prompt,
+		Positional: int64Opts.Positional,
+		Value:      value,
 	}
 	fs.addFlag(flag)
 	if int64Opts.Default != "" {
@@ -638,6 +667,9 @@ func (o Float64VarOptions) ApplyFlag(fo *FlagOptions) {
 	if len(o.EnvVars) > 0 {
 		fo.EnvVars = o.EnvVars
 	}
+	if o.Positional {
+		fo.Positional = true
+	}
 }
 
 // Float64Var registers a float64 flag. Accepts either a Float64VarOptions struct
@@ -658,14 +690,15 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 	}
 	value := &Float64Value{target: float64Opts.Value}
 	flag := &Flag{
-		Name:     float64Opts.Name,
-		Short:    float64Opts.Short,
-		Usage:    float64Opts.Usage,
-		EnvVar:   float64Opts.EnvVar,
-		Default:  float64Opts.Default,
-		Required: float64Opts.Required,
-		Prompt:   float64Opts.Prompt,
-		Value:    value,
+		Name:       float64Opts.Name,
+		Short:      float64Opts.Short,
+		Usage:      float64Opts.Usage,
+		EnvVar:     float64Opts.EnvVar,
+		Default:    float64Opts.Default,
+		Required:   float64Opts.Required,
+		Prompt:     float64Opts.Prompt,
+		Positional: float64Opts.Positional,
+		Value:      value,
 	}
 	fs.addFlag(flag)
 	if float64Opts.Default != "" {
@@ -679,6 +712,11 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 	}
 	if flag.Value == nil {
 		panic("flag requires a value")
+	}
+	if flag.Positional {
+		if _, ok := flag.Value.(boolFlag); ok {
+			panic("boolean flag cannot be positional: " + flag.Name)
+		}
 	}
 	if fs.index == nil {
 		fs.index = make(map[string]*Flag)
@@ -739,6 +777,11 @@ func WithFlagRequired() FlagOption {
 // WithFlagPrompt sets the interactive prompt label for a required flag.
 func WithFlagPrompt(prompt string) FlagOption {
 	return flagPromptOption(prompt)
+}
+
+// WithFlagPositional marks the flag as accepting positional arguments.
+func WithFlagPositional() FlagOption {
+	return flagPositionalOption(true)
 }
 
 // WithStringValue sets the string flag value pointer.
@@ -838,6 +881,12 @@ type flagPromptOption string
 
 func (o flagPromptOption) ApplyFlag(fo *FlagOptions) {
 	fo.Prompt = string(o)
+}
+
+type flagPositionalOption bool
+
+func (o flagPositionalOption) ApplyFlag(fo *FlagOptions) {
+	fo.Positional = bool(o)
 }
 
 type boolValueOption struct {

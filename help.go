@@ -40,7 +40,7 @@ func (h HelpRenderer) Render(w io.Writer) error {
 
 	usage := cmd.Usage
 	if usage == "" {
-		usage = fmt.Sprintf("%s [flags]", cmd.Path())
+		usage = h.buildUsageLine(cmd)
 	}
 	fmt.Fprintf(w, "%s\n  %s\n\n", renderText(styles.SectionHeading, "USAGE"), renderText(styles.Usage, usage))
 
@@ -49,6 +49,7 @@ func (h HelpRenderer) Render(w io.Writer) error {
 		fmt.Fprintf(w, "%s\n\n", long)
 	}
 
+	h.renderArguments(w, cmd)
 	h.renderFlags(w, cmd)
 	h.renderChildren(w, cmd)
 
@@ -58,6 +59,28 @@ func (h HelpRenderer) Render(w io.Writer) error {
 	}
 
 	return nil
+}
+
+func (h HelpRenderer) renderArguments(w io.Writer, cmd *Command) {
+	positionals := cmd.Flags.PositionalFlags()
+	if len(positionals) == 0 {
+		return
+	}
+
+	nameStyle, usageStyle := h.flagStylesFor(cmd == h.App.Root)
+
+	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "ARGUMENTS"))
+	for _, flag := range positionals {
+		label := "<" + flag.Name + ">"
+		renderedName := renderText(nameStyle, label)
+		usage := flag.Usage
+		if flag.Required {
+			usage += " (required)"
+		}
+		usage = renderText(usageStyle, usage)
+		fmt.Fprintf(w, "  %-20s %s\n", renderedName, usage)
+	}
+	fmt.Fprintln(w)
 }
 
 func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
@@ -84,6 +107,20 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 		fmt.Fprintf(w, "  %-20s %s\n", renderedNames, usage)
 	}
 	fmt.Fprintln(w)
+}
+
+func (h HelpRenderer) buildUsageLine(cmd *Command) string {
+	var b strings.Builder
+	b.WriteString(cmd.Path())
+	b.WriteString(" [flags]")
+	for _, f := range cmd.Flags.PositionalFlags() {
+		if f.Required {
+			fmt.Fprintf(&b, " <%s>", f.Name)
+		} else {
+			fmt.Fprintf(&b, " [%s]", f.Name)
+		}
+	}
+	return b.String()
 }
 
 func (h HelpRenderer) flagStylesFor(isGlobal bool) (name TextStyle, usage TextStyle) {

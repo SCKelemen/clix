@@ -20,19 +20,21 @@ func NewCommand(project *string) *clix.Command {
 	var setProp, setValue string
 	set.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "property",
-			Usage:    "Property name",
-			Required: true,
-			Prompt:   "Property name",
+			Name:       "property",
+			Usage:      "Property name",
+			Required:   true,
+			Prompt:     "Property name",
+			Positional: true,
 		},
 		Value: &setProp,
 	})
 	set.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "value",
-			Usage:    "Property value",
-			Required: true,
-			Prompt:   "Value",
+			Name:       "value",
+			Usage:      "Property value",
+			Required:   true,
+			Prompt:     "Value",
+			Positional: true,
 		},
 		Value: &setValue,
 	})
@@ -50,10 +52,11 @@ func NewCommand(project *string) *clix.Command {
 	var getProp string
 	get.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "property",
-			Usage:    "Property name",
-			Required: true,
-			Prompt:   "Property name",
+			Name:       "property",
+			Usage:      "Property name",
+			Required:   true,
+			Prompt:     "Property name",
+			Positional: true,
 		},
 		Value: &getProp,
 	})

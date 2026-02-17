@@ -9,15 +9,16 @@ import (
 func NewCommand(project *string) *clix.Command {
 	cmd := clix.NewCommand("greet")
 	cmd.Short = "Print a greeting"
-	cmd.Usage = "demo greet --name [name]"
+	cmd.Usage = "demo greet [flags] <name>"
 
 	var name string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "name",
-			Usage:    "Name of the person to greet",
-			Required: true,
-			Prompt:   "Name of the person to greet",
+			Name:       "name",
+			Usage:      "Name of the person to greet",
+			Required:   true,
+			Prompt:     "Name of the person to greet",
+			Positional: true,
 		},
 		Value: &name,
 	})

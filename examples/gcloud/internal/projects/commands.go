@@ -27,10 +27,11 @@ func NewCommand(project *string) *clix.Command {
 	var projectID string
 	create.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "project-id",
-			Usage:    "New project ID",
-			Required: true,
-			Prompt:   "New project ID",
+			Name:       "project-id",
+			Usage:      "New project ID",
+			Required:   true,
+			Prompt:     "New project ID",
+			Positional: true,
 		},
 		Value: &projectID,
 	})

@@ -20,10 +20,11 @@ func NewCommand() *clix.Command {
 	var checkoutNumber string
 	checkout.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "number",
-			Usage:    "Pull request number",
-			Required: true,
-			Prompt:   "Pull request number",
+			Name:       "number",
+			Usage:      "Pull request number",
+			Required:   true,
+			Prompt:     "Pull request number",
+			Positional: true,
 		},
 		Value: &checkoutNumber,
 	})
@@ -38,10 +39,11 @@ func NewCommand() *clix.Command {
 	var mergeNumber string
 	merge.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "number",
-			Usage:    "Pull request number",
-			Required: true,
-			Prompt:   "Pull request number",
+			Name:       "number",
+			Usage:      "Pull request number",
+			Required:   true,
+			Prompt:     "Pull request number",
+			Positional: true,
 		},
 		Value: &mergeNumber,
 	})

@@ -19,10 +19,11 @@ func NewCommand() *clix.Command {
 	var repository string
 	clone.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "repository",
-			Usage:    "Repository to clone (OWNER/REPO)",
-			Required: true,
-			Prompt:   "OWNER/REPO",
+			Name:       "repository",
+			Usage:      "Repository to clone (OWNER/REPO)",
+			Required:   true,
+			Prompt:     "OWNER/REPO",
+			Positional: true,
 		},
 		Value: &repository,
 	})
@@ -37,10 +38,11 @@ func NewCommand() *clix.Command {
 	var repoName string
 	create.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "name",
-			Usage:    "Repository name",
-			Required: true,
-			Prompt:   "Repository name",
+			Name:       "name",
+			Usage:      "Repository name",
+			Required:   true,
+			Prompt:     "Repository name",
+			Positional: true,
 		},
 		Value: &repoName,
 	})

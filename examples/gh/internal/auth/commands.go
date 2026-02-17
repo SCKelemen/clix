@@ -19,10 +19,11 @@ func NewCommand() *clix.Command {
 	var hostname string
 	login.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "hostname",
-			Usage:    "GitHub hostname",
-			Required: true,
-			Prompt:   "GitHub hostname",
+			Name:       "hostname",
+			Usage:      "GitHub hostname",
+			Required:   true,
+			Prompt:     "GitHub hostname",
+			Positional: true,
 		},
 		Default: "github.com",
 		Value:   &hostname,
@@ -31,10 +32,11 @@ func NewCommand() *clix.Command {
 	var username string
 	login.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "username",
-			Usage:    "GitHub username",
-			Required: true,
-			Prompt:   "GitHub username",
+			Name:       "username",
+			Usage:      "GitHub username",
+			Required:   true,
+			Prompt:     "GitHub username",
+			Positional: true,
 		},
 		Value: &username,
 	})

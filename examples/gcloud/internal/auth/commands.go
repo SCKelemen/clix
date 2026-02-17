@@ -19,10 +19,11 @@ func NewCommand() *clix.Command {
 	var account string
 	login.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "account",
-			Usage:    "Google account",
-			Required: true,
-			Prompt:   "Google account",
+			Name:       "account",
+			Usage:      "Google account",
+			Required:   true,
+			Prompt:     "Google account",
+			Positional: true,
 		},
 		Value: &account,
 	})

@@ -27,10 +27,11 @@ func NewCommand() *clix.Command {
 	var organization string
 	view.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "organization",
-			Usage:    "Organization login",
-			Required: true,
-			Prompt:   "Organization login",
+			Name:       "organization",
+			Usage:      "Organization login",
+			Required:   true,
+			Prompt:     "Organization login",
+			Positional: true,
 		},
 		Value: &organization,
 	})

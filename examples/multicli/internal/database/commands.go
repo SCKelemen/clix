@@ -15,10 +15,11 @@ func NewCreateCommand() *clix.Command {
 	var name string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "name",
-			Usage:    "Database name",
-			Required: true,
-			Prompt:   "Database name",
+			Name:       "name",
+			Usage:      "Database name",
+			Required:   true,
+			Prompt:     "Database name",
+			Positional: true,
 		},
 		Value: &name,
 	})
