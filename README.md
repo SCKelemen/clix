@@ -60,6 +60,10 @@
 - **Complex state management**: `clix` focuses on CLI structure, not application state
 - **Built-in templating or rich output**: While styling is supported, `clix` doesn't include markdown rendering or complex UI components by default
 
+## Integration Boundary
+
+`clix` does not import `tui` or `cli/components` directly. It provides command routing, parsing, prompting, and extension hooks; richer terminal rendering can be layered on top from your app when needed.
+
 ## When to Use clix
 
 `clix` is a good fit if you want:
