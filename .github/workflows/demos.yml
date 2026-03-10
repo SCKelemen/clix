@@ -256,7 +256,7 @@ jobs:
           fetch-depth: 0
       
       - name: Download all generated GIFs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: gif-*
           merge-multiple: true
