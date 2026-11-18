@@ -3,6 +3,7 @@ package clix
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -117,8 +118,10 @@ func NewConfigManager(name string) *ConfigManager {
 	}
 }
 
-// Load reads configuration from the provided path. Missing files are ignored.
-// The file format is YAML. Nested structures are flattened using dot notation.
+// Load reads configuration from the provided path. Missing and empty files
+// are ignored. The file format is YAML. Nested structures are flattened
+// using dot notation, and null values (for example, "project:" with nothing
+// after it) are skipped, so they never count as configured.
 func (m *ConfigManager) Load(path string) error {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -132,6 +135,10 @@ func (m *ConfigManager) Load(path string) error {
 	var data map[string]interface{}
 	decoder := yaml.NewDecoder(file)
 	if err := decoder.Decode(&data); err != nil {
+		if errors.Is(err, io.EOF) {
+			// An empty file (or one holding only comments) has no documents.
+			return nil
+		}
 		return fmt.Errorf("failed to parse config file as YAML: %w", err)
 	}
 
@@ -151,6 +158,9 @@ func flattenYAML(prefix string, data map[string]interface{}, result map[string]s
 		}
 
 		switch v := value.(type) {
+		case nil:
+			// "key:" with no value is YAML null; treat it as unset.
+			continue
 		case map[string]interface{}:
 			// Recurse into nested maps
 			flattenYAML(fullKey, v, result)
@@ -158,7 +168,9 @@ func flattenYAML(prefix string, data map[string]interface{}, result map[string]s
 			// For arrays, convert to comma-separated string
 			parts := make([]string, len(v))
 			for i, item := range v {
-				parts[i] = fmt.Sprintf("%v", item)
+				if item != nil {
+					parts[i] = fmt.Sprintf("%v", item)
+				}
 			}
 			result[fullKey] = strings.Join(parts, ",")
 		default:
