@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Run executes the application with the given context and arguments.
@@ -448,6 +451,12 @@ func (a *App) trySetFromDefault(flag *Flag) {
 }
 
 // promptForRequiredFlags interactively prompts for each missing required flag.
+//
+// Each answer is checked with the flag's parser and Validate function while
+// the prompt is still open, so prompters that support validation (such as
+// TextPrompter) re-prompt after a typo instead of aborting. An answer that
+// is still invalid when the prompter returns is reported as an error naming
+// the flag.
 func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing []*Flag) error {
 	for _, flag := range missing {
 		label := flag.Prompt
@@ -459,24 +468,58 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 		}
 
 		value, err := a.Prompter.Prompt(ctx, PromptRequest{
-			Label: label,
-			Theme: a.DefaultTheme,
+			Label:    label,
+			Theme:    a.DefaultTheme,
+			Validate: promptValidator(flag),
 		})
 		if err != nil {
-			return err
-		}
-		if err := flag.Value.Set(value); err != nil {
-			return err
-		}
-		if flag.Validate != nil {
-			if err := flag.Validate(value); err != nil {
-				return err
+			if errors.Is(err, io.EOF) {
+				return fmt.Errorf("no input for required flag --%s: %w", flag.Name, err)
 			}
+			return err
+		}
+		if err := setAndValidate(flag, value); err != nil {
+			return fmt.Errorf("invalid value for --%s: %w", flag.Name, err)
 		}
 		flag.set = true
 		flag.source = SourcePrompt
 	}
 	return nil
+}
+
+// promptValidator returns a validation function that accepts exactly the
+// answers flag would accept: the value must parse for the flag's type and
+// then pass the flag's own Validate function.
+func promptValidator(flag *Flag) func(string) error {
+	return func(value string) error {
+		if err := checkValue(flag.Value, value); err != nil {
+			return err
+		}
+		if flag.Validate != nil {
+			return flag.Validate(value)
+		}
+		return nil
+	}
+}
+
+// checkValue reports whether raw parses for the built-in value types,
+// without changing the flag. Custom Value implementations are checked when
+// the answer is applied.
+func checkValue(v Value, raw string) error {
+	var err error
+	switch v.(type) {
+	case *BoolValue:
+		_, err = strconv.ParseBool(raw)
+	case *IntValue:
+		_, err = strconv.ParseInt(raw, 10, 0)
+	case *Int64Value:
+		_, err = strconv.ParseInt(raw, 10, 64)
+	case *Float64Value:
+		_, err = strconv.ParseFloat(raw, 64)
+	case *DurationValue:
+		_, err = time.ParseDuration(raw)
+	}
+	return err
 }
 
 func (a *App) printCommandHelp(cmd *Command) error {
