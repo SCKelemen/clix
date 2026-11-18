@@ -122,7 +122,9 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 }
 
 // resetFlagState forgets which flags were set by a previous parse, so an App
-// can be run more than once.
+// can be run more than once. The command-line-only --help and --version
+// switches are also turned back off; other values are left alone because
+// callers may pre-initialize their destination variables.
 func resetFlagState(fs *FlagSet) {
 	if fs == nil {
 		return
@@ -131,5 +133,8 @@ func resetFlagState(fs *FlagSet) {
 		f.set = false
 		f.cliSet = false
 		f.source = SourceDefault
+		if isCommandLineOnly(f) {
+			_ = f.Value.(boolFlag).SetBool(false)
+		}
 	}
 }

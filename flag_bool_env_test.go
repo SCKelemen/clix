@@ -113,3 +113,16 @@ func TestConfigSetErrorNamesSource(t *testing.T) {
 		t.Fatalf("Run error = %v, want an error naming --port and the config file", err)
 	}
 }
+
+func TestHelpDoesNotLeakIntoNextRun(t *testing.T) {
+	app, out, _ := newIsolatedApp(t, "moln")
+	ran := false
+	app.Root.AddCommand(NewCommand("ls", WithCommandRun(func(*Context) error { ran = true; return nil })))
+	if err := app.Run(context.Background(), []string{"ls", "--help"}); err != nil || ran {
+		t.Fatalf("first run: ran=%v err=%v", ran, err)
+	}
+	out.Reset()
+	if err := app.Run(context.Background(), []string{"ls"}); err != nil || !ran || out.Len() != 0 {
+		t.Fatalf("second run: ran=%v err=%v out=%q", ran, err, out.String())
+	}
+}
