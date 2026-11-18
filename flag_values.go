@@ -248,12 +248,14 @@ func (fs *FlagSet) AnyCLISet() bool {
 	return false
 }
 
-// MissingRequired returns required flags whose value is still empty
-// (not satisfied by CLI, env, config, or default).
+// MissingRequired returns required flags that were never set from any
+// source (command line, positional argument, environment, config file, or
+// prompt) and have no default. It works for every flag type: an int flag's
+// zero value does not count as provided, while an explicit --name "" does.
 func (fs *FlagSet) MissingRequired() []*Flag {
 	var missing []*Flag
 	for _, flag := range fs.flags {
-		if flag.Required && flag.Value.String() == "" {
+		if flag.Required && !flag.set && flag.Default == "" {
 			missing = append(missing, flag)
 		}
 	}
