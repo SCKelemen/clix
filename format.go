@@ -30,11 +30,15 @@ func formatJSON(w io.Writer, data interface{}) error {
 }
 
 // formatYAML formats data as YAML using go.yaml.in/yaml/v3.
+// Close flushes any buffered output, so its error is reported too.
 func formatYAML(w io.Writer, data interface{}) error {
 	encoder := yaml.NewEncoder(w)
 	encoder.SetIndent(2)
-	defer encoder.Close()
-	return encoder.Encode(data)
+	if err := encoder.Encode(data); err != nil {
+		_ = encoder.Close()
+		return err
+	}
+	return encoder.Close()
 }
 
 // formatText formats data as plain text (default).
