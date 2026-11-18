@@ -21,7 +21,7 @@ func main() {
 	// For the standalone bq CLI, we mount bigquery children directly
 	// This gives us: bq dataset list, bq v1beta dataset list, etc.
 	bqCmd := bigquery.NewBigQueryCommand()
-	
+
 	// Mount all children (dataset, v1alpha, v1beta, v1)
 	for _, child := range bqCmd.Children {
 		root.AddCommand(child)
@@ -43,4 +43,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-

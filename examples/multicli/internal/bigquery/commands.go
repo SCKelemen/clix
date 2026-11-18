@@ -41,10 +41,10 @@ func NewDatasetCommand(version string) *clix.Command {
 func NewVersionedCommand(version string) *clix.Command {
 	cmd := clix.NewCommand(version)
 	cmd.Short = fmt.Sprintf("BigQuery %s API", version)
-	
+
 	// Add dataset subcommand under this version
 	cmd.AddCommand(NewDatasetCommand(version))
-	
+
 	return cmd
 }
 
@@ -66,4 +66,3 @@ func NewBigQueryCommand() *clix.Command {
 
 	return cmd
 }
-

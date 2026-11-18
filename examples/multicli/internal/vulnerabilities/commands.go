@@ -51,4 +51,3 @@ func NewVulnerabilitiesCommand() *clix.Command {
 	cmd.AddCommand(NewListCommand())
 	return cmd
 }
-

@@ -19,7 +19,7 @@ func main() {
 
 	root := clix.NewCommand("dev")
 	root.Short = "Developer tools"
-	
+
 	// Add shared commands from different teams
 	root.AddCommand(database.NewDatabaseCommand())
 	root.AddCommand(vulnerabilities.NewVulnerabilitiesCommand())
@@ -41,4 +41,3 @@ func main() {
 		os.Exit(1)
 	}
 }
-
