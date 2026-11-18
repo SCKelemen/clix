@@ -2,7 +2,6 @@ package clix
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -319,30 +318,23 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 		}
 	}
 
-	// Then check environment variables
-	// First check if any flag defines an EnvVar for this key
+	// Then check environment variables: a flag's EnvVar, its EnvVars
+	// aliases, and the APP_KEY default, in that order.
 	if ctx.App != nil {
-		// Check command flags for EnvVar
-		if ctx.Command != nil && ctx.Command.Flags != nil {
-			if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
-				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+		isFlag := false
+		for _, fs := range []*FlagSet{ctx.commandFlags(), ctx.App.Flags()} {
+			if flag := fs.lookup(key); flag != nil {
+				isFlag = true
+				if _, val, ok := ctx.App.lookupFlagEnv(flag); ok {
 					return val, SourceEnvVar, true
 				}
 			}
 		}
-		// Check root flags for EnvVar
-		rootFlags := ctx.App.Flags()
-		if rootFlags != nil {
-			if flag := rootFlags.lookup(key); flag != nil && flag.EnvVar != "" {
-				if val, ok := os.LookupEnv(flag.EnvVar); ok {
-					return val, SourceEnvVar, true
-				}
+		// Keys that are not flags only have the APP_KEY default.
+		if !isFlag {
+			if val, ok := os.LookupEnv(ctx.App.envVarName(key)); ok {
+				return val, SourceEnvVar, true
 			}
-		}
-		// Check default env var pattern (APP_KEY)
-		upper := fmt.Sprintf("%s_%s", ctx.App.EnvPrefix, strings.ToUpper(strings.ReplaceAll(key, "-", "_")))
-		if val, ok := os.LookupEnv(upper); ok {
-			return val, SourceEnvVar, true
 		}
 	}
 
@@ -371,6 +363,14 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	}
 
 	return "", 0, false
+}
+
+// commandFlags returns the executing command's flag set, or nil.
+func (ctx *Context) commandFlags() *FlagSet {
+	if ctx.Command == nil {
+		return nil
+	}
+	return ctx.Command.Flags
 }
 
 // String retrieves a string configuration value with the given key, looking at

@@ -75,6 +75,10 @@ type Flag struct {
 	// If empty, defaults to APP_KEY format based on EnvPrefix.
 	EnvVar string
 
+	// EnvVars are additional environment variable aliases, checked in order
+	// after EnvVar and before the APP_KEY default.
+	EnvVars []string
+
 	// Default is the default value for this flag (as a string).
 	Default string
 
@@ -126,7 +130,8 @@ type FlagOptions struct {
 	EnvVar string
 
 	// EnvVars are optional additional environment variable aliases.
-	// All listed environment variables are checked in order.
+	// They are checked in order after EnvVar and before the APP_KEY default;
+	// the first one that is set (and not empty) wins.
 	EnvVars []string
 
 	// Required indicates this flag must be provided (or resolved from Default/env/config).
@@ -265,6 +270,7 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 		Short:      stringOpts.Short,
 		Usage:      stringOpts.Usage,
 		EnvVar:     stringOpts.EnvVar,
+		EnvVars:    append([]string(nil), stringOpts.EnvVars...),
 		Default:    stringOpts.Default,
 		Required:   stringOpts.Required,
 		Prompt:     stringOpts.Prompt,
@@ -416,6 +422,7 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 		Short:      boolOpts.Short,
 		Usage:      boolOpts.Usage,
 		EnvVar:     boolOpts.EnvVar,
+		EnvVars:    append([]string(nil), boolOpts.EnvVars...),
 		Required:   boolOpts.Required,
 		Prompt:     boolOpts.Prompt,
 		Positional: boolOpts.Positional,
@@ -447,6 +454,7 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 		Short:      durationOpts.Short,
 		Usage:      durationOpts.Usage,
 		EnvVar:     durationOpts.EnvVar,
+		EnvVars:    append([]string(nil), durationOpts.EnvVars...),
 		Default:    durationOpts.Default,
 		Required:   durationOpts.Required,
 		Prompt:     durationOpts.Prompt,
@@ -535,6 +543,7 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 		Short:      intOpts.Short,
 		Usage:      intOpts.Usage,
 		EnvVar:     intOpts.EnvVar,
+		EnvVars:    append([]string(nil), intOpts.EnvVars...),
 		Default:    intOpts.Default,
 		Required:   intOpts.Required,
 		Prompt:     intOpts.Prompt,
@@ -623,6 +632,7 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 		Short:      int64Opts.Short,
 		Usage:      int64Opts.Usage,
 		EnvVar:     int64Opts.EnvVar,
+		EnvVars:    append([]string(nil), int64Opts.EnvVars...),
 		Default:    int64Opts.Default,
 		Required:   int64Opts.Required,
 		Prompt:     int64Opts.Prompt,
@@ -711,6 +721,7 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 		Short:      float64Opts.Short,
 		Usage:      float64Opts.Usage,
 		EnvVar:     float64Opts.EnvVar,
+		EnvVars:    append([]string(nil), float64Opts.EnvVars...),
 		Default:    float64Opts.Default,
 		Required:   float64Opts.Required,
 		Prompt:     float64Opts.Prompt,

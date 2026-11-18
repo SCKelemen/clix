@@ -362,22 +362,45 @@ func (a *App) envVarName(name string) string {
 // returned as an error that names the variable. Empty variables are treated
 // as unset.
 func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
-	names := []string{flag.EnvVar, a.envVarName(flag.Name)}
-	for _, name := range names {
-		if name == "" {
-			continue
-		}
-		val, ok := os.LookupEnv(name)
-		if !ok || val == "" {
-			continue
-		}
-		if err := flag.Value.Set(val); err != nil {
-			return false, fmt.Errorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
-		}
-		flag.set = true
-		return true, nil
+	name, val, ok := a.lookupFlagEnv(flag)
+	if !ok {
+		return false, nil
 	}
-	return false, nil
+	if err := flag.Value.Set(val); err != nil {
+		return false, fmt.Errorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
+	}
+	flag.set = true
+	return true, nil
+}
+
+// flagEnvVars lists the environment variables consulted for flag, in order:
+// EnvVar, then each of EnvVars, then the APP_KEY default.
+func (a *App) flagEnvVars(flag *Flag) []string {
+	names := make([]string, 0, len(flag.EnvVars)+2)
+	seen := make(map[string]bool, cap(names))
+	add := func(name string) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			names = append(names, name)
+		}
+	}
+	add(flag.EnvVar)
+	for _, name := range flag.EnvVars {
+		add(name)
+	}
+	add(a.envVarName(flag.Name))
+	return names
+}
+
+// lookupFlagEnv returns the first non-empty environment variable among
+// flagEnvVars(flag), with its name.
+func (a *App) lookupFlagEnv(flag *Flag) (name, value string, ok bool) {
+	for _, name := range a.flagEnvVars(flag) {
+		if val, found := os.LookupEnv(name); found && val != "" {
+			return name, val, true
+		}
+	}
+	return "", "", false
 }
 
 // trySetFromConfig attempts to set a flag value from configuration.
