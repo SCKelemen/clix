@@ -273,23 +273,62 @@ func (m *ConfigManager) Values() map[string]string {
 //		clix.ConfigSchema{Key: "project.retries"},
 //		clix.WithConfigType(clix.ConfigInt),
 //	)
+//
+// Functional options and struct fields that follow a key apply to that key,
+// so WithConfigKey("a"), WithConfigType(ConfigInt) registers one schema. A
+// new key (from WithConfigKey or a ConfigSchema with a different Key)
+// starts the next schema, which is how several schemas are registered in
+// one call.
 func (m *ConfigManager) RegisterSchema(entries ...ConfigSchemaOption) {
 	if m.schemas == nil {
 		m.schemas = make(map[string]ConfigSchema)
 	}
-	for _, entry := range entries {
-		var schema ConfigSchema
-		switch v := entry.(type) {
-		case ConfigSchema:
-			schema = v
-		default:
-			entry.ApplyConfigSchema(&schema)
+
+	var current ConfigSchema
+	flush := func() {
+		if current.Key != "" {
+			m.schemas[current.Key] = current
 		}
-		if schema.Key == "" {
+		current = ConfigSchema{}
+	}
+
+	for _, entry := range entries {
+		if entry == nil {
 			continue
 		}
-		m.schemas[schema.Key] = schema
+		if p, ok := entry.(*ConfigSchema); ok {
+			if p == nil {
+				continue
+			}
+			entry = *p
+		}
+
+		if v, ok := entry.(ConfigSchema); ok && v.Key != "" {
+			// A complete struct describes its own key. Options given before
+			// any key carry over to it unless the struct sets them itself.
+			pending := current
+			if pending.Key != "" {
+				flush()
+				pending = ConfigSchema{}
+			}
+			current = v
+			if current.Type == ConfigString {
+				current.Type = pending.Type
+			}
+			if current.Validate == nil {
+				current.Validate = pending.Validate
+			}
+			continue
+		}
+
+		var probe ConfigSchema
+		entry.ApplyConfigSchema(&probe)
+		if probe.Key != "" && current.Key != "" && probe.Key != current.Key {
+			flush()
+		}
+		entry.ApplyConfigSchema(&current)
 	}
+	flush()
 }
 
 // NormalizeValue validates and canonicalises a value according to the schema (if present).
