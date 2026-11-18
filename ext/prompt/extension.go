@@ -5,6 +5,11 @@ import "github.com/SCKelemen/clix/v2"
 // Extension replaces the default TextPrompter with TerminalPrompter,
 // enabling advanced prompt features: select, multi-select, confirm, and raw terminal mode.
 //
+// Only the core default is replaced: when App.Prompter is nil or a
+// clix.TextPrompter, it becomes a TerminalPrompter reading from App.In and
+// writing to App.Err (App.Out if Err is nil), so prompts never mix with
+// command output. A Prompter you set yourself is left in place.
+//
 // Without this extension, advanced prompt types (select, multi-select) return errors
 // directing users to add the extension. With this extension, all prompt types are supported.
 //
@@ -39,11 +44,22 @@ type Extension struct {
 
 // Extend implements clix.Extension.
 func (Extension) Extend(app *clix.App) error {
-	// Replace TextPrompter with TerminalPrompter
-	if app.In != nil && app.Out != nil {
+	switch app.Prompter.(type) {
+	case nil, clix.TextPrompter, *clix.TextPrompter:
+		// The core default (or nothing): upgrade it.
+	default:
+		// A Prompter chosen by the application; keep it.
+		return nil
+	}
+
+	out := app.Err
+	if out == nil {
+		out = app.Out
+	}
+	if app.In != nil && out != nil {
 		app.Prompter = TerminalPrompter{
 			In:  app.In,
-			Out: app.Out,
+			Out: out,
 		}
 	}
 	return nil

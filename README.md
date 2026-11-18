@@ -426,7 +426,7 @@ Readers that are not file descriptors, such as `strings.Reader`, are not termina
 Other guarantees:
 
 - **Prompts go to `App.Err`**, never `App.Out`, so `myapp get --format json | jq` stays clean.
-- **Cancellation**: `TextPrompter` returns `ctx.Err()` as soon as the context is done, even while waiting on an idle pipe.
+- **Cancellation**: `TextPrompter` returns `ctx.Err()` as soon as the context is done, even while waiting on an idle pipe. With `clix/ext/prompt`, Ctrl-C or Escape returns `clix.ErrCancelled`, and SIGINT or SIGTERM during a raw-mode prompt restores the terminal and returns `clix.ErrCancelled` instead of exiting the process. The extension only replaces the default `TextPrompter`; a `Prompter` you set yourself is kept.
 - **Piped answers**: each prompt reads exactly one line, so `printf 'a\nb\n' | myapp mk` (with `InteractiveAlways`) answers two prompts in turn.
 - **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors and missing flags, 130 for cancellation, and 1 otherwise:
 

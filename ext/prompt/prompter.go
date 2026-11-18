@@ -371,7 +371,7 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		}
 
 		// Read a single keypress
-		key, err := ReadKey(p.In)
+		key, err := state.readKey(ctx, inFile)
 		if err != nil {
 			return "", err
 		}
@@ -450,7 +450,7 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		case KeyCtrlC:
 			fmt.Fprint(p.Out, "\n")
 			fmt.Fprint(p.Out, "\r\033[K")
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyEscape:
 			state := clix.PromptKeyState{
 				Command:    clix.PromptCommand{Type: clix.PromptCommandEscape},
@@ -557,7 +557,7 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 
 	for {
 		// Read a single keypress
-		key, err := ReadKey(p.In)
+		key, err := state.readKey(ctx, inFile)
 		if err != nil {
 			return "", err
 		}
@@ -621,7 +621,7 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyEscape:
 			state := clix.PromptKeyState{Command: clix.PromptCommand{Type: clix.PromptCommandEscape}, Default: cfg.Default}
 			action := dispatchCommand(cfg, state, nil)
@@ -654,7 +654,7 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
 			state := clix.PromptKeyState{
 				Command: clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)},
@@ -690,7 +690,7 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyHome:
 			selectedIdx = 0
 			MoveCursorUp(p.Out, linesToRender)
@@ -1038,7 +1038,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 
 	for {
 		// Read a single keypress
-		key, err := ReadKey(p.In)
+		key, err := state.readKey(ctx, inFile)
 		if err != nil {
 			return "", err
 		}
@@ -1110,7 +1110,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyEscape:
 			state := clix.PromptKeyState{Command: clix.PromptCommand{Type: clix.PromptCommandEscape}, Default: cfg.Default}
 			action := dispatchCommand(cfg, state, nil)
@@ -1143,7 +1143,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
 			state := clix.PromptKeyState{
 				Command: clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)},
@@ -1179,7 +1179,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyHome:
 			onContinueButton = false
 			currentIdx = 0

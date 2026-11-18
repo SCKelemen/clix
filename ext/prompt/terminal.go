@@ -1,12 +1,15 @@
 package prompt
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
+	"github.com/SCKelemen/clix/v2"
 	"golang.org/x/term"
 )
 
@@ -15,9 +18,22 @@ type TerminalState struct {
 	fd       int
 	oldState *term.State
 	restored bool
+
+	mu          sync.Mutex     // guards restored
+	stopOnce    sync.Once      // makes Restore's cleanup idempotent
+	sigCh       chan os.Signal // SIGINT/SIGTERM while in raw mode
+	stop        chan struct{}  // closed by Restore to end the signal watcher
+	interrupted chan struct{}  // closed when a signal arrived in raw mode
+	watchDone   chan struct{}  // closed when the signal watcher exits
 }
 
 // EnableRawMode enables raw terminal mode for reading individual keystrokes.
+//
+// While the terminal is in raw mode, SIGINT and SIGTERM restore it, and the
+// prompt that is waiting for a key returns clix.ErrCancelled. The process
+// is not exited, so the application's deferred cleanup and own signal
+// handling still run. Call Restore when done; it also stops the signal
+// handling, so nothing is left running.
 func EnableRawMode(in *os.File) (*TerminalState, error) {
 	fd := int(in.Fd())
 	oldState, err := term.MakeRaw(fd)
@@ -28,28 +44,112 @@ func EnableRawMode(in *os.File) (*TerminalState, error) {
 	state := &TerminalState{
 		fd:       fd,
 		oldState: oldState,
-		restored: false,
 	}
-
-	// Ensure we restore on interrupt signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		state.Restore()
-		os.Exit(1)
-	}()
-
+	state.watchSignals()
 	return state, nil
 }
 
-// Restore restores the terminal to its previous state.
+// watchSignals starts restoring the terminal on SIGINT or SIGTERM until
+// Restore is called.
+func (ts *TerminalState) watchSignals() {
+	ts.sigCh = make(chan os.Signal, 1)
+	ts.stop = make(chan struct{})
+	ts.interrupted = make(chan struct{})
+	ts.watchDone = make(chan struct{})
+	signal.Notify(ts.sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		defer close(ts.watchDone)
+		select {
+		case <-ts.sigCh:
+			// Stop intercepting so a second signal gets its normal effect.
+			signal.Stop(ts.sigCh)
+			_ = ts.restoreTerminal()
+			close(ts.interrupted)
+		case <-ts.stop:
+		}
+	}()
+}
+
+// Restore restores the terminal to its previous state and stops the signal
+// handling installed by EnableRawMode. It is safe to call more than once.
 func (ts *TerminalState) Restore() error {
+	ts.stopOnce.Do(func() {
+		if ts.sigCh != nil {
+			signal.Stop(ts.sigCh)
+		}
+		if ts.stop != nil {
+			close(ts.stop)
+		}
+	})
+	return ts.restoreTerminal()
+}
+
+// restoreTerminal puts the terminal back into its original mode once.
+func (ts *TerminalState) restoreTerminal() error {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
 	if ts.restored || ts.oldState == nil {
 		return nil
 	}
 	ts.restored = true
 	return term.Restore(ts.fd, ts.oldState)
+}
+
+// keyResult is the outcome of one ReadKey call.
+type keyResult struct {
+	key Key
+	err error
+}
+
+// pendingKeys holds, per input file, a key read still in flight after the
+// prompt waiting for it stopped (because of a signal or a done context).
+// The next prompt on the same input receives that key, so no keystroke is
+// lost and at most one goroutine waits per input.
+var pendingKeys = struct {
+	sync.Mutex
+	m map[*os.File]chan keyResult
+}{m: make(map[*os.File]chan keyResult)}
+
+// readKey reads one key from in, like ReadKey, but returns early with
+// clix.ErrCancelled if a signal arrives while the terminal is in raw mode,
+// or with ctx.Err() when ctx is done.
+func (ts *TerminalState) readKey(ctx context.Context, in *os.File) (Key, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	pendingKeys.Lock()
+	ch := pendingKeys.m[in]
+	delete(pendingKeys.m, in)
+	pendingKeys.Unlock()
+	if ch == nil {
+		ch = make(chan keyResult, 1)
+		go func() {
+			key, err := ReadKey(in)
+			ch <- keyResult{key: key, err: err}
+		}()
+	}
+
+	var interrupted <-chan struct{}
+	if ts != nil {
+		interrupted = ts.interrupted
+	}
+
+	park := func() {
+		pendingKeys.Lock()
+		pendingKeys.m[in] = ch
+		pendingKeys.Unlock()
+	}
+	select {
+	case res := <-ch:
+		return res.key, res.err
+	case <-interrupted:
+		park()
+		return KeyUnknown, clix.ErrCancelled
+	case <-ctx.Done():
+		park()
+		return KeyUnknown, ctx.Err()
+	}
 }
 
 // ReadKey reads a single keypress from the terminal, returning the key code
