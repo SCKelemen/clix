@@ -52,6 +52,12 @@ type App struct {
 	// Configuration values are automatically loaded and available via Context getters.
 	Config *ConfigManager
 
+	// ConfigPath overrides the location of the config file. When empty,
+	// config.yaml in $XDG_CONFIG_HOME/<name> (or ~/.config/<name>) is used.
+	// The <EnvPrefix>_CONFIG environment variable, when set, takes
+	// precedence over ConfigPath. See ConfigFile.
+	ConfigPath string
+
 	// Prompter handles interactive user input. Defaults to TextPrompter.
 	// Use the prompt extension to enable advanced prompts (select, multi-select).
 	Prompter Prompter

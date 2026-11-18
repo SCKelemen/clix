@@ -292,10 +292,14 @@ func (a *App) ensureConfigLoaded(ctx context.Context) error {
 	}
 	a.configLoaded = true
 
-	path, err := a.ConfigFile()
+	path, err := a.configFilePath()
 	if err != nil {
-		a.configLoadErr = err
-		return err
+		// Without a home directory there is no config file to read; that is
+		// not an error for commands that do not save configuration.
+		return nil
+	}
+	if a.Config == nil {
+		a.Config = NewConfigManager(a.Name)
 	}
 	a.configLoadErr = a.Config.Load(path)
 	return a.configLoadErr

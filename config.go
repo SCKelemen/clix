@@ -182,22 +182,32 @@ func flattenYAML(prefix string, data map[string]interface{}, result map[string]s
 
 // Save writes the configuration to the provided path in YAML format.
 // Dot-notation keys (e.g., "project.name") are saved as flat key:value pairs.
-func (m *ConfigManager) Save(path string) error {
+//
+// Config files often hold credentials or project identifiers, so a missing
+// directory is created with mode 0700 and the file is written with mode
+// 0600. The file is replaced atomically via a temporary file and rename.
+func (m *ConfigManager) Save(path string) (err error) {
 	if m.values == nil {
 		return nil
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 
-	tmp := path + ".tmp"
-	file, err := os.Create(tmp)
+	// os.CreateTemp creates the file with mode 0600.
+	file, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	tmp := file.Name()
+	defer func() {
+		if err != nil {
+			file.Close()
+			os.Remove(tmp)
+		}
+	}()
 
 	// Convert flat map[string]string to map[string]interface{} for YAML encoding
 	data := make(map[string]interface{})
@@ -208,10 +218,12 @@ func (m *ConfigManager) Save(path string) error {
 	encoder := yaml.NewEncoder(file)
 	encoder.SetIndent(2)
 	if err := encoder.Encode(data); err != nil {
-		file.Close()
 		return err
 	}
-
+	// Close flushes any output the encoder is still buffering.
+	if err := encoder.Close(); err != nil {
+		return err
+	}
 	if err := file.Close(); err != nil {
 		return err
 	}
