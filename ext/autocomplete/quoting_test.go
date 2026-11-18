@@ -80,3 +80,13 @@ func TestShellQuoting(t *testing.T) {
 		t.Errorf("zshValue = %s", got)
 	}
 }
+
+func TestAutocompleteAcceptsPositionalShell(t *testing.T) {
+	app, out := newQuotingApp(t)
+	if err := app.Run(context.Background(), []string{"autocomplete", "bash"}); err != nil {
+		t.Fatalf("autocomplete bash: %v", err)
+	}
+	if !strings.Contains(out.String(), "complete -F _moln_completions moln") {
+		t.Fatalf("not a bash completion script:\n%s", out.String())
+	}
+}

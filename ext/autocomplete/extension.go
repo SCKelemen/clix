@@ -13,7 +13,9 @@ import (
 //
 // The extension adds:
 //
-//	cli autocomplete --shell [bash|zsh|fish] - Generate completion script for the specified shell
+//	cli autocomplete [bash|zsh|fish] - Generate completion script for the specified shell
+//
+// The shell may also be given as --shell.
 //
 // The generated scripts include all commands, groups, flags, and aliases
 // from your application's command tree.
@@ -27,12 +29,12 @@ import (
 //
 //	app := clix.NewApp("myapp")
 //	app.AddExtension(autocomplete.Extension{})
-//	// Now your app has: myapp autocomplete --shell [shell]
+//	// Now your app has: myapp autocomplete [shell]
 //
 //	// Users can generate and install completion:
-//	//   myapp autocomplete --shell bash > /etc/bash_completion.d/myapp
-//	//   myapp autocomplete --shell zsh > ~/.zsh/completions/_myapp
-//	//   myapp autocomplete --shell fish > ~/.config/fish/completions/myapp.fish
+//	//   myapp autocomplete bash > /etc/bash_completion.d/myapp
+//	//   myapp autocomplete zsh > ~/.zsh/completions/_myapp
+//	//   myapp autocomplete fish > ~/.config/fish/completions/myapp.fish
 type Extension struct {
 	// Extension has no configuration options.
 	// Simply add it to your app to enable autocomplete command generation.
@@ -64,14 +66,15 @@ func findChild(cmd *clix.Command, name string) *clix.Command {
 func NewAutocompleteCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("autocomplete")
 	cmd.Short = "Generate shell completion script"
-	cmd.Usage = fmt.Sprintf("%s autocomplete --shell [bash|zsh|fish]", app.Name)
+	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish]", app.Name)
 	cmd.IsExtensionCommand = true
 
 	var shell string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:  "shell",
-			Usage: "Shell type (bash, zsh, fish)",
+			Name:       "shell",
+			Usage:      "Shell type (bash, zsh, fish)",
+			Positional: true,
 		},
 		Value: &shell,
 	})
