@@ -106,9 +106,11 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// 1. No CLI flags passed + required missing → interactive prompting
 	// 2. All required satisfied (from any source) → run
 	// 3. Some CLI flags passed + required missing → error
+	// Root (app-level) flags count as "flags passed" too: "mk --project p"
+	// is a scripted invocation even though --project lives on the root.
 	missing := cmd.Flags.MissingRequired()
 	if len(missing) > 0 {
-		if cmd.Flags.AnyCLISet() {
+		if cmd.Flags.AnyCLISet() || rootFlags.AnyCLISet() {
 			// Mode 3: some flags provided, required missing → error
 			names := make([]string, len(missing))
 			for i, f := range missing {
