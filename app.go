@@ -146,7 +146,6 @@ func NewApp(name string, opts ...AppOption) *App {
 
 	app.EnvPrefix = strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
 	app.Config = NewConfigManager(name)
-	app.Prompter = TextPrompter{In: app.In, Out: app.Out}
 	app.DefaultTheme = DefaultPromptTheme
 	app.Styles = DefaultStyles
 
@@ -162,6 +161,12 @@ func NewApp(name string, opts ...AppOption) *App {
 	// Ensure root exists (in case WithAppRoot set it to nil)
 	if app.Root == nil {
 		app.Root = NewCommand(name)
+	}
+
+	// Build the default prompter only now, so it uses the streams chosen by
+	// WithAppIn/WithAppOut, and never replaces one set by WithAppPrompter.
+	if app.Prompter == nil {
+		app.Prompter = TextPrompter{In: app.In, Out: app.Out}
 	}
 
 	// Ensure root has a FlagSet initialized
