@@ -1,6 +1,8 @@
 package clix
 
 import (
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -35,7 +37,8 @@ type FlagSet struct {
 	name   string
 	flags  []*Flag
 	index  map[string]*Flag
-	strict bool // If true, unknown flags cause errors instead of being treated as positionals
+	strict bool    // If true, unknown flags cause errors instead of being treated as positionals
+	errs   []error // Registration problems, such as duplicate flag names
 }
 
 // NewFlagSet initialises an empty flag set.
@@ -721,6 +724,17 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 	}
 }
 
+// addFlag registers flag in the set.
+//
+// A flag whose long name is already registered is not added: the first
+// registration wins, and the conflict is recorded so it can be reported by
+// Err. Registration does not panic on duplicates because existing programs
+// that happen to register a name twice must keep working.
+//
+// A short name that is already taken moves to the new flag, and the previous
+// owner loses its short name. This keeps the historical "newest wins" parsing
+// behavior (for example, a command may claim -h for --host) while making help
+// output and lookups agree on which flag owns the short name.
 func (fs *FlagSet) addFlag(flag *Flag) {
 	if flag.Name == "" {
 		panic("flag requires a name")
@@ -736,20 +750,39 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 	if fs.index == nil {
 		fs.index = make(map[string]*Flag)
 	}
+	if _, exists := fs.index["--"+flag.Name]; exists {
+		fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s redefined in flag set %q; keeping the first definition", flag.Name, fs.name))
+		return
+	}
 	fs.flags = append(fs.flags, flag)
 	fs.index["--"+flag.Name] = flag
 	if flag.Short != "" {
+		if previous, taken := fs.index["-"+flag.Short]; taken && previous != flag {
+			previous.Short = ""
+		}
 		fs.index["-"+flag.Short] = flag
 	}
 }
 
+// lookup returns the flag registered under the long name, or nil.
+// It consults the same index the parser uses, so reads and writes always
+// refer to the same flag.
 func (fs *FlagSet) lookup(name string) *Flag {
-	for _, flag := range fs.flags {
-		if flag.Name == name {
-			return flag
-		}
+	if fs == nil || fs.index == nil {
+		return nil
 	}
-	return nil
+	return fs.index["--"+name]
+}
+
+// Err reports problems found while registering flags, such as a long flag
+// name that was defined more than once. It returns nil when registration
+// succeeded. Duplicate definitions are ignored rather than causing a panic,
+// so call Err (for example, in a test) to detect them.
+func (fs *FlagSet) Err() error {
+	if fs == nil {
+		return nil
+	}
+	return errors.Join(fs.errs...)
 }
 
 // Flags returns all registered flags.

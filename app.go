@@ -167,15 +167,19 @@ func NewApp(name string, opts ...AppOption) *App {
 	}
 
 	// Standard flags on root command (accessible via app.Flags()).
-	var help bool
-	app.Flags().BoolVar(BoolVarOptions{
-		FlagOptions: FlagOptions{
-			Name:  "help",
-			Short: "h",
-			Usage: "Show help information",
-		},
-		Value: &help,
-	})
+	// NewCommand and NewGroup already register --help, so only add it when
+	// the root does not have one yet (for example, a hand-built Command).
+	if app.Flags().lookup("help") == nil {
+		var help bool
+		app.Flags().BoolVar(BoolVarOptions{
+			FlagOptions: FlagOptions{
+				Name:  "help",
+				Short: "h",
+				Usage: "Show help information",
+			},
+			Value: &help,
+		})
+	}
 
 	return app
 }
