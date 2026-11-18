@@ -101,3 +101,19 @@ func TestApplyFlagCarriesEveryField(t *testing.T) {
 		t.Fatal("flag after a nil option was not registered")
 	}
 }
+
+func TestStructAfterFunctionalOptionsKeepsThem(t *testing.T) {
+	fs := NewFlagSet("t")
+	var s string
+	var n int
+	fs.StringVar(WithFlagName("name"), WithFlagRequired(), StringVarOptions{Value: &s, Default: "d"})
+	fs.IntVar(WithFlagName("count"), WithFlagShort("c"), &IntVarOptions{Value: &n})
+
+	f := fs.lookup("name")
+	if f == nil || !f.Required || f.Default != "d" || s != "d" {
+		t.Fatalf("name flag = %+v (s=%q); want name, required, and default all kept", f, s)
+	}
+	if _, err := fs.Parse([]string{"-c", "3"}); err != nil || n != 3 {
+		t.Fatalf("Parse -c 3: err=%v n=%d", err, n)
+	}
+}

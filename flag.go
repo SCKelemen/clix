@@ -235,6 +235,18 @@ type StringVarOptions struct {
 	Value *string
 }
 
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *StringVarOptions) merge(v StringVarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
+	}
+	if v.Value != nil {
+		o.Value = v.Value
+	}
+}
+
 // FlagOption configures a flag using the functional options pattern.
 // Options can be used to build flags:
 //
@@ -271,10 +283,10 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 		case nil:
 			continue
 		case StringVarOptions:
-			stringOpts = v
+			stringOpts.merge(v)
 		case *StringVarOptions:
 			if v != nil {
-				stringOpts = *v
+				stringOpts.merge(*v)
 			}
 		case stringValueOption:
 			stringOpts.Value = v.value
@@ -349,6 +361,18 @@ type DurationVarOptions struct {
 	Value *time.Duration
 }
 
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *DurationVarOptions) merge(v DurationVarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
+	}
+	if v.Value != nil {
+		o.Value = v.Value
+	}
+}
+
 // BoolVarOptions describes the configuration for adding a bool flag.
 // This struct implements FlagOption, so it can be used alongside functional options.
 //
@@ -378,6 +402,15 @@ type BoolVarOptions struct {
 	Value *bool
 }
 
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *BoolVarOptions) merge(v BoolVarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Value != nil {
+		o.Value = v.Value
+	}
+}
+
 // BoolVar registers a boolean flag. Accepts either a BoolVarOptions struct
 // (primary API) or functional options (convenience layer).
 func (fs *FlagSet) BoolVar(opts ...FlagOption) {
@@ -387,10 +420,10 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 		case nil:
 			continue
 		case BoolVarOptions:
-			boolOpts = v
+			boolOpts.merge(v)
 		case *BoolVarOptions:
 			if v != nil {
-				boolOpts = *v
+				boolOpts.merge(*v)
 			}
 		case boolValueOption:
 			boolOpts.Value = v.value
@@ -423,10 +456,10 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 		case nil:
 			continue
 		case DurationVarOptions:
-			durationOpts = v
+			durationOpts.merge(v)
 		case *DurationVarOptions:
 			if v != nil {
-				durationOpts = *v
+				durationOpts.merge(*v)
 			}
 		case durationValueOption:
 			durationOpts.Value = v.value
@@ -487,6 +520,18 @@ type IntVarOptions struct {
 	Value *int
 }
 
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *IntVarOptions) merge(v IntVarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
+	}
+	if v.Value != nil {
+		o.Value = v.Value
+	}
+}
+
 // IntVar registers an int flag. Accepts either an IntVarOptions struct
 // (primary API) or functional options (convenience layer).
 func (fs *FlagSet) IntVar(opts ...FlagOption) {
@@ -496,10 +541,10 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 		case nil:
 			continue
 		case IntVarOptions:
-			intOpts = v
+			intOpts.merge(v)
 		case *IntVarOptions:
 			if v != nil {
-				intOpts = *v
+				intOpts.merge(*v)
 			}
 		case integerValueOption:
 			intOpts.Value = v.value
@@ -560,6 +605,18 @@ type Int64VarOptions struct {
 	Value *int64
 }
 
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *Int64VarOptions) merge(v Int64VarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
+	}
+	if v.Value != nil {
+		o.Value = v.Value
+	}
+}
+
 // Int64Var registers an int64 flag. Accepts either an Int64VarOptions struct
 // (primary API) or functional options (convenience layer).
 func (fs *FlagSet) Int64Var(opts ...FlagOption) {
@@ -569,10 +626,10 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 		case nil:
 			continue
 		case Int64VarOptions:
-			int64Opts = v
+			int64Opts.merge(v)
 		case *Int64VarOptions:
 			if v != nil {
-				int64Opts = *v
+				int64Opts.merge(*v)
 			}
 		case int64ValueOption:
 			int64Opts.Value = v.value
@@ -633,6 +690,18 @@ type Float64VarOptions struct {
 	Value *float64
 }
 
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *Float64VarOptions) merge(v Float64VarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
+	}
+	if v.Value != nil {
+		o.Value = v.Value
+	}
+}
+
 // Float64Var registers a float64 flag. Accepts either a Float64VarOptions struct
 // (primary API) or functional options (convenience layer).
 func (fs *FlagSet) Float64Var(opts ...FlagOption) {
@@ -642,10 +711,10 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 		case nil:
 			continue
 		case Float64VarOptions:
-			float64Opts = v
+			float64Opts.merge(v)
 		case *Float64VarOptions:
 			if v != nil {
-				float64Opts = *v
+				float64Opts.merge(*v)
 			}
 		case float64ValueOption:
 			float64Opts.Value = v.value
