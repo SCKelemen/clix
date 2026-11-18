@@ -33,9 +33,9 @@
 
 2. **Commands with handlers execute**: Commands with Run handlers execute when called. If they have children, the handler executes when called without arguments, or routes to child commands when a child name is provided.
 
-3. **Actionable commands prompt**: Commands without children that require arguments will automatically prompt for missing required arguments, providing a smooth interactive experience.
+3. **Actionable commands prompt**: Commands without children that declare required flags will automatically prompt for missing required values, providing a smooth interactive experience.
 
-4. **Help flags take precedence**: Global and command-level `-h`/`--help` flags always show help information, even if arguments are missing.
+4. **Help flags take precedence**: Global and command-level `-h`/`--help` flags always show help information, even if required values are missing.
 
 5. **Configuration precedence**: Values are resolved in the following order (highest precedence first): Command flags > App flags > Environment variables > Config file > Defaults
    - Command-level flag values (flags defined on the specific command)
@@ -51,7 +51,7 @@
 - **Consistent behavior**: Predictable help, prompting, and command execution patterns
 - **Great developer experience**: Clear types, helpful defaults, and comprehensive examples
 - **Batteries-included when needed**: Extensions provide powerful features without polluting core functionality
-- **Structured output support**: Built-in JSON/YAML/text formatting for machine-readable output
+- **Structured output support**: JSON/YAML/text formatting for machine-readable output via `clix.FormatData` and the opt-in `ext/format` extension
 - **Interactive by default**: Smart prompting that guides users through required inputs
 
 ## Not Goals
@@ -59,6 +59,8 @@
 - **Everything as a dependency**: Features like help commands, autocomplete, and version checking are opt-in via extensions
 - **Complex state management**: `clix` focuses on CLI structure, not application state
 - **Built-in templating or rich output**: While styling is supported, `clix` doesn't include markdown rendering or complex UI components by default
+- **Command auto-generation**: You explicitly define your command tree
+- **Automatic flag inference**: Flags must be explicitly declared (though defaults, env vars, and config files reduce boilerplate)
 
 ## Integration Boundary
 
@@ -69,13 +71,11 @@
 `clix` is a good fit if you want:
 
 - **A strict tree of groups and commands** – Clear hierarchy where groups organize commands and commands execute handlers
-- **Built-in prompting and config precedence** – Automatic prompting for missing arguments and consistent flag/env/config/default resolution
+- **Built-in prompting and config precedence** – Automatic prompting for missing required flags and consistent flag/env/config/default resolution
 - **Extensions instead of code generation** – Optional features via extensions rather than codegen tools
-- **Declarative API** – Describe your CLI structure clearly with structs, functional options, or builder-style APIs
+- **Declarative API** – Describe your CLI structure clearly with struct literals or functional options
 
 If you need code generation, complex plugin systems, or a more flexible command model, consider [Cobra](https://github.com/spf13/cobra) or [ff](https://github.com/peterbourgon/ff).
-- **Command auto-generation**: You explicitly define your command tree
-- **Automatic flag inference**: Flags must be explicitly declared (though defaults, env vars, and config files reduce boilerplate)
 
 ## Quick Start
 
@@ -117,9 +117,9 @@ func main() {
 package main
 
 import (
+        "example.com/demo/internal/greet"
         "github.com/SCKelemen/clix/v2"
         "github.com/SCKelemen/clix/v2/ext/help"
-        "example.com/demo/internal/greet"
 )
 
 func newApp() *clix.App {
@@ -127,6 +127,18 @@ func newApp() *clix.App {
         app.Description = "Demonstrates the clix CLI framework"
 
         var project string
+
+        root := clix.NewCommand("demo")
+        root.Short = "Root of the demo application"
+        root.Run = func(ctx *clix.Context) error {
+                return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+        }
+        root.AddCommand(greet.NewCommand(&project))
+
+        // app.Flags() is the flag set of the current root command, so install
+        // the custom root before registering app-level flags on it.
+        app.Root = root
+
         app.Flags().StringVar(clix.StringVarOptions{
                 FlagOptions: clix.FlagOptions{
                         Name:   "project",
@@ -137,17 +149,6 @@ func newApp() *clix.App {
                 Default: "sample-project",
         })
 
-        root := clix.NewCommand("demo")
-        root.Short = "Root of the demo application"
-        root.Run = func(ctx *clix.Context) error {
-                return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
-        }
-        root.Children = []*clix.Command{
-                greet.NewCommand(&project),
-        }
-
-        app.Root = root
-
         // Add optional extensions
         app.AddExtension(help.Extension{})
 
@@ -155,7 +156,7 @@ func newApp() *clix.App {
 }
 ```
 
-The implementation of the `greet` command (including flags, arguments, and handlers) lives in `internal/greet`:
+The implementation of the `greet` command (including flags, positional arguments, and handlers) lives in `internal/greet`:
 
 ```go
 // internal/greet/command.go
@@ -237,6 +238,9 @@ auth.Run = func(ctx *clix.Context) error {
 auth.AddCommand(clix.NewCommand("login"))
 auth.AddCommand(clix.NewCommand("logout"))
 
+app.Root.AddCommand(users)
+app.Root.AddCommand(auth)
+
 // Groups show help, commands with handlers execute
 // cli users        -> shows help
 // cli auth         -> executes auth handler
@@ -249,9 +253,11 @@ Global and command-level flags support:
 - **Environment variable defaults**: Automatically read from environment
 - **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml`
 - **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`)
-- **Type support**: String, bool, int, int64, float64
+- **Type support**: `StringVar`, `BoolVar`, `IntVar`, `Int64Var`, `Float64Var`, and `DurationVar` (`time.Duration`, parsed with `time.ParseDuration`)
 - **Custom validation**: Optional `Validate` function runs after parsing to reject invalid values
 - **Precedence**: Command flags > App flags > Environment variables > Config file > Defaults
+
+App-level flags live on the root command: `app.Flags()` returns the flag set of the current `app.Root`, so register them after assigning a custom root.
 
 ```go
 var project string
@@ -357,50 +363,72 @@ The prompt API supports both struct-based and functional options patterns. The s
 **Struct-based API (recommended):**
 ```go
 // Basic text prompt
-result, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
+name, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
         Label:   "Enter name",
         Default: "unknown",
 })
+if err != nil {
+        return err
+}
 
-// Select prompt
-result, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
+// Select prompt (requires the prompt extension)
+choice, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
         Label: "Choose an option",
         Options: []clix.SelectOption{
                 {Label: "Option A", Value: "a"},
                 {Label: "Option B", Value: "b"},
         },
 })
+if err != nil {
+        return err
+}
 
 // Confirm prompt
-result, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
+confirmed, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{
         Label:   "Continue?",
         Confirm: true,
 })
+if err != nil {
+        return err
+}
+
+fmt.Fprintln(ctx.App.Out, name, choice, confirmed)
 ```
 
 **Functional options API:**
 ```go
 // Basic text prompt
-result, err := ctx.App.Prompter.Prompt(ctx,
+name, err := ctx.App.Prompter.Prompt(ctx,
         clix.WithLabel("Enter name"),
         clix.WithDefault("unknown"),
 )
+if err != nil {
+        return err
+}
 
-// Select prompt (requires prompt extension)
-import "github.com/SCKelemen/clix/v2/ext/prompt"
-result, err := ctx.App.Prompter.Prompt(ctx,
+// Select prompt: prompt.Select comes from
+// github.com/SCKelemen/clix/v2/ext/prompt and needs prompt.Extension
+choice, err := ctx.App.Prompter.Prompt(ctx,
         clix.WithLabel("Choose an option"),
         prompt.Select([]clix.SelectOption{
                 {Label: "Option A", Value: "a"},
                 {Label: "Option B", Value: "b"},
         }),
 )
+if err != nil {
+        return err
+}
 
 // Confirm prompt
-result, err := ctx.App.Prompter.Prompt(ctx,
+confirmed, err := ctx.App.Prompter.Prompt(ctx,
         clix.WithLabel("Continue?"),
         clix.WithConfirm(),
 )
+if err != nil {
+        return err
+}
+
+fmt.Fprintln(ctx.App.Out, name, choice, confirmed)
 ```
 
 Both APIs can be mixed - functional options can be combined with `PromptRequest` structs, with later options overriding earlier values.
@@ -443,14 +471,24 @@ func main() {
 
 ### Structured Output
 
-Global `--format` flag supports `json`, `yaml`, and `text` output formats:
+Structured output is opt-in. The format extension (`github.com/SCKelemen/clix/v2/ext/format`) registers a global `--format`/`-f` flag that accepts `json`, `yaml`, or `text` (the default). Handlers pass the selected format to `clix.FormatData`:
 
 ```go
-// In your command handler
-return ctx.App.FormatOutput(data) // Uses --format flag automatically
+import (
+        "github.com/SCKelemen/clix/v2"
+        "github.com/SCKelemen/clix/v2/ext/format"
+)
+
+app.AddExtension(format.Extension{}) // registers --format / -f on the root command
+
+cmd.Run = func(ctx *clix.Context) error {
+        data := map[string]any{"name": "demo", "replicas": 3}
+        // format.OutputFormat returns "text" when the flag is unset or invalid.
+        return clix.FormatData(ctx.App.Out, data, format.OutputFormat(ctx.App))
+}
 ```
 
-Commands like `version` and `config list` automatically support structured output for machine-readable workflows.
+`clix.FormatData(w, data, format)` writes indented JSON, YAML, or plain text: `key = value` lines (sorted by key) for `map[string]any` and `map[string]string`, one line per element for `[]any` and `[]string`, and `fmt`'s `%v` for anything else. Without the extension there is no `--format` flag, so call `clix.FormatData` with a fixed format such as `clix.FormatJSON`. The `version` and `config list` extension commands also read `--format` when the extension is registered.
 
 ### Styling
 
@@ -470,7 +508,7 @@ app.Styles.CommandFlagName = clix.StyleFunc(style.Render)
 Key style hooks:
 
 - `AppFlagName` / `AppFlagUsage` – app-level flags defined on `app.Flags()`
-- `CommandFlagName` / `CommandFlagUsage` – command-level flags defined on `cmd.Flags()`
+- `CommandFlagName` / `CommandFlagUsage` – command-level flags defined on `cmd.Flags`
 - `FlagName` / `FlagUsage` – base styles applied when the more specific hooks are unset
 - `ChildName` / `ChildDesc` – section entries under **GROUPS** and **COMMANDS**
 
@@ -481,11 +519,11 @@ Styling is optional—applications without styling still work perfectly.
 Command handlers receive a `*clix.Context` that embeds `context.Context` and provides:
 - Access to the active command
 - Application instance and configuration
-- Hydrated flag/config values via type-specific getters: `String()`, `Bool()`, `Int()`, `Int64()`, `Float64()`
+- Resolved flag/config values via `String()` and `Bool()`, plus `EffectiveString()`, `EffectiveBool()`, `EffectiveInt()`, `EffectiveInt64()`, and `EffectiveFloat64()`, which also report the `clix.Source` (command flag, app flag, env var, config file, or default) the value came from
 - Standard output/error streams
 - Standard context.Context functionality (cancellation, deadlines, values)
 
-All getter methods follow the same precedence: **command flags > app flags > env > config > defaults**
+All getter methods follow the same precedence: **command flags > app flags > env > config > defaults**. Typed flags can also be read through the variable bound with `Value`, or through `cmd.Flags.Int(name)` and the other `FlagSet` getters.
 
 **Context Layering:**
 
@@ -500,20 +538,21 @@ cmd.Run = func(ctx *clix.Context) error {
         if project, ok := ctx.String("project"); ok {
                 fmt.Fprintf(ctx.App.Out, "Using project %s\n", project)
         }
-        
+
         if verbose, ok := ctx.Bool("verbose"); ok && verbose {
                 fmt.Fprintf(ctx.App.Out, "Verbose mode enabled\n")
         }
 
-        if port, ok := ctx.Int("port"); ok {
+        // Numeric values use the Effective* getters, which also return the source
+        if port, _, ok := ctx.EffectiveInt("port"); ok {
                 fmt.Fprintf(ctx.App.Out, "Port: %d\n", port)
         }
 
-        if timeout, ok := ctx.Int64("timeout"); ok {
-                fmt.Fprintf(ctx.App.Out, "Timeout: %d\n", timeout)
+        if timeout, source, ok := ctx.EffectiveInt64("timeout"); ok {
+                fmt.Fprintf(ctx.App.Out, "Timeout: %d (from %s)\n", timeout, source)
         }
-        
-        if ratio, ok := ctx.Float64("ratio"); ok {
+
+        if ratio, _, ok := ctx.EffectiveFloat64("ratio"); ok {
                 fmt.Fprintf(ctx.App.Out, "Ratio: %.2f\n", ratio)
         }
 
@@ -532,6 +571,7 @@ cmd.Run = func(ctx *clix.Context) error {
                 return err
         }
 
+        fmt.Fprintf(ctx.App.Out, "You entered %s\n", value)
         return nil
 }
 ```
@@ -545,7 +585,7 @@ This design is inspired by [goldmark's extension system](https://github.com/yuin
 ### Philosophy
 
 **Simple by default, powerful when needed.** `clix` starts with minimal overhead:
-- Core command/flag/argument parsing
+- Core command and flag parsing (including positional flags)
 - Flag-based help (`-h`, `--help`) - always available
 - Prompting UI
 - Configuration management (API only, not commands)
@@ -555,7 +595,8 @@ Everything else is opt-in via extensions, including:
 - Config management commands (`cli config`)
 - Shell completion (`cli autocomplete`)
 - Version information (`cli version`)
-- And future extensions...
+- Output format selection (`--format`)
+- Select and multi-select prompts, surveys, and validators
 
 ### Using Extensions
 
@@ -563,9 +604,14 @@ Add extensions to your app before calling `Run()`:
 
 ```go
 import (
+        "context"
+        "fmt"
+        "os"
+
         "github.com/SCKelemen/clix/v2"
         "github.com/SCKelemen/clix/v2/ext/autocomplete"
         "github.com/SCKelemen/clix/v2/ext/config"
+        "github.com/SCKelemen/clix/v2/ext/format"
         "github.com/SCKelemen/clix/v2/ext/help"
         "github.com/SCKelemen/clix/v2/ext/version"
 )
@@ -577,14 +623,18 @@ app.Root = clix.NewCommand("myapp")
 app.AddExtension(help.Extension{})         // Adds: myapp help [command]
 app.AddExtension(config.Extension{})       // Adds: myapp config, myapp config list, etc.
 app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [shell]
-app.AddExtension(version.Extension{        // Adds: myapp version
+app.AddExtension(format.Extension{})       // Adds: --format / -f (json|yaml|text)
+app.AddExtension(version.Extension{        // Adds: myapp version, --version / -v
         Version: "1.0.0",
-        Commit:  "abc123",  // optional
+        Commit:  "abc123",     // optional
         Date:    "2024-01-01", // optional
 })
 
 // Flag-based help works without extensions: myapp -h, myapp --help
-app.Run(context.Background(), nil)
+if err := app.Run(context.Background(), nil); err != nil {
+        fmt.Fprintln(os.Stderr, err)
+        os.Exit(1)
+}
 ```
 
 ### Available Extensions
@@ -601,7 +651,7 @@ Adds command-based help similar to man pages:
 
 Adds configuration management commands using dot-separated key paths (e.g. `project.default`):
 - `cli config` - Show help for config commands (group)
-- `cli config list` - List persisted configuration as YAML (respects `--format=json|yaml|text`)
+- `cli config list` - List persisted configuration as YAML (or JSON with `--format=json` when the format extension is registered)
 - `cli config get <key_path>` - Print the persisted value at `key_path`
 - `cli config set <key_path> <value>` - Persist a new value
 - `cli config unset <key_path>` - Remove the persisted value (no-op if missing)
@@ -627,16 +677,28 @@ Adds shell completion script generation:
 #### Version Extension (`clix/ext/version`)
 
 Adds version information:
-- `cli version` - Show version information, including Go version and build info (supports `--format=json|yaml|text`)
+- `cli version` - Show version information, including Go version and build info (honors `--format=json|yaml|text` when the format extension is registered)
 - Global `--version`/`-v` flag - Show simple version string (e.g., `cli --version` shows "cli version 1.0.0")
 
 ```go
 app.AddExtension(version.Extension{
         Version: "1.0.0",
-        Commit:  "abc123",  // optional
+        Commit:  "abc123",     // optional
         Date:    "2024-01-01", // optional
 })
 ```
+
+#### Format Extension (`clix/ext/format`)
+
+Adds a global `--format`/`-f` flag (`json`, `yaml`, or `text`, defaulting to `text`). Read the selected value with `format.OutputFormat(app)` and pass it to `clix.FormatData`; see [Structured Output](#structured-output).
+
+#### Prompt, Survey, and Validation Extensions
+
+- `clix/ext/prompt` replaces the default `TextPrompter` with `prompt.TerminalPrompter`, enabling select and multi-select prompts with arrow-key navigation.
+- `clix/ext/survey` chains prompts into static or dynamic question flows, with optional undo and an end-of-survey summary.
+- `clix/ext/validation` provides validators such as `validation.Email`, `validation.URL`, and `validation.All` for prompts and flags.
+
+See [`ext/README.md`](ext/README.md) for details.
 
 **Zero overhead if not imported:** Extensions only add commands when imported and registered. Simple apps that don't import them pay zero cost.
 
@@ -647,7 +709,11 @@ Extensions implement the `clix.Extension` interface:
 ```go
 package myextension
 
-import "github.com/SCKelemen/clix/v2"
+import (
+        "fmt"
+
+        "github.com/SCKelemen/clix/v2"
+)
 
 type Extension struct {
         // Optional: extension-specific configuration
@@ -659,6 +725,17 @@ func (e Extension) Extend(app *clix.App) error {
                 app.Root.AddCommand(MyCustomCommand(app))
         }
         return nil
+}
+
+// MyCustomCommand builds the command contributed by this extension.
+func MyCustomCommand(app *clix.App) *clix.Command {
+        cmd := clix.NewCommand("hello")
+        cmd.Short = "Say hello"
+        cmd.Run = func(ctx *clix.Context) error {
+                fmt.Fprintf(ctx.App.Out, "Hello from %s!\n", app.Name)
+                return nil
+        }
+        return cmd
 }
 ```
 
@@ -673,35 +750,39 @@ For more details, see [`ext/README.md`](ext/README.md).
 The `App` struct represents a runnable CLI application and wires together the root command, global flag set, configuration manager, and prompting behavior.
 
 ```go
+// Abridged: exported fields only; see pkg.go.dev for the documented source.
 type App struct {
         Name        string
         Version     string
         Description string
 
-        Root        *Command
-        Config      *ConfigManager
-        Prompter    Prompter
-        Out         io.Writer
-        Err         io.Writer
-        In          io.Reader
-        EnvPrefix   string
+        Root      *Command
+        Config    *ConfigManager
+        Prompter  Prompter
+        Out       io.Writer
+        Err       io.Writer
+        In        io.Reader
+        EnvPrefix string
 
-        DefaultTheme  PromptTheme
-        Styles        Styles
+        DefaultTheme PromptTheme
+        Styles       Styles
 }
 ```
 
 Key methods:
-- `NewApp(name string) *App` - Construct a new application
+- `NewApp(name string, opts ...AppOption) *App` - Construct a new application
 - `Run(ctx context.Context, args []string) error` - Execute the application
+- `Flags() *FlagSet` - App-level (root command) flags, visible to every command
 - `AddExtension(ext Extension)` - Register an extension
 - `ApplyExtensions() error` - Apply all registered extensions
-- `OutputFormat() string` - Get the current output format (json/yaml/text)
-- `FormatOutput(data interface{}) error` - Format data using the current format
+- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file
+- `SaveConfig() error` - Persist `Config` values to the configuration file
+
+Structured output lives outside `App`: use `clix.FormatData` together with the format extension (see [Structured Output](#structured-output)).
 
 ### `clix.Command`
 
-A `Command` represents a CLI command. Commands can contain nested children (groups or commands), flags, argument definitions, and execution hooks.
+A `Command` represents a CLI command. Commands can contain nested children (groups or commands), flags (including positional flags), and execution hooks.
 
 A Command can be one of three types:
 - **Group**: has children but no Run handler (interior node, shows help when called)
@@ -709,16 +790,18 @@ A Command can be one of three types:
 - **Command with Children**: has both a Run handler and children (executes Run handler when called without args, or routes to child commands when a child name is provided)
 
 ```go
+// Abridged: exported fields only; see pkg.go.dev for the documented source.
 type Command struct {
-        Name        string
-        Aliases     []string
-        Short       string
-        Long        string
-        Usage       string
-        Example     string
-        Hidden      bool
-        Flags       *FlagSet
-        Children    []*Command // Children of this command (groups or commands)
+        Name               string
+        Aliases            []string
+        Short              string
+        Long               string
+        Usage              string
+        Example            string
+        Hidden             bool
+        IsExtensionCommand bool       // Set by extensions; not counted as a user-defined child
+        Flags              *FlagSet   // A field, not a method: cmd.Flags.StringVar(...)
+        Children           []*Command // Children of this command (groups or commands)
 
         Run     Handler
         PreRun  Hook
@@ -727,7 +810,7 @@ type Command struct {
 ```
 
 Key methods:
-- `NewCommand(name string) *Command` - Construct a new executable command
+- `NewCommand(name string, opts ...CommandOption) *Command` - Construct a new executable command
 - `NewGroup(name, short string, children ...*Command) *Command` - Construct a group (interior node)
 - `AddCommand(cmd *Command)` - Register a child command or group
 - `IsGroup() bool` - Returns true if command is a group (has children, no Run handler)
@@ -736,17 +819,22 @@ Key methods:
 - `Commands() []*Command` - Returns only executable child commands
 - `VisibleChildren() []*Command` - Returns all visible child commands and groups
 - `Path() string` - Get the full command path from root
+- `ResolvePath(path []string) *Command` - Resolve a path such as `["config", "set"]` to a descendant command
 
 ### `clix.PromptRequest`
 
 A `PromptRequest` carries the information necessary to display a prompt. This is the primary, struct-based API for prompts, consistent with the rest of the codebase (similar to `StringVarOptions`, `BoolVarOptions`, etc.). `PromptRequest` implements `PromptOption`, so it can be used alongside functional options.
 
 ```go
+// Abridged: see pkg.go.dev for the documented source.
 type PromptRequest struct {
         Label    string
         Default  string
         Validate func(string) error
         Theme    PromptTheme
+
+        // NoDefaultPlaceholder is shown when there is no default value
+        NoDefaultPlaceholder string
 
         // Options for select-style prompts
         Options []SelectOption
@@ -759,6 +847,10 @@ type PromptRequest struct {
 
         // ContinueText for multi-select prompts
         ContinueText string
+
+        // CommandHandler and KeyMap handle special keys (Esc, Tab, F1-F12)
+        CommandHandler PromptCommandHandler
+        KeyMap         PromptKeyMap
 }
 ```
 
@@ -785,10 +877,14 @@ For convenience, `clix` also provides functional options that can be used instea
 Both APIs can be mixed. For example:
 ```go
 // Mix struct with functional options
-result, err := prompter.Prompt(ctx,
+name, err := prompter.Prompt(ctx,
         clix.PromptRequest{Label: "Name"},
         clix.WithDefault("unknown"),
 )
+if err != nil {
+        return err
+}
+fmt.Println("Hello,", name)
 ```
 
 ### `clix.Extension`
@@ -796,6 +892,7 @@ result, err := prompter.Prompt(ctx,
 The `Extension` interface allows optional features to be added to an application.
 
 ```go
+// Abridged: see pkg.go.dev for the documented source.
 type Extension interface {
         Extend(app *App) error
 }
@@ -808,6 +905,10 @@ type Extension interface {
 - [`examples/gcloud`](examples/gcloud): A Google Cloud CLI-inspired tree with large command groups, global flags, and configuration interactions.
 - [`examples/lipgloss`](examples/lipgloss): Demonstrates prompt and help styling using [`lipgloss`](https://github.com/charmbracelet/lipgloss), including select, multi-select, and confirm prompts.
 - [`examples/multicli`](examples/multicli): Demonstrates sharing command implementations across multiple CLI applications with different hierarchies, similar to Google Cloud's gcloud/bq pattern.
+- [`examples/bubbles`](examples/bubbles): Implements a custom `clix.Prompter` with [Bubbles](https://github.com/charmbracelet/bubbles) components.
+- [`examples/survey`](examples/survey): Demonstrates the survey extension, including validation, undo, and an end card.
+
+`examples/basic`, `examples/gh`, and `examples/gcloud` are packages of the root module. The other examples are separate modules that use a `replace` directive to build against the working tree; run `go build ./...` from inside each of their directories.
 
 ## Contributing
 
