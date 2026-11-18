@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // FormatData formats data to the specified output writer using the given format.
@@ -29,7 +29,7 @@ func formatJSON(w io.Writer, data interface{}) error {
 	return enc.Encode(data)
 }
 
-// formatYAML formats data as YAML using yaml.v3.
+// formatYAML formats data as YAML using go.yaml.in/yaml/v3.
 func formatYAML(w io.Writer, data interface{}) error {
 	encoder := yaml.NewEncoder(w)
 	encoder.SetIndent(2)
