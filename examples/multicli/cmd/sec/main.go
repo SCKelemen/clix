@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/SCKelemen/clix/v2"
@@ -39,6 +40,7 @@ func main() {
 	})
 
 	if err := app.Run(context.Background(), nil); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
