@@ -157,8 +157,42 @@ type FlagOptions struct {
 	Validate func(string) error
 }
 
+// ApplyFlag implements FlagOption, so a FlagOptions value (and every
+// *VarOptions struct that embeds it) can be passed alongside functional
+// options. Each non-zero field overwrites the corresponding field in fo.
+func (o FlagOptions) ApplyFlag(fo *FlagOptions) {
+	if o.Name != "" {
+		fo.Name = o.Name
+	}
+	if o.Short != "" {
+		fo.Short = o.Short
+	}
+	if o.Usage != "" {
+		fo.Usage = o.Usage
+	}
+	if o.EnvVar != "" {
+		fo.EnvVar = o.EnvVar
+	}
+	if len(o.EnvVars) > 0 {
+		fo.EnvVars = o.EnvVars
+	}
+	if o.Required {
+		fo.Required = true
+	}
+	if o.Prompt != "" {
+		fo.Prompt = o.Prompt
+	}
+	if o.Positional {
+		fo.Positional = true
+	}
+	if o.Validate != nil {
+		fo.Validate = o.Validate
+	}
+}
+
 // StringVarOptions describes the configuration for adding a string flag.
 // This struct implements FlagOption, so it can be used alongside functional options.
+// Both StringVarOptions{...} and &StringVarOptions{...} are accepted.
 //
 // Example - three API styles:
 //
@@ -200,28 +234,6 @@ type StringVarOptions struct {
 	Value *string
 }
 
-// ApplyFlag implements FlagOption so StringVarOptions can be used directly.
-func (o StringVarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
-	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
-	}
-}
-
 // FlagOption configures a flag using the functional options pattern.
 // Options can be used to build flags:
 //
@@ -255,8 +267,14 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 	var stringOpts StringVarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case StringVarOptions:
 			stringOpts = v
+		case *StringVarOptions:
+			if v != nil {
+				stringOpts = *v
+			}
 		case stringValueOption:
 			stringOpts.Value = v.value
 		case stringDefaultOption:
@@ -330,28 +348,6 @@ type DurationVarOptions struct {
 	Value *time.Duration
 }
 
-// ApplyFlag implements FlagOption so DurationVarOptions can be used directly.
-func (o DurationVarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
-	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
-	}
-}
-
 // BoolVarOptions describes the configuration for adding a bool flag.
 // This struct implements FlagOption, so it can be used alongside functional options.
 //
@@ -381,36 +377,20 @@ type BoolVarOptions struct {
 	Value *bool
 }
 
-// ApplyFlag implements FlagOption so BoolVarOptions can be used directly.
-func (o BoolVarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
-	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
-	}
-}
-
 // BoolVar registers a boolean flag. Accepts either a BoolVarOptions struct
 // (primary API) or functional options (convenience layer).
 func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 	var boolOpts BoolVarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case BoolVarOptions:
 			boolOpts = v
+		case *BoolVarOptions:
+			if v != nil {
+				boolOpts = *v
+			}
 		case boolValueOption:
 			boolOpts.Value = v.value
 		default:
@@ -439,8 +419,14 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 	var durationOpts DurationVarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case DurationVarOptions:
 			durationOpts = v
+		case *DurationVarOptions:
+			if v != nil {
+				durationOpts = *v
+			}
 		case durationValueOption:
 			durationOpts.Value = v.value
 		case durationDefaultOption:
@@ -500,36 +486,20 @@ type IntVarOptions struct {
 	Value *int
 }
 
-// ApplyFlag implements FlagOption so IntVarOptions can be used directly.
-func (o IntVarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
-	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
-	}
-}
-
 // IntVar registers an int flag. Accepts either an IntVarOptions struct
 // (primary API) or functional options (convenience layer).
 func (fs *FlagSet) IntVar(opts ...FlagOption) {
 	var intOpts IntVarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case IntVarOptions:
 			intOpts = v
+		case *IntVarOptions:
+			if v != nil {
+				intOpts = *v
+			}
 		case integerValueOption:
 			intOpts.Value = v.value
 		case integerDefaultOption:
@@ -589,36 +559,20 @@ type Int64VarOptions struct {
 	Value *int64
 }
 
-// ApplyFlag implements FlagOption so Int64VarOptions can be used directly.
-func (o Int64VarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
-	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
-	}
-}
-
 // Int64Var registers an int64 flag. Accepts either an Int64VarOptions struct
 // (primary API) or functional options (convenience layer).
 func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 	var int64Opts Int64VarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case Int64VarOptions:
 			int64Opts = v
+		case *Int64VarOptions:
+			if v != nil {
+				int64Opts = *v
+			}
 		case int64ValueOption:
 			int64Opts.Value = v.value
 		case int64DefaultOption:
@@ -678,36 +632,20 @@ type Float64VarOptions struct {
 	Value *float64
 }
 
-// ApplyFlag implements FlagOption so Float64VarOptions can be used directly.
-func (o Float64VarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
-	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
-	}
-}
-
 // Float64Var registers a float64 flag. Accepts either a Float64VarOptions struct
 // (primary API) or functional options (convenience layer).
 func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 	var float64Opts Float64VarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case Float64VarOptions:
 			float64Opts = v
+		case *Float64VarOptions:
+			if v != nil {
+				float64Opts = *v
+			}
 		case float64ValueOption:
 			float64Opts.Value = v.value
 		case float64DefaultOption:
