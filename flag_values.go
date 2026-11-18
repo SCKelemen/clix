@@ -10,13 +10,17 @@ type StringValue struct {
 	target *string
 }
 
+// Set stores value. When the flag was registered without a destination
+// pointer, the value is kept internally so it can still be read back.
 func (s *StringValue) Set(value string) error {
-	if s.target != nil {
-		*s.target = value
+	if s.target == nil {
+		s.target = new(string)
 	}
+	*s.target = value
 	return nil
 }
 
+// String returns the current value.
 func (s *StringValue) String() string {
 	if s.target == nil {
 		return ""
@@ -29,6 +33,7 @@ type BoolValue struct {
 	target *bool
 }
 
+// Set parses value with strconv.ParseBool and stores the result.
 func (b *BoolValue) Set(value string) error {
 	parsed, err := strconv.ParseBool(value)
 	if err != nil {
@@ -37,13 +42,17 @@ func (b *BoolValue) Set(value string) error {
 	return b.SetBool(parsed)
 }
 
+// SetBool stores value. When the flag was registered without a destination
+// pointer, the value is kept internally so it can still be read back.
 func (b *BoolValue) SetBool(value bool) error {
-	if b.target != nil {
-		*b.target = value
+	if b.target == nil {
+		b.target = new(bool)
 	}
+	*b.target = value
 	return nil
 }
 
+// String returns "true" or "false".
 func (b *BoolValue) String() string {
 	if b.target == nil {
 		return "false"
@@ -54,6 +63,7 @@ func (b *BoolValue) String() string {
 	return "false"
 }
 
+// Bool returns the current value.
 func (b *BoolValue) Bool() bool {
 	if b.target == nil {
 		return false
@@ -66,17 +76,20 @@ type DurationValue struct {
 	target *time.Duration
 }
 
+// Set parses value with time.ParseDuration and stores the result.
 func (d *DurationValue) Set(value string) error {
 	dur, err := time.ParseDuration(value)
 	if err != nil {
 		return err
 	}
-	if d.target != nil {
-		*d.target = dur
+	if d.target == nil {
+		d.target = new(time.Duration)
 	}
+	*d.target = dur
 	return nil
 }
 
+// String returns the current value formatted by time.Duration.String.
 func (d *DurationValue) String() string {
 	if d.target == nil {
 		return "0s"
@@ -89,17 +102,20 @@ type IntValue struct {
 	target *int
 }
 
+// Set parses value as a base-10 int and stores the result.
 func (i *IntValue) Set(value string) error {
 	parsed, err := strconv.ParseInt(value, 10, 0)
 	if err != nil {
 		return err
 	}
-	if i.target != nil {
-		*i.target = int(parsed)
+	if i.target == nil {
+		i.target = new(int)
 	}
+	*i.target = int(parsed)
 	return nil
 }
 
+// String returns the current value in base 10.
 func (i *IntValue) String() string {
 	if i.target == nil {
 		return "0"
@@ -112,17 +128,20 @@ type Int64Value struct {
 	target *int64
 }
 
+// Set parses value as a base-10 int64 and stores the result.
 func (i *Int64Value) Set(value string) error {
 	parsed, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return err
 	}
-	if i.target != nil {
-		*i.target = parsed
+	if i.target == nil {
+		i.target = new(int64)
 	}
+	*i.target = parsed
 	return nil
 }
 
+// String returns the current value in base 10.
 func (i *Int64Value) String() string {
 	if i.target == nil {
 		return "0"
@@ -135,17 +154,20 @@ type Float64Value struct {
 	target *float64
 }
 
+// Set parses value as a float64 and stores the result.
 func (f *Float64Value) Set(value string) error {
 	parsed, err := strconv.ParseFloat(value, 64)
 	if err != nil {
 		return err
 	}
-	if f.target != nil {
-		*f.target = parsed
+	if f.target == nil {
+		f.target = new(float64)
 	}
+	*f.target = parsed
 	return nil
 }
 
+// String returns the current value in the shortest exact representation.
 func (f *Float64Value) String() string {
 	if f.target == nil {
 		return "0"
@@ -166,23 +188,22 @@ func (fs *FlagSet) String(name string) (string, bool) {
 }
 
 // Bool fetches a boolean flag value.
-// Returns the flag's value and whether it was found.
-// For boolean flags, if the flag was explicitly set on the command line,
-// returns true regardless of the target pointer (handles help flags without targets).
+// It returns the flag's parsed value and whether the flag exists and holds a
+// boolean. The result reflects the value actually parsed, so --flag=false,
+// or an environment variable set to "false", reads as false.
 func (fs *FlagSet) Bool(name string) (bool, bool) {
 	flag := fs.lookup(name)
 	if flag == nil {
 		return false, false
 	}
-	// Boolean flags set via command line are always true
-	if flag.set {
-		return true, true
-	}
-	// Not set, check if there's a target with a default value
 	if value, ok := flag.Value.(*BoolValue); ok {
 		return value.Bool(), true
 	}
-	return false, false
+	parsed, err := strconv.ParseBool(flag.Value.String())
+	if err != nil {
+		return false, false
+	}
+	return parsed, true
 }
 
 // Int fetches an int flag value.

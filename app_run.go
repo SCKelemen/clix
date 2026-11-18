@@ -35,7 +35,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	flags := a.Flags()
 	// Apply config/env/defaults to root flags before parsing
 	// This sets defaults, but parsing will override if flags are provided
-	a.applyConfigToFlags(a.Root.Flags, true)
+	if err := a.applyConfigToFlags(a.Root.Flags, true); err != nil {
+		return err
+	}
 	remaining, err := flags.Parse(args)
 	if err != nil {
 		return err
@@ -99,7 +101,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// Ensure defaults and env/config values are applied prior to parsing.
 	// This sets defaults, but parsing will override if flags are provided
 	// Use reset=false to avoid resetting flags that were already set on root
-	a.applyConfigToFlags(cmd.Flags, false)
+	if err := a.applyConfigToFlags(cmd.Flags, false); err != nil {
+		return err
+	}
 
 	// Parse flags first - flags consume arguments starting with -
 	// This handles: --flag=value, --flag value, -f=value, -f value
@@ -224,9 +228,10 @@ func (a *App) ensureConfigLoaded(ctx context.Context) error {
 // This should be called BEFORE parsing. After parsing, flags that were set
 // will have flag.set = true and won't be overridden.
 // If reset is false, flags that are already set (flag.set == true) will be skipped.
-func (a *App) applyConfigToFlags(flags *FlagSet, reset bool) {
+// A value that the flag rejects is reported as an error naming its source.
+func (a *App) applyConfigToFlags(flags *FlagSet, reset bool) error {
 	if flags == nil {
-		return
+		return nil
 	}
 
 	for _, flag := range flags.flags {
@@ -239,54 +244,87 @@ func (a *App) applyConfigToFlags(flags *FlagSet, reset bool) {
 		// Reset flag state before applying precedence
 		flag.set = false
 
-		// Try each source in order of precedence
-		if a.trySetFromEnv(flag) {
+		// The built-in --help and --version switches only come from the
+		// command line; MYAPP_HELP or MYAPP_VERSION must not hijack every run.
+		if isCommandLineOnly(flag) {
 			continue
 		}
-		if a.trySetFromConfig(flag) {
+
+		// Try each source in order of precedence
+		if ok, err := a.trySetFromEnv(flag); ok || err != nil {
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		if ok, err := a.trySetFromConfig(flag); ok || err != nil {
+			if err != nil {
+				return err
+			}
 			continue
 		}
 		a.trySetFromDefault(flag)
 	}
+	return nil
+}
+
+// isCommandLineOnly reports whether flag is a boolean --help or --version
+// switch, which are never read from the environment or the config file.
+func isCommandLineOnly(flag *Flag) bool {
+	if flag.Name != "help" && flag.Name != "version" {
+		return false
+	}
+	_, ok := flag.Value.(boolFlag)
+	return ok
+}
+
+// envVarName returns the default environment variable for a flag or key:
+// the app's EnvPrefix, an underscore, and the name upper-cased with hyphens
+// replaced by underscores (for example, MYAPP_DRY_RUN).
+func (a *App) envVarName(name string) string {
+	return fmt.Sprintf("%s_%s", a.EnvPrefix, strings.ToUpper(strings.ReplaceAll(name, "-", "_")))
 }
 
 // trySetFromEnv attempts to set a flag value from environment variables.
-// Returns true if a value was found and set.
-func (a *App) trySetFromEnv(flag *Flag) bool {
-	// Try explicit EnvVar first
-	if flag.EnvVar != "" {
-		if val, ok := os.LookupEnv(flag.EnvVar); ok {
-			flag.Value.Set(val)
-			flag.set = true
-			return true
+// It reports whether a variable was found; a value the flag rejects is
+// returned as an error that names the variable. Empty variables are treated
+// as unset.
+func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
+	names := []string{flag.EnvVar, a.envVarName(flag.Name)}
+	for _, name := range names {
+		if name == "" {
+			continue
 		}
-	}
-
-	// Try default pattern (APP_KEY)
-	upper := fmt.Sprintf("%s_%s", a.EnvPrefix, strings.ToUpper(strings.ReplaceAll(flag.Name, "-", "_")))
-	if val, ok := os.LookupEnv(upper); ok {
-		flag.Value.Set(val)
+		val, ok := os.LookupEnv(name)
+		if !ok || val == "" {
+			continue
+		}
+		if err := flag.Value.Set(val); err != nil {
+			return false, fmt.Errorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
+		}
 		flag.set = true
-		return true
+		return true, nil
 	}
-
-	return false
+	return false, nil
 }
 
 // trySetFromConfig attempts to set a flag value from configuration.
-// Returns true if a value was found and set.
-func (a *App) trySetFromConfig(flag *Flag) bool {
+// It reports whether a value was found; a value the flag rejects is returned
+// as an error that names the config key.
+func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 	if a.Config == nil {
-		return false
+		return false, nil
 	}
 
-	if val, ok := a.Config.Values()[flag.Name]; ok {
-		flag.Value.Set(val)
-		flag.set = true
-		return true
+	val, ok := a.Config.Get(flag.Name)
+	if !ok {
+		return false, nil
 	}
-
-	return false
+	if err := flag.Value.Set(val); err != nil {
+		return false, fmt.Errorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, flag.Name, err)
+	}
+	flag.set = true
+	return true, nil
 }
 
 // trySetFromDefault sets a flag value from its default if available.
