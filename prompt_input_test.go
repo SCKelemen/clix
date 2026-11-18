@@ -57,6 +57,7 @@ func TestTwoRequiredFlagsFromPipedInput(t *testing.T) {
 	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "a", Required: true}, Value: &a})
 	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "b", Required: true}, Value: &b})
 	app.Root.AddCommand(cmd)
+	app.Interactive = InteractiveAlways
 	app.Prompter = TextPrompter{In: strings.NewReader("one\ntwo"), Out: &bytes.Buffer{}}
 
 	if err := app.Run(context.Background(), []string{"mk"}); err != nil {

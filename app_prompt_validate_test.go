@@ -27,6 +27,7 @@ func TestPromptRepromptsOnInvalidAnswer(t *testing.T) {
 	app.Root.AddCommand(cmd)
 
 	promptOut := &bytes.Buffer{}
+	app.Interactive = InteractiveAlways
 	app.Prompter = TextPrompter{In: strings.NewReader("three\n3\nus east\nus-east\n"), Out: promptOut}
 
 	if err := app.Run(context.Background(), []string{"scale"}); err != nil {
@@ -46,6 +47,7 @@ func TestPromptReportsInvalidAnswerFromCustomPrompter(t *testing.T) {
 	cmd := NewCommand("scale", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.IntVar(IntVarOptions{FlagOptions: FlagOptions{Name: "replicas", Required: true}, Value: &replicas})
 	app.Root.AddCommand(cmd)
+	app.Interactive = InteractiveAlways
 	app.Prompter = prompterFunc(func(context.Context, ...PromptOption) (string, error) { return "three", nil })
 
 	err := app.Run(context.Background(), []string{"scale"})
@@ -60,6 +62,7 @@ func TestPromptReportsExhaustedInput(t *testing.T) {
 	cmd := NewCommand("scale", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.IntVar(IntVarOptions{FlagOptions: FlagOptions{Name: "replicas", Required: true}, Value: &replicas})
 	app.Root.AddCommand(cmd)
+	app.Interactive = InteractiveAlways
 	app.Prompter = TextPrompter{In: strings.NewReader("three\n"), Out: &bytes.Buffer{}}
 
 	err := app.Run(context.Background(), []string{"scale"})

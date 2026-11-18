@@ -15,6 +15,7 @@ func TestRootFlagCountsAsFlagsPassed(t *testing.T) {
 	app.Root.AddCommand(cmd)
 
 	prompted := false
+	app.Interactive = InteractiveAlways
 	app.Prompter = prompterFunc(func(context.Context, ...PromptOption) (string, error) {
 		prompted = true
 		return "x", nil

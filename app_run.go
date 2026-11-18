@@ -66,7 +66,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// A pure group (children but no Run handler) followed by a word that is
 	// not one of its children is a mistyped command.
 	if stray != "" && len(cmd.Children) > 0 && cmd.Run == nil {
-		return fmt.Errorf("unknown command: %s %s", cmd.Path(), stray)
+		return usageErrorf("unknown command: %s %s", cmd.Path(), stray)
 	}
 
 	// Map leftover positional args to flags marked Positional: true
@@ -76,7 +76,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			return err
 		}
 		if len(excess) > 0 {
-			return fmt.Errorf("unexpected arguments: %s", strings.Join(excess, " "))
+			return usageErrorf("unexpected arguments: %s", strings.Join(excess, " "))
 		}
 	}
 
@@ -107,19 +107,16 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	// Three-way mode detection for required flags:
 	// 1. No CLI flags passed + required missing → interactive prompting
+	//    (only when the app is interactive; otherwise an error)
 	// 2. All required satisfied (from any source) → run
 	// 3. Some CLI flags passed + required missing → error
 	// Root (app-level) flags count as "flags passed" too: "mk --project p"
 	// is a scripted invocation even though --project lives on the root.
 	missing := cmd.Flags.MissingRequired()
 	if len(missing) > 0 {
-		if cmd.Flags.AnyCLISet() || rootFlags.AnyCLISet() {
-			// Mode 3: some flags provided, required missing → error
-			names := make([]string, len(missing))
-			for i, f := range missing {
-				names[i] = "--" + f.Name
-			}
-			return fmt.Errorf("missing required flags: %s", strings.Join(names, ", "))
+		if cmd.Flags.AnyCLISet() || rootFlags.AnyCLISet() || !a.IsInteractive() {
+			// Mode 3 (or nobody to ask): report what is missing.
+			return a.missingFlagsError(missing)
 		}
 		// Mode 1: no CLI flags → interactive prompting
 		if err := a.promptForRequiredFlags(ctx, cmd, missing); err != nil {
@@ -247,7 +244,7 @@ scan:
 		}
 		if f == nil {
 			if cmd.Flags.strict {
-				return nil, nil, "", fmt.Errorf("unknown flag: %s", name)
+				return nil, nil, "", usageErrorf("unknown flag: %s", name)
 			}
 			positionals = append(positionals, tok)
 			continue
@@ -448,6 +445,20 @@ func (a *App) trySetFromDefault(flag *Flag) {
 	if flag.Default != "" {
 		flag.Value.Set(flag.Default)
 	}
+}
+
+// missingFlagsError describes missing flags together with the environment
+// variables that could supply them.
+func (a *App) missingFlagsError(missing []*Flag) *MissingFlagsError {
+	err := &MissingFlagsError{
+		Flags:   make([]string, len(missing)),
+		EnvVars: make([][]string, len(missing)),
+	}
+	for i, f := range missing {
+		err.Flags[i] = f.Name
+		err.EnvVars[i] = a.flagEnvVars(f)
+	}
+	return err
 }
 
 // promptForRequiredFlags interactively prompts for each missing required flag.

@@ -59,6 +59,7 @@ func TestPromptedValueReportsPromptSource(t *testing.T) {
 	}))
 	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "name", Required: true}, Value: &name})
 	app.Root.AddCommand(cmd)
+	app.Interactive = InteractiveAlways
 	app.Prompter = prompterFunc(func(context.Context, ...PromptOption) (string, error) { return "typed", nil })
 
 	if err := app.Run(context.Background(), []string{"mk"}); err != nil {

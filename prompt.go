@@ -284,7 +284,7 @@ func WithDefault(def string) PromptOption {
 //		clix.WithLabel("Enter value"),
 //		clix.WithCommandHandler(func(ctx clix.PromptCommandContext) clix.PromptCommandAction {
 //			if ctx.Command.Type == clix.PromptCommandEscape {
-//				return clix.PromptCommandAction{Exit: true, ExitErr: errors.New("cancelled")}
+//				return clix.PromptCommandAction{Exit: true, ExitErr: clix.ErrCancelled}
 //			}
 //			return clix.PromptCommandAction{Handled: false}
 //		}),

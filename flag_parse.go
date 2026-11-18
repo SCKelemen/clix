@@ -1,7 +1,6 @@
 package clix
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -37,7 +36,7 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 		flag, ok := fs.index[name]
 		if !ok {
 			if fs.strict {
-				return nil, fmt.Errorf("unknown flag: %s", name)
+				return nil, usageErrorf("unknown flag: %s", name)
 			}
 			positionals = append(positionals, current)
 			rest = rest[1:]
@@ -103,17 +102,17 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 		}
 		v, ok := next()
 		if !ok {
-			return fmt.Errorf("flag %s requires a value", name)
+			return usageErrorf("flag %s requires a value", name)
 		}
 		value = v
 	}
 
 	if err := flag.Value.Set(value); err != nil {
-		return fmt.Errorf("invalid value for %s: %w", flag.Name, err)
+		return usageErrorf("invalid value for %s: %w", flag.Name, err)
 	}
 	if flag.Validate != nil {
 		if err := flag.Validate(value); err != nil {
-			return fmt.Errorf("invalid value for %s: %w", flag.Name, err)
+			return usageErrorf("invalid value for %s: %w", flag.Name, err)
 		}
 	}
 	flag.set = true

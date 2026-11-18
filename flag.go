@@ -137,8 +137,9 @@ type FlagOptions struct {
 
 	// Required indicates this flag must be provided (or resolved from Default/env/config).
 	// When required flags are missing and no CLI flags were passed, the user is
-	// prompted interactively. When some CLI flags were passed but required flags
-	// are still missing, an error is returned.
+	// prompted interactively if the app is interactive (see App.IsInteractive).
+	// When some CLI flags were passed, or the app is not interactive, Run
+	// returns a *MissingFlagsError instead.
 	Required bool
 
 	// Prompt is the label shown when interactively prompting for this flag's value.

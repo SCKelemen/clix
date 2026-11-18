@@ -20,8 +20,8 @@ func TestDefaultPrompterUsesAppStreamsFromOptions(t *testing.T) {
 	if tp.In != in {
 		t.Fatal("default prompter ignores WithAppIn")
 	}
-	if tp.Out != app.Out {
-		t.Fatal("default prompter does not write to the app's streams")
+	if tp.Out != app.Err {
+		t.Fatal("default prompter does not write prompts to the app's error stream")
 	}
 }
 

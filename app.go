@@ -58,9 +58,18 @@ type App struct {
 	// precedence over ConfigPath. See ConfigFile.
 	ConfigPath string
 
-	// Prompter handles interactive user input. Defaults to TextPrompter.
-	// Use the prompt extension to enable advanced prompts (select, multi-select).
+	// Prompter handles interactive user input. Defaults to a TextPrompter
+	// that reads from In and writes prompts to Err, keeping Out clean for
+	// data. Use the prompt extension to enable advanced prompts (select,
+	// multi-select).
 	Prompter Prompter
+
+	// Interactive controls whether Run prompts for missing required flags.
+	// The default, InteractiveAuto, prompts only when In is a terminal, so
+	// scripts and CI get a *MissingFlagsError instead of a hung process.
+	// The <EnvPrefix>_DISABLE_PROMPTS environment variable turns prompting
+	// off in every mode. See IsInteractive.
+	Interactive InteractiveMode
 
 	// Out is the writer for standard output (defaults to os.Stdout).
 	Out io.Writer
@@ -164,9 +173,14 @@ func NewApp(name string, opts ...AppOption) *App {
 	}
 
 	// Build the default prompter only now, so it uses the streams chosen by
-	// WithAppIn/WithAppOut, and never replaces one set by WithAppPrompter.
+	// WithAppIn/WithAppErr, and never replaces one set by WithAppPrompter.
+	// Prompts go to Err so that Out stays clean for data.
 	if app.Prompter == nil {
-		app.Prompter = TextPrompter{In: app.In, Out: app.Out}
+		promptOut := app.Err
+		if promptOut == nil {
+			promptOut = app.Out
+		}
+		app.Prompter = TextPrompter{In: app.In, Out: promptOut}
 	}
 
 	// Ensure root has a FlagSet initialized
@@ -536,6 +550,12 @@ func WithAppIn(in io.Reader) AppOption {
 	return appInOption{in: in}
 }
 
+// WithAppInteractive sets App.Interactive, which controls whether Run
+// prompts for missing required flags.
+func WithAppInteractive(mode InteractiveMode) AppOption {
+	return appInteractiveOption(mode)
+}
+
 // Internal option types
 
 type appDescriptionOption string
@@ -610,4 +630,10 @@ type appInOption struct {
 
 func (o appInOption) ApplyApp(app *App) {
 	app.In = o.in
+}
+
+type appInteractiveOption InteractiveMode
+
+func (o appInteractiveOption) ApplyApp(app *App) {
+	app.Interactive = InteractiveMode(o)
 }
