@@ -2,8 +2,8 @@ package survey
 
 import (
 	"bytes"
-	"github.com/SCKelemen/clix/v2"
 	"context"
+	"github.com/SCKelemen/clix/v2"
 	"strings"
 	"testing"
 )
@@ -142,4 +142,3 @@ func TestSurveyEndCardSummary(t *testing.T) {
 		_ = prompter // Suppress unused warning
 	})
 }
-

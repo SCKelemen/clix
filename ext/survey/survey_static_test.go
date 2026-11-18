@@ -2,8 +2,8 @@ package survey
 
 import (
 	"bytes"
-	"github.com/SCKelemen/clix/v2"
 	"context"
+	"github.com/SCKelemen/clix/v2"
 	"testing"
 )
 
@@ -211,4 +211,3 @@ func TestStaticSurvey(t *testing.T) {
 		}
 	})
 }
-

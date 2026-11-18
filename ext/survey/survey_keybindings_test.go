@@ -1,8 +1,8 @@
 package survey
 
 import (
-	"github.com/SCKelemen/clix/v2"
 	"context"
+	"github.com/SCKelemen/clix/v2"
 	"testing"
 )
 

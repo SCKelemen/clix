@@ -40,8 +40,8 @@ func TestInt64Var(t *testing.T) {
 	fs := NewFlagSet("test")
 	fs.Int64Var(Int64VarOptions{
 		FlagOptions: FlagOptions{Name: "count"},
-		Default:      "1000000000",
-		Value:        &count,
+		Default:     "1000000000",
+		Value:       &count,
 	})
 
 	if count != 1000000000 {
@@ -66,8 +66,8 @@ func TestFloat64Var(t *testing.T) {
 	fs := NewFlagSet("test")
 	fs.Float64Var(Float64VarOptions{
 		FlagOptions: FlagOptions{Name: "ratio"},
-		Default:      "3.14159",
-		Value:         &ratio,
+		Default:     "3.14159",
+		Value:       &ratio,
 	})
 
 	if ratio != 3.14159 {
@@ -98,8 +98,8 @@ func TestNumberVarWithConfigAndEnv(t *testing.T) {
 	root := NewCommand("test")
 	root.Flags.IntVar(IntVarOptions{
 		FlagOptions: FlagOptions{Name: "port"},
-		Default:      "3000",
-		Value:        &port,
+		Default:     "3000",
+		Value:       &port,
 	})
 	root.Run = func(ctx *Context) error {
 		return nil

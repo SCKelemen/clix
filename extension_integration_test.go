@@ -141,4 +141,3 @@ func TestExtensionsIntegration(t *testing.T) {
 		}
 	})
 }
-

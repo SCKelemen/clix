@@ -449,4 +449,3 @@ type commandPostRunOption struct {
 func (o commandPostRunOption) ApplyCommand(cmd *Command) {
 	cmd.PostRun = o.postRun
 }
-

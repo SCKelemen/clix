@@ -48,4 +48,3 @@ func (a *App) SaveConfig() error {
 	}
 	return a.Config.Save(path)
 }
-
