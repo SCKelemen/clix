@@ -1,14 +1,12 @@
 version: 2
 updates:
-  # Go modules
+  # Go modules: root module
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 10
-    reviewers:
-      - "SCKelemen"
     labels:
       - "dependencies"
       - "go"
@@ -16,15 +14,39 @@ updates:
       prefix: "chore"
       include: "scope"
 
-  # GitHub Actions
+  # Go modules: examples with their own go.mod. Each one replaces
+  # github.com/SCKelemen/clix/v2 with the working tree (../..), so its
+  # require line is not a real dependency and is ignored here.
+  - package-ecosystem: "gomod"
+    directories:
+      - "/examples/bubbles"
+      - "/examples/lipgloss"
+      - "/examples/multicli"
+      - "/examples/survey"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "github.com/SCKelemen/clix/v2"
+    groups:
+      examples:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "go"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # GitHub Actions used by .github/workflows
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
-    reviewers:
-      - "SCKelemen"
     labels:
       - "dependencies"
       - "github-actions"
