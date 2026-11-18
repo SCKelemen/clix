@@ -915,26 +915,28 @@ type Extension interface {
 We welcome issues and pull requests. To keep the review cycle short:
 
 1. Fork the repo and create a feature branch.
-2. Format Go sources with `gofmt` (or `go fmt ./...`).
-3. Run `go test ./...` to ensure tests and examples stay green.
-4. Include tests and docs for new behavior.
+2. Format Go sources with `gofmt -w .`; CI fails if `gofmt -l .` lists any file.
+3. At the repository root, run `go build ./...`, `go vet ./...`, and `go test -race ./...`. This also covers `examples/basic`, `examples/gh`, and `examples/gcloud`, which are packages of the root module.
+4. `examples/bubbles`, `examples/lipgloss`, `examples/multicli`, and `examples/survey` are separate modules: run `go build ./...`, `go vet ./...`, and `go test ./...` inside each one, and keep its `go.mod` tidy with `go mod tidy`.
+5. Optionally run `golangci-lint run`. CI pins golangci-lint v2.15.0 and fails only on findings your change introduces; [`.golangci.yml`](.golangci.yml) records the existing baseline.
+6. Include tests and docs for new behavior, and add an entry under `Unreleased` in [`CHANGELOG.md`](CHANGELOG.md).
 
 If you plan a larger change, feel free to open an issue first so we can discuss the approach.
 
 ## Release Process
 
-We use semantic versioning and Git tags so Go tooling (and Dependabot) can pick up new versions automatically. When you’re ready to cut a release:
+`clix` is a Go module at major version 2 (`github.com/SCKelemen/clix/v2`). Releases are semantic-version Git tags, which the Go module proxy, pkg.go.dev, and Dependabot pick up automatically. To cut a release:
 
-1. Ensure `main` is green: `gofmt ./... && go test ./...`.
-2. Update any docs or examples that mention the version (e.g., changelog snippets if applicable).
-3. Tag the release using Go-style semver and push the tag:
+1. Ensure `main` is green. The `CI` workflow checks gofmt, `go mod tidy`, `go vet`, race-enabled tests, golangci-lint, and every example module.
+2. Move the `Unreleased` entries in [`CHANGELOG.md`](CHANGELOG.md) under the new version and date, and update any docs or examples that mention the version.
+3. Tag the release with a `v2.x.y` tag and push the tag:
    ```bash
-   git tag -a v1.0.0 -m "clix v1.0.0"
-   git push origin v1.0.0
+   git tag -a v2.5.0 -m "clix v2.5.0"
+   git push origin v2.5.0
    ```
-4. GitHub Actions (`release.yml`) will build/test and publish a GitHub Release for that tag. pkg.go.dev and Dependabot will automatically index the new version.
+4. The `Release` workflow (`.github/workflows/release.yml`) builds, vets, and tests the tagged commit, then publishes a GitHub Release with generated notes.
 
-Following this flow keeps the module path (`github.com/SCKelemen/clix`) stable and gives downstream consumers reproducible builds.
+Tags must stay in the `v2.x.y` range while the module path ends in `/v2`. A breaking change needs a new major version: change the module path to `github.com/SCKelemen/clix/v3` in `go.mod` and in every import, then tag `v3.0.0`.
 
 ## Developers & Maintainers
 
@@ -943,17 +945,17 @@ Following this flow keeps the module path (`github.com/SCKelemen/clix`) stable a
 
 ## Receiving Dependabot PRs When clix Releases
 
-Whenever we tag a new version (e.g. `v1.0.0`, `v1.1.0`, …) the Go module proxy and Dependabot can see it automatically because the module path stays `github.com/SCKelemen/clix`. To have Dependabot open upgrade PRs in your application:
+Releases are tagged `v2.x.y` (for example `v2.4.1`) under the module path `github.com/SCKelemen/clix/v2`, so the Go module proxy and Dependabot see each new tag automatically. To have Dependabot open upgrade PRs in your application:
 
-1. **Import clix via the module path**:
+1. **Import clix with the `/v2` suffix**:
    ```go
-   import "github.com/SCKelemen/clix"
+   import "github.com/SCKelemen/clix/v2"
    ```
-2. **Pin a version in your `go.mod`**:
-   ```go
-   require github.com/SCKelemen/clix v1.0.0
+2. **Require a v2 release in your `go.mod`**, for example with `go get github.com/SCKelemen/clix/v2@latest`:
+   ```text
+   require github.com/SCKelemen/clix/v2 v2.4.1
    ```
-   Dependabot will bump this line when a newer semver-compatible version exists.
+   Dependabot will bump this line when a newer v2 minor or patch release exists.
 3. **Add `.github/dependabot.yml` with a Go entry**:
    ```yaml
    version: 2
@@ -964,7 +966,9 @@ Whenever we tag a new version (e.g. `v1.0.0`, `v1.1.0`, …) the Go module proxy
          interval: "weekly"    # or daily/monthly
    ```
 
-That’s it—each time clix tags a new release, Dependabot compares the version in your `go.mod` with the latest tag and submits a PR if they differ. If you want to limit updates (e.g. only patches), you can use Dependabot’s `allow`/`ignore` rules, but the basic config above is enough for automatic PRs.
+That’s it—each time clix tags a new v2 release, Dependabot compares the version in your `go.mod` with the latest tag and submits a PR if they differ. If you want to limit updates (e.g. only patches), you can use Dependabot’s `allow`/`ignore` rules, but the basic config above is enough for automatic PRs.
+
+Dependabot never changes a module path. A future major version would live at a new path (such as `github.com/SCKelemen/clix/v3`), and moving to it means updating your imports and `go.mod` yourself. Likewise, code that still imports the pre-v2 path `github.com/SCKelemen/clix` (tags `v0.1.0` and `v0.2.0`) will not receive v2 releases until it switches to `/v2`; see [`CHANGELOG.md`](CHANGELOG.md) for the breaking changes.
 
 ## License
 
