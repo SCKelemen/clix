@@ -12,16 +12,19 @@ import (
 
 // Use with prompts
 prompter.Prompt(ctx, clix.PromptRequest{
-    Label: "Email",
+    Label:    "Email",
     Validate: validation.Email,
 })
 
-// Use with flags (combined with other validators)
-app.Flags.StringVar(&clix.StringVarOptions{
-    Name:    "api-url",
-    Usage:   "API endpoint URL",
-    Value:   &url,
-    Validate: validation.URL,
+// Use with flags: FlagOptions.Validate runs after the value is parsed
+var apiURL string
+app.Flags().StringVar(clix.StringVarOptions{
+    FlagOptions: clix.FlagOptions{
+        Name:     "api-url",
+        Usage:    "API endpoint URL",
+        Validate: validation.URL,
+    },
+    Value: &apiURL,
 })
 
 // Combine validators
@@ -32,7 +35,7 @@ validator := validation.All(
 )
 
 prompter.Prompt(ctx, clix.PromptRequest{
-    Label: "Password",
+    Label:    "Password",
     Validate: validator,
 })
 ```
