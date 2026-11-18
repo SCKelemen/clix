@@ -2,14 +2,15 @@ package bigquery
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/SCKelemen/clix/v2"
 	"github.com/SCKelemen/clix/v2/ext/format"
 )
 
-// NewDatasetCommand creates a "dataset" command for BigQuery.
-func NewDatasetCommand() *clix.Command {
+// NewDatasetCommand creates a "dataset" command for the given BigQuery API
+// version (for example "v1beta", or "latest" for the unversioned path). The
+// handler closes over version, so it does not need to parse the command path.
+func NewDatasetCommand(version string) *clix.Command {
 	cmd := clix.NewCommand("dataset")
 	cmd.Short = "BigQuery dataset operations"
 
@@ -17,20 +18,6 @@ func NewDatasetCommand() *clix.Command {
 	listCmd := clix.NewCommand("list")
 	listCmd.Short = "List datasets"
 	listCmd.Run = func(ctx *clix.Context) error {
-		// Get version from command path
-		version := "latest"
-		if ctx.Command != nil {
-			path := ctx.Command.Path()
-			// Check if path contains a version (v1alpha, v1beta, v1)
-			parts := strings.Split(path, " ")
-			for _, part := range parts {
-				if strings.HasPrefix(part, "v") && (strings.Contains(part, "alpha") || strings.Contains(part, "beta") || part == "v1") {
-					version = part
-					break
-				}
-			}
-		}
-
 		datasets := []map[string]string{
 			{"id": "project1.dataset1", "location": "US"},
 			{"id": "project1.dataset2", "location": "EU"},
@@ -56,7 +43,7 @@ func NewVersionedCommand(version string) *clix.Command {
 	cmd.Short = fmt.Sprintf("BigQuery %s API", version)
 	
 	// Add dataset subcommand under this version
-	cmd.AddCommand(NewDatasetCommand())
+	cmd.AddCommand(NewDatasetCommand(version))
 	
 	return cmd
 }
@@ -69,7 +56,7 @@ func NewBigQueryCommand() *clix.Command {
 	cmd.Short = "Google BigQuery operations"
 
 	// Add dataset command (default/latest version)
-	cmd.AddCommand(NewDatasetCommand())
+	cmd.AddCommand(NewDatasetCommand("latest"))
 
 	// Add versioned commands (v1alpha, v1beta, v1)
 	// These contain the same subcommands but use different API versions
