@@ -28,3 +28,16 @@ func TestGcloudProjectsList(t *testing.T) {
 		t.Fatalf("expected header in output, got %q", output)
 	}
 }
+
+func TestGcloudProjectFlag(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	app := newApp()
+	app.Out = &bytes.Buffer{}
+	app.Err = &bytes.Buffer{}
+
+	// --project is registered on the installed root, so it is accepted.
+	if err := app.Run(context.Background(), []string{"--project", "my-project", "projects", "list"}); err != nil {
+		t.Fatalf("app.Run returned error: %v", err)
+	}
+}

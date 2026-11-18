@@ -35,14 +35,6 @@ func newApp() *clix.App {
 	app.Description = "Interact with Google Cloud services from the command line."
 
 	var project string
-	app.Flags().StringVar(clix.StringVarOptions{
-		FlagOptions: clix.FlagOptions{
-			Name:   "project",
-			Usage:  "Google Cloud project to operate against",
-			EnvVar: "GCLOUD_PROJECT",
-		},
-		Value: &project,
-	})
 
 	root := clix.NewCommand("gcloud")
 	root.Short = "Interact with Google Cloud services from the command line."
@@ -103,7 +95,19 @@ func newApp() *clix.App {
 
 	root.Children = subcommands
 
+	// app.Flags() is the flag set of the current root command, so install
+	// the custom root before registering app-level flags on it.
 	app.Root = root
+
+	app.Flags().StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:   "project",
+			Usage:  "Google Cloud project to operate against",
+			EnvVar: "GCLOUD_PROJECT",
+		},
+		Value: &project,
+	})
+
 	return app
 }
 
