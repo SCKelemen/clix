@@ -1,6 +1,6 @@
 # clix
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/SCKelemen/clix.svg)](https://pkg.go.dev/github.com/SCKelemen/clix)
+[![Go Reference](https://pkg.go.dev/badge/github.com/SCKelemen/clix/v2.svg)](https://pkg.go.dev/github.com/SCKelemen/clix/v2)
 
 ```
   ██████╗ ██╗      ██╗ ██╗  ██╗
@@ -13,7 +13,7 @@
 
 ## Introduction
 
-`clix` is an opinionated, batteries-optional framework for building nested CLI applications using plain Go. It provides a declarative API for describing commands, flags, and arguments while handling configuration hydration, interactive prompting, and contextual execution hooks for you. The generated Go reference documentation lives on [pkg.go.dev](https://pkg.go.dev/github.com/SCKelemen/clix), which always reflects the latest published API surface.
+`clix` is an opinionated, batteries-optional framework for building nested CLI applications using plain Go. It provides a declarative API for describing commands, flags, and arguments while handling configuration hydration, interactive prompting, and contextual execution hooks for you. The generated Go reference documentation lives on [pkg.go.dev](https://pkg.go.dev/github.com/SCKelemen/clix/v2), which always reflects the latest published API surface.
 
 ### Inspired by
 
@@ -117,8 +117,8 @@ func main() {
 package main
 
 import (
-        "clix"
-        "clix/ext/help"
+        "github.com/SCKelemen/clix/v2"
+        "github.com/SCKelemen/clix/v2/ext/help"
         "example.com/demo/internal/greet"
 )
 
@@ -164,7 +164,7 @@ package greet
 import (
         "fmt"
 
-        "clix"
+        "github.com/SCKelemen/clix/v2"
 )
 
 func NewCommand(project *string) *clix.Command {
@@ -387,7 +387,7 @@ result, err := ctx.App.Prompter.Prompt(ctx,
 )
 
 // Select prompt (requires prompt extension)
-import "clix/ext/prompt"
+import "github.com/SCKelemen/clix/v2/ext/prompt"
 result, err := ctx.App.Prompter.Prompt(ctx,
         clix.WithLabel("Choose an option"),
         prompt.Select([]clix.SelectOption{
@@ -563,11 +563,11 @@ Add extensions to your app before calling `Run()`:
 
 ```go
 import (
-        "clix"
-        "clix/ext/autocomplete"
-        "clix/ext/config"
-        "clix/ext/help"
-        "clix/ext/version"
+        "github.com/SCKelemen/clix/v2"
+        "github.com/SCKelemen/clix/v2/ext/autocomplete"
+        "github.com/SCKelemen/clix/v2/ext/config"
+        "github.com/SCKelemen/clix/v2/ext/help"
+        "github.com/SCKelemen/clix/v2/ext/version"
 )
 
 app := clix.NewApp("myapp")
@@ -647,7 +647,7 @@ Extensions implement the `clix.Extension` interface:
 ```go
 package myextension
 
-import "github.com/SCKelemen/clix"
+import "github.com/SCKelemen/clix/v2"
 
 type Extension struct {
         // Optional: extension-specific configuration

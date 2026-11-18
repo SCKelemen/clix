@@ -13,8 +13,8 @@ The Survey extension enables chaining prompts together in a depth-first traversa
 
 ```go
 import (
-    "clix"
-    "clix/ext/survey"
+    "github.com/SCKelemen/clix/v2"
+    "github.com/SCKelemen/clix/v2/ext/survey"
 )
 
 // Create a survey

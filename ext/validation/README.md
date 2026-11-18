@@ -6,8 +6,8 @@ The `validation` package provides common validators for use with `clix` prompts 
 
 ```go
 import (
-    "clix"
-    "clix/ext/validation"
+    "github.com/SCKelemen/clix/v2"
+    "github.com/SCKelemen/clix/v2/ext/validation"
 )
 
 // Use with prompts

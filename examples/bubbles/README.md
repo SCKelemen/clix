@@ -41,5 +41,5 @@ This demonstrates how you can:
 
 - `github.com/charmbracelet/bubbles` - Bubbles components
 - `github.com/charmbracelet/bubbletea` - Bubble Tea framework
-- `github.com/SCKelemen/clix` - clix CLI framework
+- `github.com/SCKelemen/clix/v2` - clix CLI framework
 

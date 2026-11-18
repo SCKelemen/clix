@@ -25,11 +25,11 @@ Add extensions to your app before calling `Run()`:
 
 ```go
 import (
-	"clix"
-	"clix/ext/autocomplete"
-	"clix/ext/config"
-	"clix/ext/help"
-	"clix/ext/version"
+	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/autocomplete"
+	"github.com/SCKelemen/clix/v2/ext/config"
+	"github.com/SCKelemen/clix/v2/ext/help"
+	"github.com/SCKelemen/clix/v2/ext/version"
 )
 
 app := clix.NewApp("myapp")
@@ -124,7 +124,7 @@ Provides common validators for prompts and flags:
 - `All`, `Any` - Combine validators
 
 ```go
-import "clix/ext/validation"
+import "github.com/SCKelemen/clix/v2/ext/validation"
 
 prompter.Prompt(ctx, clix.PromptRequest{
     Label: "Email",
@@ -141,7 +141,7 @@ Extensions implement the `clix.Extension` interface:
 ```go
 package myextension
 
-import "clix"
+import "github.com/SCKelemen/clix/v2"
 
 type Extension struct {
 	// Optional: extension-specific configuration
@@ -169,7 +169,7 @@ Enables chaining prompts together in a depth-first traversal pattern, allowing b
 Define surveys as struct literals, similar to `clix.Command`:
 
 ```go
-import "clix/ext/survey"
+import "github.com/SCKelemen/clix/v2/ext/survey"
 
 questions := []survey.Question{
 	{
