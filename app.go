@@ -232,6 +232,9 @@ const (
 	SourceConfigFile
 	// SourceDefault indicates the value came from a flag's default value.
 	SourceDefault
+	// SourcePrompt indicates the value was entered at an interactive prompt
+	// for a missing required flag.
+	SourcePrompt
 )
 
 // String returns a human-readable representation of the source.
@@ -247,6 +250,8 @@ func (s Source) String() string {
 		return "config file"
 	case SourceDefault:
 		return "default"
+	case SourcePrompt:
+		return "prompt"
 	default:
 		return "unknown"
 	}
@@ -297,23 +302,24 @@ type Context struct {
 // command flags > app flags > env > config > defaults.
 // Returns the raw string value, its source, and whether it was found.
 func (ctx *Context) resolveValue(key string) (string, Source, bool) {
-	// First check command-level flags (only if explicitly set)
-	if ctx.Command != nil && ctx.Command.Flags != nil {
-		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
-			if v, ok := ctx.Command.Flags.String(key); ok {
-				return v, SourceCommandFlag, true
-			}
+	// First check values the user supplied directly: command-level flags,
+	// then root flags. A value typed at a prompt for a missing required flag
+	// counts as supplied directly but reports SourcePrompt.
+	if flag := ctx.commandFlags().lookup(key); flag != nil {
+		if flag.cliSet {
+			return flag.Value.String(), SourceCommandFlag, true
+		}
+		if flag.set && flag.source == SourcePrompt {
+			return flag.Value.String(), SourcePrompt, true
 		}
 	}
-
-	// Then check root flags (only if explicitly set)
 	if ctx.App != nil {
-		rootFlags := ctx.App.Flags()
-		if rootFlags != nil {
-			if flag := rootFlags.lookup(key); flag != nil && flag.set {
-				if v, ok := rootFlags.String(key); ok {
-					return v, SourceAppFlag, true
-				}
+		if flag := ctx.App.Flags().lookup(key); flag != nil {
+			if flag.cliSet {
+				return flag.Value.String(), SourceAppFlag, true
+			}
+			if flag.set && flag.source == SourcePrompt {
+				return flag.Value.String(), SourcePrompt, true
 			}
 		}
 	}

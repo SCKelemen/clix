@@ -28,7 +28,7 @@ func TestEnvVarsAliasesAreCheckedInOrder(t *testing.T) {
 		if err := app.Run(context.Background(), []string{"ls"}); err != nil {
 			t.Fatalf("Run error: %v", err)
 		}
-		if project != "p1" || got != "p1" {
+		if project != "p1" || got != "p1" || src != SourceEnvVar {
 			t.Fatalf("project=%q ctx=%q source=%v; want p1 from the first alias", project, got, src)
 		}
 	})

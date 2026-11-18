@@ -130,5 +130,6 @@ func resetFlagState(fs *FlagSet) {
 	for _, f := range fs.flags {
 		f.set = false
 		f.cliSet = false
+		f.source = SourceDefault
 	}
 }

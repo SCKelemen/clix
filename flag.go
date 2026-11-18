@@ -98,8 +98,9 @@ type Flag struct {
 	// Value is the flag value implementation.
 	Value Value
 
-	set    bool // Internal: tracks if flag was explicitly set (any source)
-	cliSet bool // Internal: tracks if flag was set via CLI argument (not env/config/default)
+	set    bool   // Internal: tracks if flag was explicitly set (any source)
+	cliSet bool   // Internal: tracks if flag was set via CLI argument (not env/config/default)
+	source Source // Internal: where a non-CLI value came from (env, config, or prompt) when set
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.

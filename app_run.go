@@ -366,11 +366,24 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	if err := flag.Value.Set(val); err != nil {
+	if err := setAndValidate(flag, val); err != nil {
 		return false, fmt.Errorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
 	}
 	flag.set = true
+	flag.source = SourceEnvVar
 	return true, nil
+}
+
+// setAndValidate parses raw into flag and then runs the flag's Validate
+// function, mirroring what the command-line parser does.
+func setAndValidate(flag *Flag, raw string) error {
+	if err := flag.Value.Set(raw); err != nil {
+		return err
+	}
+	if flag.Validate != nil {
+		return flag.Validate(raw)
+	}
+	return nil
 }
 
 // flagEnvVars lists the environment variables consulted for flag, in order:
@@ -415,10 +428,11 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	if err := flag.Value.Set(val); err != nil {
+	if err := setAndValidate(flag, val); err != nil {
 		return false, fmt.Errorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, flag.Name, err)
 	}
 	flag.set = true
+	flag.source = SourceConfigFile
 	return true, nil
 }
 
@@ -456,6 +470,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 			}
 		}
 		flag.set = true
+		flag.source = SourcePrompt
 	}
 	return nil
 }
