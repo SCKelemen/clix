@@ -1,7 +1,6 @@
 package clix
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -530,11 +529,19 @@ var DefaultPromptTheme = PromptTheme{
 // For advanced prompts (select, multi-select), use the prompt extension
 // which provides TerminalPrompter.
 //
+// TextPrompter reads exactly one line per prompt and never buffers input
+// beyond it, so consecutive prompts (and other code) can share the same
+// reader: piping "one\ntwo\n" answers two prompts, and a final line without
+// a trailing newline is accepted. Prompt returns ctx.Err() as soon as ctx is
+// done, even while waiting on an idle pipe; a line that arrives afterwards
+// is delivered to the next prompt on the same reader. Prompts on one reader
+// must not run concurrently.
+//
 // Example:
 //
 //	app.Prompter = clix.TextPrompter{
 //		In:  os.Stdin,
-//		Out: os.Stdout,
+//		Out: os.Stderr,
 //	}
 type TextPrompter struct {
 	// In is the reader for user input (typically os.Stdin).
@@ -580,8 +587,6 @@ func (p TextPrompter) Prompt(ctx context.Context, opts ...PromptOption) (string,
 
 // promptText handles regular text input prompts.
 func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
-
 	for {
 		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
 		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
@@ -599,7 +604,7 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 
 		fmt.Fprint(p.Out, ": ")
 
-		line, err := reader.ReadString('\n')
+		line, err := readLine(ctx, p.In)
 		if err != nil {
 			return "", err
 		}
@@ -628,8 +633,6 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 // promptConfirm handles yes/no confirmation prompts.
 // This works with TextPrompter since it's just a text prompt with validation.
 func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
-
 	// Determine default (Y/n or y/N)
 	defaultYes := true
 	defaultText := "Y"
@@ -658,7 +661,7 @@ func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (str
 
 		fmt.Fprint(p.Out, ": ")
 
-		line, err := reader.ReadString('\n')
+		line, err := readLine(ctx, p.In)
 		if err != nil {
 			return "", err
 		}
