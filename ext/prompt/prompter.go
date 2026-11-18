@@ -1,7 +1,6 @@
 package prompt
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -259,7 +258,7 @@ func (p TerminalPrompter) promptText(ctx context.Context, cfg *clix.PromptConfig
 
 // promptTextLineBased handles text input with line-based reading (fallback for non-terminals).
 func (p TerminalPrompter) promptTextLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
+	reader := newLineReader(p.In)
 
 	for {
 		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
@@ -781,7 +780,7 @@ func (p TerminalPrompter) renderSelectPrompt(cfg *clix.PromptConfig, selectedIdx
 
 // promptSelectLineBased is the fallback line-based implementation for non-terminal input.
 func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
+	reader := newLineReader(p.In)
 
 	// Find default option index
 	defaultIdx := -1
@@ -893,7 +892,7 @@ func parseIndex(input string, max int) int {
 
 // promptConfirm handles yes/no confirmation prompts.
 func (p TerminalPrompter) promptConfirm(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
+	reader := newLineReader(p.In)
 
 	// Determine default (Y/n or y/N)
 	defaultYes := true
@@ -1300,7 +1299,7 @@ func parseIndices(input string, max int) []int {
 
 // promptMultiSelectLineBased is the fallback line-based implementation for non-terminal input.
 func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
+	reader := newLineReader(p.In)
 
 	// Parse default selections
 	selected := make(map[int]bool)
