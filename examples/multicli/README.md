@@ -54,13 +54,13 @@ sec vulns list --severity critical
 # Similar to gcloud bigquery
 bq dataset list                    # Latest/default version
 bq v1alpha dataset list           # Alpha version
-bq v1beta dataset list            # Beta version  
+bq v1beta dataset list            # Beta version
 bq v1 dataset list                # Stable v1
 ```
 
 ## Format Support
 
-All commands support the global `--format` flag:
+Each CLI registers `format.Extension` (from `github.com/SCKelemen/clix/v2/ext/format`), which adds a global `--format`/`-f` flag. The shared commands pass its value to `clix.FormatData`:
 
 ```bash
 dev database list --format=json
@@ -95,5 +95,5 @@ The binaries will be created in the examples/multicli directory:
 2. **Flexible Mounting**: Commands can be mounted at different paths in different CLIs
 3. **Aliases**: Use command aliases for shorter names in focused CLIs
 4. **Versioning**: Support multiple API versions (like `gcloud bigquery v1alpha`)
-5. **Format Support**: All commands use `FormatOutput()` for consistent json/yaml/text output
+5. **Format Support**: All commands call `clix.FormatData(ctx.App.Out, data, format.OutputFormat(ctx.App))` for consistent json/yaml/text output
 

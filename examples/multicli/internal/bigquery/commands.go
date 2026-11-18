@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/format"
 )
 
 // NewDatasetCommand creates a "dataset" command for BigQuery.
@@ -40,7 +41,8 @@ func NewDatasetCommand() *clix.Command {
 			"datasets": datasets,
 		}
 
-		return ctx.App.FormatOutput(result)
+		// Honor the global --format flag registered by format.Extension.
+		return clix.FormatData(ctx.App.Out, result, format.OutputFormat(ctx.App))
 	}
 	cmd.AddCommand(listCmd)
 
