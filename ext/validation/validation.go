@@ -3,11 +3,13 @@ package validation
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Validator is a function that validates a string value and returns an error if invalid.
@@ -161,30 +163,33 @@ func NotEmpty(value string) error {
 	return nil
 }
 
-// MinLength validates that a string has at least the specified minimum length.
+// MinLength validates that a string has at least min characters. Characters
+// are Unicode code points (runes), not bytes, so "héllo" has 5.
 func MinLength(min int) Validator {
 	return func(value string) error {
-		if len(value) < min {
+		if utf8.RuneCountInString(value) < min {
 			return fmt.Errorf("must be at least %d characters", min)
 		}
 		return nil
 	}
 }
 
-// MaxLength validates that a string has at most the specified maximum length.
+// MaxLength validates that a string has at most max characters (Unicode
+// code points, not bytes).
 func MaxLength(max int) Validator {
 	return func(value string) error {
-		if len(value) > max {
+		if utf8.RuneCountInString(value) > max {
 			return fmt.Errorf("must be at most %d characters", max)
 		}
 		return nil
 	}
 }
 
-// Length validates that a string has exactly the specified length.
+// Length validates that a string has exactly exact characters (Unicode code
+// points, not bytes).
 func Length(exact int) Validator {
 	return func(value string) error {
-		if len(value) != exact {
+		if utf8.RuneCountInString(value) != exact {
 			return fmt.Errorf("must be exactly %d characters", exact)
 		}
 		return nil
@@ -250,11 +255,23 @@ func Port(value string) error {
 	return nil
 }
 
+// hostnameLabel matches one hostname label (RFC 1123 section 2.1).
+var hostnameLabel = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
+
 // Hostname validates a hostname according to RFC 1123.
 // Accepts hostnames like "example.com", "subdomain.example.com", "localhost".
+//
+// A fully qualified name with one trailing dot for the root, such as
+// "example.com.", is also accepted (RFC 1034 section 3.1,
+// https://datatracker.ietf.org/doc/html/rfc1034#section-3.1); the dot does
+// not count toward the 253-character limit.
 func Hostname(value string) error {
 	if value == "" {
 		return errors.New("hostname cannot be empty")
+	}
+	value = strings.TrimSuffix(value, ".")
+	if value == "" {
+		return errors.New("hostname must contain at least one label")
 	}
 
 	// RFC 1123 hostname rules:
@@ -273,7 +290,6 @@ func Hostname(value string) error {
 		return errors.New("hostname must contain at least one label")
 	}
 
-	hostnameRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$`)
 	for _, label := range labels {
 		if len(label) == 0 {
 			return errors.New("hostname labels cannot be empty")
@@ -281,7 +297,7 @@ func Hostname(value string) error {
 		if len(label) > 63 {
 			return errors.New("hostname labels cannot exceed 63 characters")
 		}
-		if !hostnameRegex.MatchString(label) {
+		if !hostnameLabel.MatchString(label) {
 			return errors.New("hostname contains invalid characters or format")
 		}
 	}
@@ -367,7 +383,8 @@ func IntRange(min, max int) Validator {
 	}
 }
 
-// FloatRange validates that a string can be parsed as a float64 within the specified range [min, max].
+// FloatRange validates that a string can be parsed as a float64 within the
+// specified range [min, max]. NaN is in no range, so it is rejected.
 func FloatRange(min, max float64) Validator {
 	return func(value string) error {
 		if value == "" {
@@ -379,7 +396,7 @@ func FloatRange(min, max float64) Validator {
 			return errors.New("must be a valid floating-point number")
 		}
 
-		if val < min || val > max {
+		if math.IsNaN(val) || val < min || val > max {
 			return fmt.Errorf("must be between %g and %g", min, max)
 		}
 
