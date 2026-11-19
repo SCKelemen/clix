@@ -331,7 +331,8 @@ var (
 	one  = resource.Number{Int: big.NewInt(1)}
 )
 
-// trimPointZeros is re.sub(r'\.0*$', ”, s): "10.0" becomes "10".
+// trimPointZeros removes a final point and the zeros after it, as
+// gcloud's re.sub(r'\.0*$', "", s) does: "10.0" becomes "10".
 func trimPointZeros(s string) string {
 	t := strings.TrimRight(s, "0")
 	if strings.HasSuffix(t, ".") {
