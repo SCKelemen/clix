@@ -139,6 +139,13 @@ type App struct {
 	// prints the plain line and ProgressQuiet prints nothing.
 	ProgressMode ProgressMode
 
+	// MaxFileSize is the most bytes Run reads from one file, or from
+	// standard input, for an @file value (see FlagOptions.ValueFromFile),
+	// a flags file (see EnableFlagsFile) or a DecodeVar flag. A larger
+	// input is a usage error. Zero or less means DefaultMaxFileSize
+	// (1 MiB).
+	MaxFileSize int64
+
 	configLoaded  bool
 	configLoadErr error
 
@@ -167,6 +174,9 @@ type App struct {
 	inMain   atomic.Bool   // Main is running the app, so it handles SIGINT and SIGTERM
 
 	ranPlugin bool // the last Run ran a plugin, whose exit status Main passes on
+
+	flagsFile bool        // EnableFlagsFile was called
+	files     *fileReader // reads the files the running Run's arguments name
 }
 
 // AppOption configures an App using the functional options pattern.

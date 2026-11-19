@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `FlagOptions.ValueFromFile` (also on `Flag`) and `WithFlagValueFromFile` let a flag's command-line value be read from a file, as curl's `-d @file` and gh's `-F key=@file` do: `--body=@message.md` reads the file, `--body=@-` reads standard input, and `@@` stands for a leading `@` (`--body=@@channel` is `@channel`). One trailing line ending (`\n` or `\r\n`) is removed. It applies to values on the command line, by name or by position, and in flags files; environment variables, the config file, prompts and defaults are always used as written. The value is a command-line value for precedence, `Changed`, `Source` and prompting. Files and standard input are read up to the new `App.MaxFileSize` (`DefaultMaxFileSize`, 1 MiB), only one value per run may read standard input, and errors about a `Sensitive` flag's value read from a file never show the contents. `FlagSet.Parse` and `FlagSet.MapPositionals` read `@file` values too.
+- `App.EnableFlagsFile` adds a global, Ambient `--flags-file FILE`, like gcloud's: a YAML or JSON mapping of long flag names (with or without `--`) to values, or a list of such mappings, inserted on the command line where `--flags-file` is written, so the last occurrence of a flag wins as gcloud documents. Values are the text written in the file; a list repeats the flag; null gives the flag alone; `--flags-file` inside a file reads more files in place, relative to the naming file, with cycle detection and limits (16 levels, 128 files, 10,000 values). Values count as command-line values (they beat the environment and the config file, report `SourceCommandFlag` and count for prompting unless the flag is Ambient). Unknown keys, duplicate keys, mappings as values and values the flag rejects are usage errors that name the file and line. `-` reads standard input. Also `App.FlagsFileEnabled`.
+
 ## [2.8.0] - 2026-11-19
 
 ### Added

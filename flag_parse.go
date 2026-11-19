@@ -2,6 +2,7 @@ package clix
 
 import (
 	"errors"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -20,8 +21,14 @@ import (
 //
 // By default, unknown flags cause errors. Use SetStrict(false) to allow unknown
 // flags to be treated as positional arguments instead.
+//
+// Values of flags with ValueFromFile are read from files as on Run's
+// command line (see FlagOptions.ValueFromFile), and --flags-file (see
+// App.EnableFlagsFile) inserts its file's flags; standard input and the
+// size limit are those of the App that last ran the set, if any.
 func (fs *FlagSet) Parse(args []string) ([]string, error) {
 	var positionals []string
+	r := fs.fileReader()
 
 	for i := 0; i < len(args); i++ {
 		current := args[i]
@@ -43,7 +50,7 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 			continue
 		}
 		for _, u := range uses {
-			err := setFromArg(u.flag, u.name, u.value, u.hasValue, func() (string, bool) {
+			err := r.apply(u, []*FlagSet{fs}, nil, func() (string, bool) {
 				if !u.takesNext(args, i) {
 					return "", false
 				}
@@ -57,6 +64,13 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 	}
 
 	return positionals, nil
+}
+
+// fileReader returns the reader for files named by values parsed outside
+// Run: with the standard input and size limit of the App that last ran
+// the set, if any.
+func (fs *FlagSet) fileReader() *fileReader {
+	return newFileReader(fs.app)
 }
 
 // flagUse is one flag set by a command-line token.
@@ -264,10 +278,24 @@ func parentChain(cmd *Command) []*FlagSet {
 	return sets
 }
 
-// setFromArg applies one command-line occurrence of flag. name is the flag as
-// written, and value/hasValue come from a "--name=value" token. When the flag
-// needs a separate value, next supplies the following argument.
-func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (string, bool)) error {
+// apply applies one flag use u, written on the command line where the
+// flag sets in effect are sets (and late; see resolveFlagToken). next
+// supplies the following argument when the flag needs it as its value.
+// A --flags-file use inserts the flags its file holds.
+func (r *fileReader) apply(u flagUse, sets, late []*FlagSet, next func() (string, bool)) error {
+	if isFlagsFileFlag(u.flag) {
+		return r.applyFlagsFileUse(u, sets, late, next)
+	}
+	return r.setArg(u.flag, u.name, u.value, u.hasValue, next, "")
+}
+
+// setArg applies one command-line occurrence of flag. name is the flag as
+// written, and value/hasValue come from a "--name=value" token. When the
+// flag needs a separate value, next (which may be nil) supplies the
+// following argument. file is the flags file the occurrence was written
+// in, or "" for the command line itself; relative @paths in it are read
+// from its directory.
+func (r *fileReader) setArg(flag *Flag, name, value string, hasValue bool, next func() (string, bool), file string) error {
 	if !hasValue {
 		if bf := switchOf(flag.Value); bf != nil {
 			// A bare switch means "true"; Validate sees it exactly as if
@@ -284,19 +312,54 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 			flag.markCLI()
 			return nil
 		}
-		v, ok := next()
+		v, ok := "", false
+		if next != nil {
+			v, ok = next()
+		}
 		if !ok && !optionalValue(flag) {
 			return usageErrorf("flag %s requires a value", name)
 		}
 		value = v // "" for a flag whose value is optional
 	}
 
-	if err := flag.setValue(value); err != nil {
-		return usageErrorf("invalid value for %s: %w", flag.Name, err)
+	return r.setText(flag, name, value, file, flag.Name)
+}
+
+// setText sets flag from value, written on the command line as name
+// (such as "--body", or the flag's name for a positional argument), or in
+// the flags file file. A value of a flag with ValueFromFile may name a
+// file to read (see atValue); relative paths in a flags file are read
+// from its directory. what names the flag in errors ("age", or
+// "positional argument age").
+func (r *fileReader) setText(flag *Flag, name, value, file, what string) error {
+	dir := ""
+	if file != "" && file != "-" {
+		dir = filepath.Dir(file)
+	}
+	text, from, err := r.atValue(flag, name, value, dir)
+	if err != nil {
+		return &usageError{err: err}
+	}
+	// A Sensitive value read from a file, or written in a flags file,
+	// never appears in an error: the file's contents were never on the
+	// command line for the user to see.
+	_, readsFile := flag.Value.(fileReadingValue)
+	secret := flag.Sensitive && (from != "" || file != "") && !readsFile
+	if from != "" {
+		what += " (read from " + from + ")"
+	}
+	if err := flag.setValueWith(r, text); err != nil {
+		if secret {
+			err = secretSetErr(flag, err)
+		}
+		return usageErrorf("invalid value for %s: %w", what, err)
 	}
 	if flag.Validate != nil {
-		if err := flag.Validate(value); err != nil {
-			return usageErrorf("invalid value for %s: %w", flag.Name, err)
+		if err := flag.Validate(text); err != nil {
+			if secret {
+				err = secretErr(err, text)
+			}
+			return usageErrorf("invalid value for %s: %w", what, err)
 		}
 	}
 	flag.markCLI()
