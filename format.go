@@ -48,11 +48,6 @@ import (
 //   - omitempty leaves out only values that would be null, "", {} or [];
 //     use omitzero to leave out zero numbers, false and zero structs.
 //   - Invalid UTF-8 in strings is replaced with U+FFFD instead of failing.
-//
-// (A binary built with Go 1.26 or earlier, which lacks encoding/json/v2,
-// encodes JSON with encoding/json instead: durations are nanoseconds, nil
-// slices and maps are null, and omitempty also leaves out zero numbers and
-// false.)
 func FormatData(w io.Writer, data interface{}, format string) error {
 	switch strings.ToLower(format) {
 	case FormatJSON:
