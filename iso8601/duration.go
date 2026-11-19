@@ -510,17 +510,26 @@ func add64(a, b int64) (int64, bool) {
 	return a + b, true
 }
 
-// AddTo returns t plus d. The calendar part is applied first, in t's
-// location, with a single call t.AddDate(d.Years, d.Months, 7*d.Weeks+d.Days),
-// and the exact part is then added with t.Add(d.Time). So P1D keeps the
-// wall clock time across a daylight saving change (23 or 25 elapsed hours),
-// while PT24H is always 24 elapsed hours.
+// AddTo returns t plus d. The calendar part is applied first, to t's wall
+// clock date in t's location, and the exact part is then added with
+// t.Add(d.Time). So P1D keeps the wall clock time across a daylight saving
+// change (23 or 25 elapsed hours), while PT24H is always 24 elapsed hours.
 //
-// Like [time.Time.AddDate], AddTo normalizes a day past the end of a month
-// into the next month instead of clamping it: 2026-01-31 plus P1M is
-// 2026-03-03 (February 31 is March 3), and 2024-02-29 plus P1Y is
-// 2025-03-01. A wall clock time that the calendar step lands in a daylight
-// saving gap or overlap resolves as [time.Date] resolves it.
+// The calendar step normalizes the date as [time.Time.AddDate] does, with
+// a single time.Date(year+d.Years, month+d.Months, day+7*d.Weeks+d.Days,
+// ...): a day past the end of a month carries into the next month instead
+// of being clamped, so 2026-01-31 plus P1M is 2026-03-03 (February 31 is
+// March 3), and 2024-02-29 plus P1Y is 2025-03-01.
+//
+// AddTo differs from AddDate when the resulting wall clock time is
+// repeated or skipped by a transition in t's location, where AddDate's
+// choice is unspecified. AddTo follows RFC 5545 §3.3.5, as [ParseTime]
+// does: a repeated time means its first occurrence, and a skipped time is
+// read with the UTC offset in effect before the gap. In America/New_York,
+// 2026-03-07T02:30 plus P1D is 2026-03-08T03:30 EDT, 24 hours later, since
+// 02:30 does not occur that day. A Duration without a calendar part leaves
+// t's wall clock alone, so adding PT0S to the second 01:30 of a day when
+// the clocks go back returns that same instant.
 //
 // Subtracting is adding the negated duration, but because months and days
 // vary in length, t plus d minus d need not equal t.
@@ -528,7 +537,14 @@ func add64(a, b int64) (int64, bool) {
 // Fields too large for time.Time's range give unspecified results, as with
 // time.AddDate.
 func (d Duration) AddTo(t time.Time) time.Time {
-	return t.AddDate(d.Years, d.Months, 7*d.Weeks+d.Days).Add(d.Time)
+	if d.Years != 0 || d.Months != 0 || d.Weeks != 0 || d.Days != 0 {
+		year, month, day := t.Date()
+		hour, minute, sec := t.Clock()
+		wall := time.Date(year+d.Years, month+time.Month(d.Months), day+7*d.Weeks+d.Days,
+			hour, minute, sec, t.Nanosecond(), time.UTC)
+		t, _ = localTime(wall, t.Location())
+	}
+	return t.Add(d.Time)
 }
 
 // FromStd returns d as a Duration with only the exact Time part set. It

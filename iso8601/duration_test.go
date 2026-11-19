@@ -370,6 +370,48 @@ func TestDurationAddToDST(t *testing.T) {
 	}
 }
 
+// TestDurationAddToTransitions covers calendar steps that land on a wall
+// clock time repeated or skipped by a change in the UTC offset, where
+// time.AddDate's choice is unspecified (and differs east and west of UTC).
+func TestDurationAddToTransitions(t *testing.T) {
+	newYork := mustLoad(t, "America/New_York")
+	berlin := mustLoad(t, "Europe/Berlin")
+	santiago := mustLoad(t, "America/Santiago")
+	apia := mustLoad(t, "Pacific/Apia")
+	// The second 01:30 on 2026-11-01 in New York, after the clocks go back.
+	secondOneThirty := time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC).In(newYork)
+	tests := []struct {
+		name    string
+		start   time.Time
+		d       string
+		want    string
+		elapsed time.Duration
+	}{
+		{"NY skipped", time.Date(2026, 3, 7, 2, 30, 0, 0, newYork), "P1D", "2026-03-08T03:30:00-04:00", 24 * time.Hour},
+		{"NY repeated", time.Date(2026, 10, 31, 1, 30, 0, 0, newYork), "P1D", "2026-11-01T01:30:00-04:00", 24 * time.Hour},
+		{"Berlin skipped", time.Date(2026, 3, 28, 2, 30, 0, 0, berlin), "P1D", "2026-03-29T03:30:00+02:00", 24 * time.Hour},
+		{"Berlin repeated", time.Date(2026, 10, 24, 2, 30, 0, 0, berlin), "P1D", "2026-10-25T02:30:00+02:00", 24 * time.Hour},
+		{"Santiago skipped midnight", time.Date(2026, 9, 5, 0, 0, 0, 0, santiago), "P1D", "2026-09-06T01:00:00-03:00", 24 * time.Hour},
+		{"Apia skipped day", time.Date(2011, 12, 29, 12, 0, 0, 0, apia), "P1D", "2011-12-31T12:00:00+14:00", 24 * time.Hour},
+		{"second 01:30 PT0S", secondOneThirty, "PT0S", "2026-11-01T01:30:00-05:00", 0},
+		{"second 01:30 PT1H", secondOneThirty, "PT1H", "2026-11-01T02:30:00-05:00", time.Hour},
+		{"second 01:30 P1D", secondOneThirty, "P1D", "2026-11-02T01:30:00-05:00", 24 * time.Hour},
+	}
+	for _, tt := range tests {
+		d, err := ParseDuration(tt.d)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.name, err)
+		}
+		got := d.AddTo(tt.start)
+		if s := FormatTime(got); s != tt.want {
+			t.Errorf("%s: %s + %s = %s, want %s", tt.name, FormatTime(tt.start), tt.d, s, tt.want)
+		}
+		if e := got.Sub(tt.start); e != tt.elapsed {
+			t.Errorf("%s: elapsed %v, want %v", tt.name, e, tt.elapsed)
+		}
+	}
+}
+
 func TestDurationAddToCalendar(t *testing.T) {
 	tests := []struct {
 		start string
