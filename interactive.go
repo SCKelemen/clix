@@ -17,8 +17,9 @@ const (
 	// zero value and the default.
 	InteractiveAuto InteractiveMode = iota
 	// InteractiveAlways prompts whenever a required flag is missing and no
-	// flags were passed, even if App.In is not a terminal (for example, to
-	// answer prompts from a pipe or from a test).
+	// flags were passed (Ambient flags do not count; see
+	// FlagOptions.Required), even if App.In is not a terminal (for
+	// example, to answer prompts from a pipe or from a test).
 	InteractiveAlways
 	// InteractiveNever never prompts; missing required flags produce a
 	// *MissingFlagsError.

@@ -156,13 +156,15 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// 3. Some CLI flags passed + required missing → error
 	// Flags anywhere on the path count as "flags passed": "mk --project p"
 	// is a scripted invocation even though --project lives on the root.
+	// Ambient flags never count: "--target X widgets create" only says
+	// where to create the widget, so it still prompts for the widget.
 	missing := missingRequired(path)
 	if len(missing) > 0 {
-		anyCLI := false
+		passed := false
 		for _, c := range path {
-			anyCLI = anyCLI || c.Flags.AnyCLISet()
+			passed = passed || c.Flags.anyInputSet()
 		}
-		if anyCLI || !a.IsInteractive() {
+		if passed || !a.IsInteractive() {
 			// Mode 3 (or nobody to ask): report what is missing.
 			return a.missingFlagsError(missing)
 		}

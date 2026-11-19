@@ -123,6 +123,11 @@ type Flag struct {
 	// Sensitive marks a secret; it is prompted for with a secret prompt.
 	Sensitive bool
 
+	// Ambient marks a flag that sets the context a command runs in rather
+	// than an input to it: giving it on the command line does not stop Run
+	// from prompting for missing required flags. See FlagOptions.Ambient.
+	Ambient bool
+
 	// Value is the flag value implementation.
 	Value Value
 
@@ -250,10 +255,14 @@ type FlagOptions struct {
 	EnvVars []string
 
 	// Required indicates this flag must be provided (or resolved from Default/env/config).
-	// When required flags are missing and no CLI flags were passed, the user is
+	// When required flags are missing and no flags were passed, the user is
 	// prompted interactively if the app is interactive (see App.IsInteractive).
-	// When some CLI flags were passed, or the app is not interactive, Run
-	// returns a *MissingFlagsError instead.
+	// When some flags were passed, or the app is not interactive, Run
+	// returns a *MissingFlagsError instead. A flag counts as passed when it
+	// was set on the command line, by name or by position, on any command
+	// of the path (the root, each group and the command itself) and is not
+	// Ambient. Values from environment variables, the config file and
+	// defaults never count.
 	Required bool
 
 	// Prompt is the label shown when interactively prompting for this flag's value.
@@ -298,6 +307,25 @@ type FlagOptions struct {
 	// is prompted for, the prompt is a secret prompt (WithSecret): the value
 	// is not echoed, not shown, and not trimmed.
 	Sensitive bool
+
+	// Ambient marks a flag that sets the context a command runs in, such
+	// as where to connect (--target, --token, --timeout, --api-version) or
+	// how to print the result (--format), rather than an input to the
+	// command. An Ambient flag on the command line never counts as "flags
+	// passed" (see Required), wherever and however it is written: before,
+	// between or after the command names, as --name=value, inside a short
+	// cluster, or by position. So "moln --target X widgets create" still
+	// prompts for the widget's missing required flags when the app is
+	// interactive. Passing any flag that is not Ambient still turns
+	// prompting off: Run returns a *MissingFlagsError for the missing
+	// flags.
+	//
+	// Nothing else changes: the flag is parsed, read from the environment
+	// and the config file, checked when Required (and prompted for when
+	// missing), and shown in help like any other flag. Environment
+	// variables and config values never counted as passed flags, Ambient
+	// or not. FlagSet.AnyCLISet still reports Ambient flags.
+	Ambient bool
 }
 
 // newFlag builds a Flag from o with the given value and default text.
@@ -318,6 +346,7 @@ func (o FlagOptions) newFlag(value Value, def string) *Flag {
 		NoConfig:        o.NoConfig,
 		ConfigKey:       o.ConfigKey,
 		Sensitive:       o.Sensitive,
+		Ambient:         o.Ambient,
 		Value:           value,
 	}
 }
@@ -367,6 +396,9 @@ func (o FlagOptions) ApplyFlag(fo *FlagOptions) {
 	}
 	if o.Sensitive {
 		fo.Sensitive = true
+	}
+	if o.Ambient {
+		fo.Ambient = true
 	}
 }
 
@@ -1125,6 +1157,14 @@ func WithFlagConfigKey(key string) FlagOption {
 	return flagConfigKeyOption(key)
 }
 
+// WithFlagAmbient marks the flag as context for the command, such as a
+// connection or output setting, rather than an input: giving it on the
+// command line does not stop Run from prompting for missing required
+// flags. See FlagOptions.Ambient.
+func WithFlagAmbient() FlagOption {
+	return flagAmbientOption{}
+}
+
 // WithStringValue sets the string flag value pointer.
 func WithStringValue(value *string) FlagOption {
 	return stringValueOption{value: value}
@@ -1258,6 +1298,10 @@ type flagConfigKeyOption string
 func (o flagConfigKeyOption) ApplyFlag(fo *FlagOptions) {
 	fo.ConfigKey = string(o)
 }
+
+type flagAmbientOption struct{}
+
+func (flagAmbientOption) ApplyFlag(fo *FlagOptions) { fo.Ambient = true }
 
 type boolValueOption struct {
 	value *bool

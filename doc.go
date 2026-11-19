@@ -71,6 +71,12 @@
 //  2. All required flags satisfied → run
 //  3. Some flags passed but required missing → *MissingFlagsError
 //
+// A flag is passed when it is set on the command line, by name or by
+// position. Values from environment variables, the config file and
+// defaults are not passed flags, and neither are flags marked Ambient
+// (FlagOptions.Ambient), such as ext/format's --format: they set the
+// context a command runs in, not its inputs.
+//
 // # Context Usage
 //
 // clix uses a layered context design:
