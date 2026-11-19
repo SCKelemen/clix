@@ -4,39 +4,9 @@ import (
 	"bytes"
 	"context"
 	"github.com/SCKelemen/clix/v2"
-	"os"
 	"strings"
 	"testing"
 )
-
-// mockTerminalInput simulates terminal input by providing a pipe that can be written to
-// This allows us to test raw terminal mode by sending escape sequences
-type mockTerminalInput struct {
-	r *os.File
-	w *os.File
-}
-
-func newMockTerminalInput() (*mockTerminalInput, error) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		return nil, err
-	}
-	return &mockTerminalInput{r: r, w: w}, nil
-}
-
-func (m *mockTerminalInput) Read(p []byte) (n int, err error) {
-	return m.r.Read(p)
-}
-
-func (m *mockTerminalInput) WriteKeySequence(seq []byte) error {
-	_, err := m.w.Write(seq)
-	return err
-}
-
-func (m *mockTerminalInput) Close() error {
-	m.w.Close()
-	return m.r.Close()
-}
 
 // TestPromptSelectRawTerminal tests select prompt in raw terminal mode
 func TestPromptSelectRawTerminal(t *testing.T) {

@@ -35,18 +35,18 @@ func NewCommand(project *string) *clix.Command {
 	})
 
 	cmd.PreRun = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Using project %s\n", valueOrDefault(project, "sample-project"))
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Using project %s\n", valueOrDefault(project, "sample-project"))
+		return err
 	}
 
 	cmd.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "%s %s!\n", salutation, name)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "%s %s!\n", salutation, name)
+		return err
 	}
 
 	cmd.PostRun = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "All done!")
-		return nil
+		_, err := fmt.Fprintln(ctx.App.Out, "All done!")
+		return err
 	}
 
 	return cmd

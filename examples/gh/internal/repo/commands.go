@@ -28,8 +28,8 @@ func NewCommand() *clix.Command {
 		Value: &repository,
 	})
 	clone.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Cloning %s...\n", repository)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Cloning %s...\n", repository)
+		return err
 	}
 
 	create := clix.NewCommand("create")
@@ -57,8 +57,8 @@ func NewCommand() *clix.Command {
 		Value:   &visibility,
 	})
 	create.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Creating %s repository %s\n", visibility, repoName)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Creating %s repository %s\n", visibility, repoName)
+		return err
 	}
 	cmd.Children = []*clix.Command{
 		clone,

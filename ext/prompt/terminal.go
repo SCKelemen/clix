@@ -287,44 +287,44 @@ func (k Key) String() string {
 // ClearLine clears the current line and moves cursor to the beginning.
 func ClearLine(out io.Writer) {
 	// ANSI escape: \r to move to start, \033[K to clear to end
-	fmt.Fprint(out, "\r\033[K")
+	_, _ = fmt.Fprint(out, "\r\033[K")
 }
 
 // MoveCursorUp moves the cursor up n lines.
 func MoveCursorUp(out io.Writer, n int) {
 	if n > 0 {
-		fmt.Fprintf(out, "\033[%dA", n)
+		_, _ = fmt.Fprintf(out, "\033[%dA", n)
 	}
 }
 
 // MoveCursorDown moves the cursor down n lines.
 func MoveCursorDown(out io.Writer, n int) {
 	if n > 0 {
-		fmt.Fprintf(out, "\033[%dB", n)
+		_, _ = fmt.Fprintf(out, "\033[%dB", n)
 	}
 }
 
 // HideCursor hides the terminal cursor.
 func HideCursor(out io.Writer) {
-	fmt.Fprint(out, "\033[?25l")
+	_, _ = fmt.Fprint(out, "\033[?25l")
 }
 
 // ShowCursor shows the terminal cursor.
 func ShowCursor(out io.Writer) {
-	fmt.Fprint(out, "\033[?25h")
+	_, _ = fmt.Fprint(out, "\033[?25h")
 }
 
 // SaveCursorPosition saves the current cursor position.
 func SaveCursorPosition(out io.Writer) {
-	fmt.Fprint(out, "\033[s")
+	_, _ = fmt.Fprint(out, "\033[s")
 }
 
 // RestoreCursorPosition restores the cursor to a previously saved position.
 func RestoreCursorPosition(out io.Writer) {
-	fmt.Fprint(out, "\033[u")
+	_, _ = fmt.Fprint(out, "\033[u")
 }
 
 // ClearToEndOfScreen clears from cursor to end of screen.
 func ClearToEndOfScreen(out io.Writer) {
-	fmt.Fprint(out, "\033[J")
+	_, _ = fmt.Fprint(out, "\033[J")
 }

@@ -29,8 +29,8 @@ func ExampleNewCommand() {
 	create := clix.NewCommand("create")
 	create.Short = "Create a new user"
 	create.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Creating user...\n")
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Creating user...\n")
+		return err
 	}
 
 	// Commands can have aliases
@@ -45,15 +45,15 @@ func ExampleNewGroup() {
 	createUser := clix.NewCommand("create")
 	createUser.Short = "Create a new user"
 	createUser.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Creating user...\n")
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Creating user...\n")
+		return err
 	}
 
 	listUsers := clix.NewCommand("list")
 	listUsers.Short = "List all users"
 	listUsers.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Listing users...\n")
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Listing users...\n")
+		return err
 	}
 
 	// Create a group (interior node) that organizes child commands
@@ -161,8 +161,8 @@ func ExampleFlagOptions_Required() {
 	})
 
 	cmd.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Hello %s!\n", name)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Hello %s!\n", name)
+		return err
 	}
 }
 
@@ -183,8 +183,8 @@ func ExampleFlagOptions_Positional() {
 	})
 
 	cmd.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Cloning %s...\n", repository)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Cloning %s...\n", repository)
+		return err
 	}
 
 	// Both forms work:
@@ -232,7 +232,7 @@ func ExamplePromptRequest() {
 		}
 
 		if confirmed == "yes" {
-			fmt.Fprintf(ctx.App.Out, "Hello %s (%s)!\n", name, email)
+			_, _ = fmt.Fprintf(ctx.App.Out, "Hello %s (%s)!\n", name, email)
 		}
 
 		return nil
@@ -279,7 +279,7 @@ func ExampleWithLabel() {
 		}
 
 		if confirmed == "yes" {
-			fmt.Fprintf(ctx.App.Out, "Hello %s (%s)!\n", name, email)
+			_, _ = fmt.Fprintf(ctx.App.Out, "Hello %s (%s)!\n", name, email)
 		}
 
 		return nil
@@ -304,9 +304,9 @@ func ExampleContext_String() {
 	root.Run = func(ctx *clix.Context) error {
 		// String checks flags, env vars, and config in precedence order
 		if project, ok := ctx.String("project"); ok {
-			fmt.Fprintf(ctx.App.Out, "Using project: %s\n", project)
+			_, _ = fmt.Fprintf(ctx.App.Out, "Using project: %s\n", project)
 		} else {
-			fmt.Fprintln(ctx.App.Out, "No project specified")
+			_, _ = fmt.Fprintln(ctx.App.Out, "No project specified")
 		}
 
 		return nil
@@ -329,7 +329,7 @@ func ExampleContext_Bool() {
 
 	root.Run = func(ctx *clix.Context) error {
 		if verbose, ok := ctx.Bool("verbose"); ok && verbose {
-			fmt.Fprintln(ctx.App.Out, "Verbose mode enabled")
+			_, _ = fmt.Fprintln(ctx.App.Out, "Verbose mode enabled")
 		}
 
 		return nil
@@ -375,8 +375,8 @@ func ExampleApp_Run() {
 	// Use the root command created by NewApp, just customize it
 	app.Root.Short = "Print a greeting"
 	app.Root.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Hello, %s!\n", name)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Hello, %s!\n", name)
+		return err
 	}
 
 	// For this example, we'll simulate running with arguments
@@ -393,20 +393,20 @@ func ExampleCommand_PreRun() {
 
 	// PreRun executes before the main Run handler
 	cmd.PreRun = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "Initializing...")
-		return nil
+		_, err := fmt.Fprintln(ctx.App.Out, "Initializing...")
+		return err
 	}
 
 	// Run is the main command handler
 	cmd.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "Processing...")
-		return nil
+		_, err := fmt.Fprintln(ctx.App.Out, "Processing...")
+		return err
 	}
 
 	// PostRun executes after the main Run handler
 	cmd.PostRun = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "Cleaning up...")
-		return nil
+		_, err := fmt.Fprintln(ctx.App.Out, "Cleaning up...")
+		return err
 	}
 }
 
@@ -491,8 +491,8 @@ func Example_declarativeStyle() {
 	createCmd.Short = "Create a new resource"
 	createCmd.Run = func(ctx *clix.Context) error {
 		name, _ := ctx.String("project")
-		fmt.Fprintf(ctx.App.Out, "Creating resource in project: %s\n", name)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Creating resource in project: %s\n", name)
+		return err
 	}
 
 	// Command flags using struct-based API
@@ -527,8 +527,8 @@ func Example_declarativeStyle() {
 	listCmd := clix.NewCommand("list")
 	listCmd.Short = "List resources"
 	listCmd.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "Listing resources...")
-		return nil
+		_, err := fmt.Fprintln(ctx.App.Out, "Listing resources...")
+		return err
 	}
 
 	root := clix.NewGroup("myapp", "My application", createCmd, listCmd)
@@ -572,8 +572,8 @@ func Example_functionalStyle() {
 		clix.WithCommandShort("Create a new resource"),
 		clix.WithCommandRun(func(ctx *clix.Context) error {
 			name, _ := ctx.String("project")
-			fmt.Fprintf(ctx.App.Out, "Creating resource in project: %s\n", name)
-			return nil
+			_, err := fmt.Fprintf(ctx.App.Out, "Creating resource in project: %s\n", name)
+			return err
 		}),
 	)
 
@@ -607,8 +607,8 @@ func Example_functionalStyle() {
 		clix.NewCommand("list",
 			clix.WithCommandShort("List resources"),
 			clix.WithCommandRun(func(ctx *clix.Context) error {
-				fmt.Fprintln(ctx.App.Out, "Listing resources...")
-				return nil
+				_, err := fmt.Fprintln(ctx.App.Out, "Listing resources...")
+				return err
 			}),
 		),
 	)

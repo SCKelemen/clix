@@ -17,8 +17,8 @@ func newGreetApp(t *testing.T, opts ...AppOption) (app *App, out, errOut *bytes.
 	app = NewApp("moln", append([]AppOption{WithAppOut(out), WithAppErr(errOut)}, opts...)...)
 	cmd := NewCommand("greet", WithCommandRun(func(ctx *Context) error {
 		name, _ := ctx.String("name")
-		fmt.Fprintf(ctx.App.Out, "hello %s\n", name)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "hello %s\n", name)
+		return err
 	}))
 	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "name", Required: true, EnvVars: []string{"GREET_NAME"}}})
 	app.Root.AddCommand(cmd)
@@ -61,8 +61,7 @@ func TestNonInteractivePipeIsNotATerminal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer r.Close()
-	defer w.Close()
+	t.Cleanup(func() { _ = w.Close(); _ = r.Close() })
 	app, _, _, prompted := newGreetApp(t, WithAppIn(r))
 	app.Prompter = prompterFunc(func(context.Context, ...PromptOption) (string, error) {
 		*prompted = true

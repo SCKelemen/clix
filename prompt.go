@@ -617,11 +617,11 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 	for {
 		prefix := st.render(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
 		label := st.render(cfg.Theme.LabelStyle, cfg.Label)
-		fmt.Fprintf(p.Out, "%s%s", prefix, label)
+		_, _ = fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
 		if cfg.Default != "" && !cfg.Secret {
 			def := st.render(cfg.Theme.DefaultStyle, cfg.Default)
-			fmt.Fprintf(p.Out, " [%s]", def)
+			_, _ = fmt.Fprintf(p.Out, " [%s]", def)
 		} else if cfg.Default == "" && cfg.NoDefaultPlaceholder != "" {
 			style := cfg.Theme.PlaceholderStyle
 			if style == nil {
@@ -632,10 +632,10 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 
 		if cfg.Theme.Hint != "" {
 			hint := st.render(cfg.Theme.HintStyle, cfg.Theme.Hint)
-			fmt.Fprintf(p.Out, " %s", hint)
+			_, _ = fmt.Fprintf(p.Out, " %s", hint)
 		}
 
-		fmt.Fprint(p.Out, ": ")
+		_, _ = fmt.Fprint(p.Out, ": ")
 
 		var value string
 		var err error
@@ -688,7 +688,7 @@ func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (str
 	for {
 		prefix := st.render(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
 		label := st.render(cfg.Theme.LabelStyle, cfg.Label)
-		fmt.Fprintf(p.Out, "%s%s", prefix, label)
+		_, _ = fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
 		// Show default in prompt
 		if defaultYes {
@@ -700,10 +700,10 @@ func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (str
 		// Show hint if provided (may include "back" instruction from survey)
 		if cfg.Theme.Hint != "" {
 			hint := st.render(cfg.Theme.HintStyle, cfg.Theme.Hint)
-			fmt.Fprintf(p.Out, " %s", hint)
+			_, _ = fmt.Fprintf(p.Out, " %s", hint)
 		}
 
-		fmt.Fprint(p.Out, ": ")
+		_, _ = fmt.Fprint(p.Out, ": ")
 
 		line, err := readLine(ctx, p.In)
 		if err != nil {

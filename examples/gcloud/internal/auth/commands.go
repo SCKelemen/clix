@@ -42,8 +42,8 @@ func NewCommand() *clix.Command {
 		if brief {
 			summary = "brief"
 		}
-		fmt.Fprintf(ctx.App.Out, "Logged in as %s with %s output.\n", account, summary)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Logged in as %s with %s output.\n", account, summary)
+		return err
 	}
 
 	activate := clix.NewCommand("activate-service-account")
@@ -70,8 +70,8 @@ func NewCommand() *clix.Command {
 	})
 
 	activate.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Activated %s using key %s\n", saAccount, keyFile)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Activated %s using key %s\n", saAccount, keyFile)
+		return err
 	}
 
 	cmd.Children = []*clix.Command{

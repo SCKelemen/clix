@@ -80,7 +80,7 @@ func (p helpPrinter) render(cmd *Command) {
 		if p.App.Description != "" {
 			_, _ = fmt.Fprintf(w, "%s\n\n", p.style(styles.AppDescription, p.App.Description))
 		} else {
-			fmt.Fprintln(w)
+			_, _ = fmt.Fprintln(w)
 		}
 	} else {
 		title := cmd.Short

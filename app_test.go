@@ -2,7 +2,6 @@ package clix
 
 import (
 	"context"
-	"os"
 	"testing"
 )
 
@@ -92,9 +91,11 @@ func TestFlagPrecedenceWithGlobalFlags(t *testing.T) {
 
 	t.Run("command flag overrides global flag", func(t *testing.T) {
 		// Don't set env or config to avoid interference
-		os.Unsetenv("TEST_VALUE")
+		unsetenv(t, "TEST_VALUE")
 		app.Config.Reset()
-		app.SaveConfig()
+		if err := app.SaveConfig(); err != nil {
+			t.Fatal(err)
+		}
 
 		app.configLoaded = false
 		cmdValue = ""
@@ -117,7 +118,6 @@ func TestFlagPrecedenceWithGlobalFlags(t *testing.T) {
 	t.Run("global flag used when command flag not set", func(t *testing.T) {
 		app.Config.Set("value", "config-value")
 		t.Setenv("TEST_VALUE", "env-value")
-		defer os.Unsetenv("TEST_VALUE")
 
 		app.configLoaded = false
 		cmdValue = ""
@@ -141,7 +141,6 @@ func TestFlagPrecedenceWithGlobalFlags(t *testing.T) {
 	t.Run("env var used when no flags set", func(t *testing.T) {
 		app.Config.Set("value", "config-value")
 		t.Setenv("TEST_VALUE", "env-value")
-		defer os.Unsetenv("TEST_VALUE")
 
 		app.configLoaded = false
 		cmdValue = ""
@@ -159,7 +158,7 @@ func TestFlagPrecedenceWithGlobalFlags(t *testing.T) {
 
 	t.Run("config used when no flags or env", func(t *testing.T) {
 		app.Config.Set("value", "config-value")
-		os.Unsetenv("TEST_VALUE")
+		unsetenv(t, "TEST_VALUE")
 
 		app.configLoaded = false
 		cmdValue = ""
@@ -177,8 +176,10 @@ func TestFlagPrecedenceWithGlobalFlags(t *testing.T) {
 
 	t.Run("default used when nothing else set", func(t *testing.T) {
 		app.Config.Reset()
-		app.SaveConfig()
-		os.Unsetenv("TEST_VALUE")
+		if err := app.SaveConfig(); err != nil {
+			t.Fatal(err)
+		}
+		unsetenv(t, "TEST_VALUE")
 
 		app.configLoaded = false
 		cmdValue = ""

@@ -685,7 +685,7 @@ func (s *Survey) renderSummary(out io.Writer) {
 	if theme.LabelStyle != nil {
 		title = renderText(theme.LabelStyle, title)
 	}
-	fmt.Fprintf(out, "\n%s\n", title)
+	_, _ = fmt.Fprintf(out, "\n%s\n", title)
 
 	// Render each question/answer pair with styling
 	for i, answer := range s.answers {
@@ -748,9 +748,9 @@ func (s *Survey) renderSummary(out io.Writer) {
 			styledAnswer = renderText(theme.DefaultStyle, answer)
 		}
 
-		fmt.Fprintf(out, "  %s: %s\n", styledLabel, styledAnswer)
+		_, _ = fmt.Fprintf(out, "  %s: %s\n", styledLabel, styledAnswer)
 	}
-	fmt.Fprint(out, "\n")
+	_, _ = fmt.Fprint(out, "\n")
 }
 
 // renderText applies a TextStyle to text, similar to prompt rendering

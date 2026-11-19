@@ -16,9 +16,9 @@ func NewCommand() *clix.Command {
 	list := clix.NewCommand("list")
 	list.Short = "List accessible organizations"
 	list.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "- cli")
-		fmt.Fprintln(ctx.App.Out, "- octo-org")
-		return nil
+		_, _ = fmt.Fprintln(ctx.App.Out, "- cli")
+		_, err := fmt.Fprintln(ctx.App.Out, "- octo-org")
+		return err
 	}
 
 	view := clix.NewCommand("view")
@@ -36,8 +36,8 @@ func NewCommand() *clix.Command {
 		Value: &organization,
 	})
 	view.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Organization: %s\n", organization)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Organization: %s\n", organization)
+		return err
 	}
 	cmd.Children = []*clix.Command{
 		list,

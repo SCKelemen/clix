@@ -84,9 +84,13 @@ func TestConfigExtension(t *testing.T) {
 
 		app := clix.NewApp("test")
 		configDir := filepath.Join(tempDir, "test")
-		os.MkdirAll(configDir, 0755)
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
 		configPath := filepath.Join(configDir, "config.yaml")
-		os.WriteFile(configPath, []byte("api.timeout: 30\nproject.default: dev\n"), 0644)
+		if err := os.WriteFile(configPath, []byte("api.timeout: 30\nproject.default: dev\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 
 		root := clix.NewCommand("test")
 		app.Root = root
@@ -115,9 +119,13 @@ func TestConfigExtension(t *testing.T) {
 
 		app := clix.NewApp("test")
 		configDir := filepath.Join(tempDir, "test")
-		os.MkdirAll(configDir, 0755)
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
 		configPath := filepath.Join(configDir, "config.yaml")
-		os.WriteFile(configPath, []byte("project.default: dev\n"), 0644)
+		if err := os.WriteFile(configPath, []byte("project.default: dev\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 
 		root := clix.NewCommand("test")
 		app.Root = root
@@ -221,7 +229,9 @@ func TestConfigExtension(t *testing.T) {
 
 		app := clix.NewApp("test")
 		app.Config.Set("project.default", "beta")
-		app.SaveConfig()
+		if err := app.SaveConfig(); err != nil {
+			t.Fatal(err)
+		}
 
 		root := clix.NewCommand("test")
 		app.Root = root
@@ -250,7 +260,9 @@ func TestConfigExtension(t *testing.T) {
 
 		app := clix.NewApp("test")
 		app.Config.Set("api.timeout", "30")
-		app.SaveConfig()
+		if err := app.SaveConfig(); err != nil {
+			t.Fatal(err)
+		}
 
 		root := clix.NewCommand("test")
 		app.Root = root

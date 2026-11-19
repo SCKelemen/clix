@@ -92,7 +92,9 @@ func TestMapPositionals(t *testing.T) {
 
 		// Simulate --first being set via CLI parsing
 		f := fs.lookup("first")
-		f.Value.Set("cli-value")
+		if err := f.Value.Set("cli-value"); err != nil {
+			t.Fatal(err)
+		}
 		f.cliSet = true
 		f.set = true
 
