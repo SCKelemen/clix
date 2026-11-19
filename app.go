@@ -455,6 +455,9 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	}
 	if ctx.App != nil {
 		for _, h := range hits {
+			if h.flag.groupSkip&skipEnv != 0 {
+				continue // a mutually exclusive group rules it out (see planGroupFill)
+			}
 			if _, val, ok := ctx.App.lookupFlagEnv(h.flag); ok {
 				return val, SourceEnvVar, true
 			}
@@ -478,6 +481,9 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	}
 	if ctx.App != nil && ctx.App.Config != nil {
 		for _, h := range hits {
+			if h.flag.groupSkip&skipConfig != 0 {
+				continue
+			}
 			if k, ok := ctx.App.flagConfigKey(h.flag); ok {
 				if v, ok := ctx.App.Config.Get(k); ok {
 					return v, SourceConfigFile, true

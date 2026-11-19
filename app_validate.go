@@ -36,6 +36,9 @@ import (
 //     than --help): written before the command name it sets the ancestor's
 //     flag, after it the command's, so the bound variables and Context
 //     getters can disagree;
+//   - flag groups (see FlagSet.MarkMutuallyExclusive) that name a flag
+//     that is not defined on the command or above it, that have fewer
+//     than two flags, or that are mutually exclusive with a required flag;
 //   - nil children.
 //
 // Like Run, Validate first adopts the root, prepares the tree and applies
@@ -133,6 +136,8 @@ func (a *App) validateCommand(cmd *Command, path string, inherited map[string]an
 		}
 	}
 
+	a.validateGroups(cmd, own, report)
+
 	match := nameMatcher(a.CaseSensitive)
 	for i, child := range cmd.Children {
 		if child == nil {
@@ -162,6 +167,34 @@ func (a *App) validateCommand(cmd *Command, path string, inherited map[string]an
 	for _, child := range cmd.Children {
 		if child != nil {
 			a.validateCommand(child, path+" "+child.Name, own, errs)
+		}
+	}
+}
+
+// validateGroups reports cmd's flag groups (see
+// FlagSet.MarkMutuallyExclusive) that name a flag that is not in effect on
+// cmd (inScope holds the flags of cmd and its ancestors, by "--name"),
+// that have fewer than two flags, or that are mutually exclusive with a
+// required flag, which makes the group's other flags unusable.
+func (a *App) validateGroups(cmd *Command, inScope map[string]ancestorFlag, report func(string, ...any)) {
+	for _, g := range cmd.Flags.groups {
+		what := fmt.Sprintf("%s flags %s", g.Kind, strings.Join(dashed(g.Flags), ", "))
+		seen := map[*Flag]bool{}
+		unknown := false
+		for _, name := range g.Flags {
+			af, ok := inScope["--"+name]
+			if !ok || name == "help" {
+				unknown = true
+				report("%s: --%s is not a flag of this command or of a command above it", what, name)
+				continue
+			}
+			seen[af.flag] = true
+			if g.Kind == FlagsMutuallyExclusive && af.flag.Required && !af.flag.hasDefault() {
+				report("%s: --%s is required, so the other flags of the group can never be given", what, name)
+			}
+		}
+		if !unknown && len(seen) < 2 {
+			report("%s: a group needs at least two flags", what)
 		}
 	}
 }
