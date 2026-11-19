@@ -113,7 +113,9 @@ func (p helpPrinter) render(cmd *Command) {
 	p.renderGlobalFlags(cmd)
 	p.renderChildren(cmd)
 	if isRoot {
+		// Like gh: alias commands with the commands, then help topics.
 		p.renderUserAliases()
+		p.renderTopics()
 	}
 
 	if cmd.Example != "" {

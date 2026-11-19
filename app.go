@@ -158,6 +158,11 @@ type App struct {
 	extending  bool  // an extension's Extend is running
 	running    bool  // Run is running
 
+	extRank int    // while extending: the rank of the extension whose Extend runs
+	extName string // while extending: its name for messages
+
+	topics []HelpTopic // added with AddHelpTopic
+
 	progress progressBoard // the progress indicators writing to Err (see Context.Progress)
 	inMain   atomic.Bool   // Main is running the app, so it handles SIGINT and SIGTERM
 

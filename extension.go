@@ -70,7 +70,7 @@ func (a *App) ApplyExtensions() error {
 		// extensions, which already claimed theirs); what is new after
 		// Extend belongs to this extension.
 		a.claimDefinitions(0, "")
-		a.extending = true
+		a.extending, a.extRank, a.extName = true, i+1, fmt.Sprintf("#%d (%T)", i+1, ext)
 		err := ext.Extend(a)
 		a.extending = false
 		a.claimDefinitions(i+1, fmt.Sprintf("#%d (%T)", i+1, ext))
