@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -354,12 +355,25 @@ func sortedInterfaceKeys(values map[string]interface{}) []string {
 	return keys
 }
 
+// removeConfigFile deletes the config file and clears the loaded values.
+// When the config path is a symbolic link (for example, into a dotfiles
+// repository), the file it points to is removed and the link is kept, the
+// way ConfigManager.Save writes through the link, so the next "config set"
+// recreates the file where the link expects it.
 func removeConfigFile(app *clix.App) error {
 	path, err := app.ConfigFile()
 	if err != nil {
 		return err
 	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+	target, err := filepath.EvalSymlinks(path)
+	switch {
+	case err == nil:
+		if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	case errors.Is(err, os.ErrNotExist):
+		// No file, or a link to a file that does not exist: nothing to remove.
+	default:
 		return err
 	}
 	app.Config.Reset()
