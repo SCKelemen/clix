@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/SCKelemen/clix/v2"
+	"go.yaml.in/yaml/v3"
 )
 
 // Extension adds configuration management commands to a clix app.
@@ -88,20 +89,20 @@ func configListCommand(app *clix.App) *clix.Command {
 	cmd.Short = "List persisted configuration values"
 	cmd.Run = func(ctx *clix.Context) error {
 		values := app.Config.Values()
-		tree := buildConfigTree(values)
 
 		format := clix.FormatText
 		if v, ok := app.Flags().String("format"); ok && v != "" {
-			format = v
+			format = strings.ToLower(v)
 		}
 
 		switch format {
 		case clix.FormatJSON:
 			enc := json.NewEncoder(app.Out)
+			enc.SetEscapeHTML(false)
 			enc.SetIndent("", "  ")
-			return enc.Encode(tree)
-		default: // yaml or text default to YAML-style output
-			return writeYAMLTree(app.Out, tree, 0)
+			return enc.Encode(buildConfigTree(values))
+		default: // yaml or text default to YAML output
+			return writeYAMLTree(app.Out, values)
 		}
 	}
 	return cmd
@@ -238,13 +239,6 @@ func configResetCommand(app *clix.App) *clix.Command {
 	return cmd
 }
 
-func quoteIfNeeded(value string) string {
-	if strings.ContainsAny(value, ":#") || strings.HasPrefix(value, " ") || strings.HasSuffix(value, " ") {
-		return fmt.Sprintf("%q", value)
-	}
-	return value
-}
-
 func validateKeyPath(raw string) (string, error) {
 	key := strings.TrimSpace(raw)
 	if key == "" {
@@ -256,67 +250,92 @@ func validateKeyPath(raw string) (string, error) {
 	return key, nil
 }
 
+// buildConfigTree nests dotted keys ("api.timeout") into maps for list
+// output. Where a key is both a value and a prefix of other keys (both "a"
+// and "a.b" are set), the value is kept under its own key and the longer
+// keys are listed flat at that level ("a.b"), so no value is lost. Keys
+// with empty segments ("a..b") are listed flat as well.
 func buildConfigTree(values map[string]string) map[string]interface{} {
 	tree := make(map[string]interface{})
-	for _, key := range sortedKeys(values) {
-		insertConfigPath(tree, strings.Split(key, "."), values[key])
+	groups := make(map[string]map[string]string) // first segment -> rest -> value
+	for key, value := range values {
+		head, rest, nested := strings.Cut(key, ".")
+		if !nested || head == "" || hasEmptySegment(rest) {
+			tree[key] = value
+			continue
+		}
+		if groups[head] == nil {
+			groups[head] = make(map[string]string)
+		}
+		groups[head][rest] = value
+	}
+	for head, rest := range groups {
+		if _, collides := tree[head]; collides {
+			for k, v := range rest {
+				tree[head+"."+k] = v
+			}
+			continue
+		}
+		tree[head] = buildConfigTree(rest)
 	}
 	return tree
 }
 
-func insertConfigPath(tree map[string]interface{}, parts []string, value string) {
-	node := tree
-	for i, part := range parts {
-		part = strings.TrimSpace(part)
+func hasEmptySegment(key string) bool {
+	for _, part := range strings.Split(key, ".") {
 		if part == "" {
-			continue
+			return true
 		}
-		if i == len(parts)-1 {
-			node[part] = value
-			return
-		}
-		child, ok := node[part].(map[string]interface{})
-		if !ok {
-			child = make(map[string]interface{})
-			node[part] = child
-		}
-		node = child
 	}
+	return false
 }
 
-func writeYAMLTree(w io.Writer, node map[string]interface{}, indent int) error {
-	keys := sortedInterfaceKeys(node)
-	for _, key := range keys {
-		value := node[key]
-		prefix := strings.Repeat("  ", indent)
-		switch typed := value.(type) {
+// writeYAMLTree writes the values as a nested YAML mapping with keys sorted
+// at each level. Keys and values are encoded as YAML strings, quoted or
+// written as block scalars where needed, so values such as "yes", "0123",
+// "null", "- x" or text with newlines read back as the same strings.
+func writeYAMLTree(w io.Writer, values map[string]string) error {
+	if len(values) == 0 {
+		return nil
+	}
+	node, err := yamlNode(buildConfigTree(values))
+	if err != nil {
+		return err
+	}
+	enc := yaml.NewEncoder(w)
+	enc.SetIndent(2)
+	if err := enc.Encode(node); err != nil {
+		_ = enc.Close()
+		return err
+	}
+	return enc.Close()
+}
+
+// yamlNode converts a config tree into a YAML mapping node with sorted keys.
+func yamlNode(tree map[string]interface{}) (*yaml.Node, error) {
+	node := &yaml.Node{Kind: yaml.MappingNode}
+	for _, key := range sortedInterfaceKeys(tree) {
+		var k yaml.Node
+		if err := k.Encode(key); err != nil {
+			return nil, err
+		}
+		var v *yaml.Node
+		switch typed := tree[key].(type) {
 		case map[string]interface{}:
-			if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
-				return err
+			child, err := yamlNode(typed)
+			if err != nil {
+				return nil, err
 			}
-			if err := writeYAMLTree(w, typed, indent+1); err != nil {
-				return err
-			}
-		case string:
-			if _, err := fmt.Fprintf(w, "%s%s: %s\n", prefix, key, quoteIfNeeded(typed)); err != nil {
-				return err
-			}
+			v = child
 		default:
-			if _, err := fmt.Fprintf(w, "%s%s: %v\n", prefix, key, typed); err != nil {
-				return err
+			v = &yaml.Node{}
+			if err := v.Encode(typed); err != nil {
+				return nil, err
 			}
 		}
+		node.Content = append(node.Content, &k, v)
 	}
-	return nil
-}
-
-func sortedKeys(values map[string]string) []string {
-	keys := make([]string, 0, len(values))
-	for k := range values {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return node, nil
 }
 
 func sortedInterfaceKeys(values map[string]interface{}) []string {

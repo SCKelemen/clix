@@ -102,7 +102,8 @@ func TestConfigExtension(t *testing.T) {
 		}
 
 		outputStr := output.String()
-		expected := "api:\n  timeout: 30\nproject:\n  default: dev"
+		// Values are strings in clix config, so YAML quotes 30 to keep it one.
+		expected := "api:\n  timeout: \"30\"\nproject:\n  default: dev"
 		if strings.TrimSpace(outputStr) != expected {
 			t.Fatalf("unexpected list output.\nexpected:\n%s\n\ngot:\n%s", expected, outputStr)
 		}
