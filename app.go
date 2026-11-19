@@ -117,6 +117,14 @@ type App struct {
 	// non-ASCII letters always match exactly.
 	CaseSensitive bool
 
+	// ExpandAliases makes Run expand user-defined aliases, which are stored
+	// in the config file under "aliases.<name>" (see ExpandAlias,
+	// CheckAlias and ext/alias, which sets this field and adds "alias set",
+	// "alias list" and "alias delete"). An alias is only looked up for the
+	// first argument, when it names no command, so aliases never shadow
+	// commands, and it never runs a shell.
+	ExpandAliases bool
+
 	// Plugins makes Run run the executable <Name>-<word> from PATH, as
 	// kubectl and gh do, when the first argument is a word that names no
 	// command: "myapp foo a b" runs "myapp-foo a b". Plugins never shadow
@@ -133,6 +141,9 @@ type App struct {
 
 	configLoaded  bool
 	configLoadErr error
+
+	configurations   bool   // EnableConfigurations was called
+	configLoadedPath string // the file Config was loaded from
 
 	// boundRoot and boundFlags are the root command and root flag set the
 	// App last adopted (see bindRoot), so Run can tell when Root changed.

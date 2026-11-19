@@ -862,6 +862,7 @@ This design is inspired by [goldmark's extension system](https://github.com/yuin
 Everything else is opt-in via extensions, including:
 - Command-based help (`cli help`)
 - Config management commands (`cli config`)
+- Command aliases (`cli alias`)
 - Plugins found on PATH (`cli plugin`)
 - Shell completion (`cli autocomplete`)
 - Version information (`cli version`)
@@ -879,6 +880,7 @@ import (
         "os"
 
         "github.com/SCKelemen/clix/v2"
+        "github.com/SCKelemen/clix/v2/ext/alias"
         "github.com/SCKelemen/clix/v2/ext/autocomplete"
         "github.com/SCKelemen/clix/v2/ext/config"
         "github.com/SCKelemen/clix/v2/ext/format"
@@ -892,7 +894,8 @@ app.Root = clix.NewCommand("myapp")
 
 // Add extensions for optional features
 app.AddExtension(help.Extension{})         // Adds: myapp help [command...]
-app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset
+app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset (Configurations: true adds named configurations)
+app.AddExtension(alias.Extension{})        // Adds: myapp alias set|list|delete, and expands aliases
 app.AddExtension(plugin.Extension{})       // Adds: myapp plugin list, and runs myapp-<name> from PATH
 app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [bash|zsh|fish|powershell]
 app.AddExtension(format.Extension{})       // Adds: --format / -f (-f unless your app uses it): json|yaml|text, default text
@@ -960,6 +963,66 @@ app.Config.RegisterSchema(clix.ConfigSchema{
 
 With a schema, `config set project.retries 5` succeeds while `config set project.retries nope` fails with a helpful error.
 
+##### Named configurations
+
+`config.Extension{Configurations: true}` adds named configurations, like gcloud's configurations and kubectl's contexts: one set of config values per account, project or environment, and a way to switch between them.
+
+```text
+myapp config configurations create work      # creates it and activates it (--no-activate to not)
+myapp config set project acme-prod           # goes into "work"
+myapp config configurations activate default # switch back
+myapp --configuration work deploy            # one command with "work"
+MYAPP_CONFIGURATION=work myapp deploy        # the same, for a shell or a CI job
+myapp config configurations list             # NAME and IS_ACTIVE (JSON or YAML with --format)
+myapp config configurations describe [name]  # name, is_active and the values, secrets [redacted]
+myapp config configurations rename work prod # or: rename work --new-name prod
+myapp config configurations delete prod...   # asks first on a terminal; --yes to not ask
+```
+
+The configuration a command uses is the one given with the Ambient `--configuration` flag, else the one named by `<PREFIX>_CONFIGURATION`, else the one last activated, else `default`. `config list`, `get`, `set`, `unset` and `reset` work on it, and so do flags that read the config file; `reset` empties a named configuration rather than deleting it. The layout follows gcloud's, inside the config directory (`App.ConfigPath`'s directory when it is set):
+
+```text
+~/.config/myapp/
+  config.yaml                     the "default" configuration
+  configurations/config_work.yaml one file per other configuration
+  active_config                   the name of the activated configuration
+```
+
+- **The existing `config.yaml` is the `default` configuration**, read in place: turning the option on moves no file and loses no value, and apps without the option are unchanged.
+- **Activation is atomic**: `active_config` is written to a temporary file and renamed over the old one. New files have mode 0600 in directories created with mode 0700.
+- **Names** are a lowercase letter followed by lowercase letters, digits and hyphens (as in gcloud), at most 64 characters, so a name can never reach outside the `configurations` directory. A name in `--configuration`, the environment variable or `active_config` is checked the same way.
+- **Symbolic links** are followed for reading and writing (`active_config` and configuration files may point into a dotfiles repository); `rename` renames a link itself, and `delete` removes only the link, never the file it points to.
+- **A missing configuration** named by `--configuration` or `<PREFIX>_CONFIGURATION` is a usage error (exit status 2), and one named by `active_config` an error (1). The config commands, help, version and completion still run (see `AllowConfigErrors`), so the selection can be repaired.
+- `default`, the activated configuration and the one the command uses cannot be deleted or renamed; activate another one first, or use `config reset` to clear `default`.
+- `--configuration` values and the names after `activate`, `describe`, `delete` and `rename` complete to the existing configurations. An app flag named `--configuration` wins over the extension's, as app flags always do; then only the environment variable and `active_config` select.
+
+The same operations are methods on `App` for programs and tests: `EnableConfigurations`, `Configuration` (the name in effect and its `Source`), `Configurations`, `ConfigurationFile`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` and `ConfigurationEnvVar`. `ConfigFile` and `SaveConfig` use the configuration in effect; `ConfigDir` is still the config directory.
+
+#### Alias Extension (`clix/ext/alias`)
+
+Adds gh-style aliases: shortcuts that users define for longer command lines.
+
+```text
+myapp alias set co 'pr checkout'              # myapp co 123  runs  myapp pr checkout 123
+myapp alias set il 'issue list --label=$1'    # myapp il bug --web  runs  myapp issue list --label=bug --web
+myapp alias set co 'pr checkout --force' --clobber
+myapp alias list                              # name: expansion (JSON or YAML with --format)
+myapp alias delete co                         # or --all
+```
+
+Aliases are stored in the config file under `aliases.<name>` (`aliases: {co: pr checkout}` written by hand works too) and expanded by `Run` when `App.ExpandAliases` is set, which the extension does. `$1`, `$2`, ... are replaced by the arguments after the alias, and the arguments after the highest `$N` used are appended, as gh does; an alias that needs more arguments than it got is a usage error. Root help lists them under ALIAS COMMANDS, and shell completion offers them as the first word and, after one, completes as for its expansion.
+
+The rules, which are also the security model:
+
+- **No shell aliases.** gh's `alias set --shell` and `!` expansions run a shell; clix has neither: `--shell` is an unknown flag, and an expansion starting with `!` is refused when it is set and when a hand-edited config file holds one. An alias only ever becomes the arguments of one of the app's own commands.
+- **Nothing is evaluated.** The expansion is split into words with shell-like quoting (`'...'`, `"..."`, backslashes), but `$VAR`, globs, `~`, backquotes and `$(...)` stay literal text.
+- **Arguments are never split again.** Each one replaces its `$N` as a whole word, or as the part of the word where `$N` is (`--label=$1`), so an argument such as `"1 --force"` cannot add flags or words.
+- **Aliases never shadow commands.** `alias set` refuses a name that a root command or command alias has, hidden commands and extensions' commands included (`alias`, `help`, `config`, ...), and a command added later wins over an existing alias (`alias list` warns).
+- **One expansion, into a command.** The expansion must start with a root command, so an alias cannot name another alias and is expanded once.
+- **Only the first argument**, and only when the root takes no positional arguments of its own; flags before an alias are not supported (as in gh).
+
+Alias names are a letter or digit followed by letters, digits, hyphens and underscores, matched like command names (ASCII case is ignored unless `App.CaseSensitive`). The core API is `App.ExpandAliases`, `Aliases`, `AliasNames`, `CheckAlias`, `SetAlias`, `DeleteAlias`, `ExpandAlias` and `AliasConfigPrefix`. An app command named `alias` replaces the extension's.
+
 #### Plugin Extension (`clix/ext/plugin`)
 
 Adds kubectl- and gh-style plugins: separate programs that add commands. With `plugin.Extension{}` (or `app.Plugins = true` without the `plugin list` command), `myapp foo a b` runs the executable `myapp-foo` from PATH with `a b` when `foo` is not a command:
@@ -1000,6 +1063,7 @@ Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion 
 The scripts are thin wrappers that ask the program itself through a hidden `__complete` command, so completion always matches the installed version and no command name or description ever becomes shell code. Completion follows the parser:
 
 - commands and aliases where they are valid, never hidden or shadowed ones;
+- user aliases (see the alias extension) as the first word, and after one, what its expansion takes;
 - plugins (see the plugin extension) as the first word, and file names after one;
 - the flags in scope (the command's, its ancestors' and the root's; long and short), leaving out flags already given, except repeatable ones, and the other flags of a mutually exclusive group once one is given;
 - values for flags and positional arguments registered with `cmd.Flags.SetCompletion(name, fn)`, for example `clix.CompleteValues("eu", "us")` or `clix.CompleteOptions(options...)` (the same `SelectOption` list a select prompt uses); `true`/`false` for `--switch=`;
@@ -1115,7 +1179,8 @@ Key methods:
 - `Flags() *FlagSet` - App-level (root command) flags, visible to every command
 - `AddExtension(ext Extension)` - Register an extension
 - `ApplyExtensions() error` - Apply all registered extensions
-- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does)
+- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does). With named configurations, `ConfigFile` is the file of the configuration in effect
+- `EnableConfigurations()`, `Configuration()`, `Configurations()`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` - Named configurations (see [Named configurations](#named-configurations))
 - `IsInteractive() bool` - Whether a missing required flag will be prompted for (see Non-interactive use)
 - `SaveConfig() error` - Persist `Config` values to the configuration file
 
