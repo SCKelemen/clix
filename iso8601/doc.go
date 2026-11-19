@@ -1,5 +1,5 @@
-// Package iso8601 parses and formats dates and times of day in the
-// formats of ISO 8601-1:2019, "Date and time — Representations for
+// Package iso8601 parses and formats dates, times of day and durations in
+// the formats of ISO 8601-1:2019, "Date and time — Representations for
 // information interchange — Part 1: Basic rules", and its internet profile,
 // RFC 3339 §5.6. RFC 3339 Appendix A collects ABNF for ISO 8601:
 // https://datatracker.ietf.org/doc/html/rfc3339#appendix-A.
@@ -48,9 +48,24 @@
 // [FormatTime] writes the RFC 3339 profile, the same as
 // [time.RFC3339Nano]: fractional seconds appear only when non-zero.
 //
+// # Durations
+//
+// [ParseDuration] accepts the format with designators (§5.5.2),
+// P[n]Y[n]M[n]W[n]D[T[n]H[n]M[n]S], with a decimal fraction on the
+// smallest component and a leading "-" for a negative duration (an
+// ISO 8601-2:2019 §4.4.1.9 extension). It also accepts weeks combined with
+// other components (P1W2D), an ISO 8601-2:2019 extension; ISO 8601-1:2019
+// itself has PnW only on its own.
+//
+// A [Duration] keeps the nominal calendar components (years, months, weeks,
+// days) apart from the exact time (hours, minutes, seconds), because a
+// calendar day is not always 24 hours. [Duration.AddTo] applies it to a
+// time.Time with calendar arithmetic, and [Duration.Exact] converts it to a
+// [time.Duration] when it has no years or months.
+//
 // # Errors
 //
-// The parser returns a [*ParseError] that names the input and the byte
+// Both parsers return a [*ParseError] that names the input and the byte
 // offset at which the problem was found:
 //
 //	iso8601: invalid time "2026-11-19T10:30:00+0100" at offset 22: basic-format offset in an extended-format value (expected ':')

@@ -6,7 +6,7 @@ import (
 	"unicode/utf8"
 )
 
-// ParseError reports an input that [ParseTime] rejected.
+// ParseError reports an input that [ParseTime] or [ParseDuration] rejected.
 // It records the whole input and the byte offset at which the problem was
 // found, so a caller can point at the offending character.
 type ParseError struct {
