@@ -1105,3 +1105,7 @@ Dependabot never changes a module path. A future major version would live at a n
 ## License
 
 `clix` is available under the [MIT License](LICENSE).
+
+## Packages
+
+- [`iso8601`](iso8601): parse and format ISO 8601 / RFC 3339 dates, times and durations, using only the standard library.

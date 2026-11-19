@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Context.Int`, `Int64`, `Float64`, `Duration` and `EffectiveDuration`.
 - Short flag clusters (`-xv`), attached short values (`-fa.tar`) and negative numbers as positional arguments (`add -5 3`). A cluster written before the command that mixes the command's switches with a flag that takes a value must use `=`: `moln -fp=p1 deploy`.
 - A "Routing" section in the README that states how arguments are matched, backed by a table-driven test (`routing_test.go`).
+- Package `iso8601` (stdlib only): `ParseTime` for ISO 8601-1:2019 calendar, ordinal and week dates and date-times in the basic or extended format, `FormatTime` for the RFC 3339 profile, and `Duration` with `ParseDuration`, `FormatDuration`, `FromStd`, `Exact`, `AddTo` and text marshaling. Errors are `*iso8601.ParseError` values with the input and byte offset.
 
 ### Changed
 
