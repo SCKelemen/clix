@@ -93,13 +93,12 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		}
 	}
 
-	// Count user-defined children (groups or commands, excluding default commands like help, config, autocomplete)
-	userChildren := a.countUserChildren(cmd)
-
-	// If command has user-defined children:
-	// - If it has a Run handler, execute it (command with children can have default behavior)
-	// - If it has no Run handler, show help (group behavior)
-	if userChildren > 0 && cmd.Run == nil {
+	// A command with children:
+	// - with a Run handler, runs it (a command with children can have
+	//   default behavior);
+	// - without one, is a group and shows help. This includes a root whose
+	//   only children were added by extensions (help, version, ...).
+	if len(cmd.Children) > 0 && cmd.Run == nil {
 		return a.printCommandHelp(cmd)
 	}
 
@@ -508,7 +507,8 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 		return false, nil
 	}
 	if err := setAndValidate(flag, val); err != nil {
-		return false, fmt.Errorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
+		// A usage error, like the same value on the command line.
+		return false, usageErrorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
 	}
 	flag.set = true
 	flag.source = SourceEnvVar
@@ -587,7 +587,7 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 		}
 	}
 	if err := setAndValidate(flag, val); err != nil {
-		return false, fmt.Errorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, key, err)
+		return false, usageErrorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, key, err)
 	}
 	flag.set = true
 	flag.source = SourceConfigFile
@@ -700,19 +700,4 @@ func checkValue(v Value, raw string) error {
 func (a *App) printCommandHelp(cmd *Command) error {
 	helper := HelpRenderer{App: a, Command: cmd}
 	return helper.Render(a.stdout())
-}
-
-// countUserChildren returns the count of child commands/groups that are not extension commands.
-func (a *App) countUserChildren(cmd *Command) int {
-	if cmd == nil || len(cmd.Children) == 0 {
-		return 0
-	}
-
-	count := 0
-	for _, child := range cmd.Children {
-		if !child.IsExtensionCommand {
-			count++
-		}
-	}
-	return count
 }

@@ -429,9 +429,11 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 				return val, SourceEnvVar, true
 			}
 		}
-		// Keys that are not flags only have the APP_KEY default.
+		// Keys that are not flags only have the APP_KEY default. As for
+		// flags, an empty variable counts as unset, so it does not hide
+		// the config file.
 		if len(hits) == 0 {
-			if val, ok := os.LookupEnv(ctx.App.envVarName(key)); ok {
+			if val, ok := os.LookupEnv(ctx.App.envVarName(key)); ok && val != "" {
 				return val, SourceEnvVar, true
 			}
 		}
