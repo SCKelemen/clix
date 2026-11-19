@@ -5,26 +5,28 @@
 // # The jq subset
 //
 // --jq is implemented in clix with the standard library only, as a strict
-// subset of jq 1.7. Results within the subset are exactly those of jq
-// 1.7.1 (built with decNumber, as jq is by default), which differential
-// tests and a fuzzer check against the real jq. Anything outside the
-// subset is an error that says it "is not supported in clix --jq", never
-// a different result.
+// subset of jq. Results within the subset are exactly those of jq 1.8.1,
+// the current release (built with decNumber, as jq is by default), which
+// differential tests and a fuzzer check against the real jq. Anything
+// outside the subset is an error that says it "is not supported in clix
+// --jq", never a different result.
 //
 // Supported:
 //
 //   - Paths: ., .. (recursive descent), .name, ."name", .["name"], .[e],
 //     .[n] (negative from the end), .[] (array elements or object values),
-//     chained after any term (.a.b, .a[0], (e).a), and ? after an index or
-//     iteration (.a?, .[]?).
+//     chained after any term (.a.b, .a[0], (e).a, (e)?.a), and ? after an
+//     index or iteration (.a?, .[]?).
 //   - Operators: |, the comma, //, or, and, ==, !=, <, <=, >, >= (jq's
-//     ordering; comparisons do not chain), e? after any expression, and
+//     ordering; comparisons do not chain), t? after any term, and
 //     parentheses.
 //   - Values: number, string (with escapes and "\(e)" interpolation),
 //     true, false and null literals, a negative number literal, [e], [],
 //     {a: e}, {"a": e}, {(e): e}, {"\(e)": e}, {a}, keyword keys, if c
 //     then a elif c2 then b else d end (elif and else optional), and #
-//     comments.
+//     comments (a backslash before the newline continues one). As in jq
+//     1.8, an object value is any expression without a comma, such as
+//     {a: .x == 1} or {a: .x // 1}.
 //   - Functions: empty, not, length, keys, keys_unsorted, has(k),
 //     to_entries, first, last, first(f), last(f), select(f), map(f),
 //     join(sep), tostring, tojson, ascii_downcase, ascii_upcase, type,
@@ -36,9 +38,10 @@
 // ?//, $__loc__, slices, format strings (@csv "..."), other formats, and
 // every other builtin.
 //
-// Numbers keep the text they were written with, as in jq 1.7 (1.0 stays
-// 1.0, 1e2 prints 1E+2, 100000000000000000001 is not rounded), and two
-// such numbers compare exactly. test(re) takes Go's RE2 syntax, which
+// Numbers keep the text they were written with, as in jq 1.8 (1.0 stays
+// 1.0, 1e2 prints 1E+2, 100000000000000000001 is not rounded), also
+// through unary minus and length (-1.0 is -1.0, -0 is 0), and two such
+// numbers compare exactly. test(re) takes Go's RE2 syntax, which
 // runs in linear time, restricted to what jq's Oniguruma reads the same
 // way; \d, \w, \s, \b and their negations, POSIX classes, inline flags,
 // lookaround, backreferences and regex flags are rejected because the

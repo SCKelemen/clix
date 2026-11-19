@@ -3,15 +3,32 @@ package format_test
 import (
 	"bytes"
 	"os/exec"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 )
 
-// --jq prints what "jq -r" prints for the --json output. Skipped when jq
-// is not installed; internal/jq has the full differential tests.
+// --jq prints what "jq -r" prints for the --json output. The expectations
+// follow jq 1.8.1, so the test is skipped when jq is not installed or is
+// older than 1.8; internal/jq has the full differential tests.
 func TestJQMatchesRealJQ(t *testing.T) {
 	jqPath, err := exec.LookPath("jq")
 	if err != nil {
 		t.Skip("jq is not installed")
+	}
+	version, err := exec.Command(jqPath, "--version").Output()
+	if err != nil {
+		t.Skipf("jq --version: %v", err)
+	}
+	m := regexp.MustCompile(`^jq-(\d+)\.(\d+)`).FindStringSubmatch(strings.TrimSpace(string(version)))
+	if m == nil {
+		t.Skipf("unrecognized jq version %q", version)
+	}
+	if major, _ := strconv.Atoi(m[1]); major == 1 {
+		if minor, _ := strconv.Atoi(m[2]); minor < 8 {
+			t.Skipf("%s is older than jq 1.8: the expectations follow jq 1.8.1", strings.TrimSpace(string(version)))
+		}
 	}
 	app, out, ran := writeApp(t)
 	for _, tc := range []struct {
