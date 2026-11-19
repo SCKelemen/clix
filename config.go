@@ -371,19 +371,26 @@ func (m *ConfigManager) numeric(key string) (string, bool) {
 //
 // Config files often hold credentials or project identifiers, so a missing
 // directory is created with mode 0700 and the file is written with mode
-// 0600. The file is replaced atomically via a temporary file and rename.
+// 0600. The file is replaced atomically: the YAML is written to a
+// temporary file in the same directory, synced, and renamed over the old
+// file. When path is a symbolic link (for example, into a dotfiles
+// repository), the file it points to is replaced and the link is kept.
 func (m *ConfigManager) Save(path string) error {
 	if m.values == nil {
 		return nil
 	}
 
-	dir := filepath.Dir(path)
+	target, err := resolveSymlinks(path)
+	if err != nil {
+		return err
+	}
+	dir := filepath.Dir(target)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 
 	// os.CreateTemp creates the file with mode 0600.
-	file, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	file, err := os.CreateTemp(dir, filepath.Base(target)+".*.tmp")
 	if err != nil {
 		return err
 	}
@@ -393,15 +400,47 @@ func (m *ConfigManager) Save(path string) error {
 		os.Remove(tmp)
 		return err
 	}
+	if err := file.Sync(); err != nil {
+		file.Close()
+		os.Remove(tmp)
+		return err
+	}
 	if err := file.Close(); err != nil {
 		os.Remove(tmp)
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	if err := os.Rename(tmp, target); err != nil {
 		os.Remove(tmp)
 		return err
 	}
 	return nil
+}
+
+// resolveSymlinks follows path while it is a symbolic link and returns the
+// file it finally names, which need not exist yet.
+func resolveSymlinks(path string) (string, error) {
+	current := path
+	for range 255 {
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			return current, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink == 0 {
+			return current, nil
+		}
+		link, err := os.Readlink(current)
+		if err != nil {
+			return "", err
+		}
+		if !filepath.IsAbs(link) {
+			link = filepath.Join(filepath.Dir(current), link)
+		}
+		current = link
+	}
+	return "", fmt.Errorf("config file %s: too many levels of symbolic links", path)
 }
 
 // writeYAML encodes the values as a flat YAML mapping.
