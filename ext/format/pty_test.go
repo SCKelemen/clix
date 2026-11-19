@@ -67,3 +67,38 @@ func TestListFlagsOnTerminal(t *testing.T) {
 		t.Errorf("on a terminal:\ngot  %q\nwant %q", got, want)
 	}
 }
+
+// A gcloud format prints the same on a terminal as in a pipe, as gcloud's
+// printers do: headings and alignment are not terminal features, and
+// nothing is truncated or styled. Box characters follow the locale.
+func TestProjectionOnTerminal(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("NO_COLOR", "")
+	term := ptytest.New(t)
+	app := clix.NewApp("probe", clix.WithAppOut(term.TTY), clix.WithAppErr(&bytes.Buffer{}), clix.WithAppInteractive(clix.InteractiveNever))
+	app.AddExtension(format.Extension{Projections: true})
+	app.Root.AddCommand(clix.NewCommand("list", clix.WithCommandRun(func(ctx *clix.Context) error {
+		return format.Write(ctx, wRepos)
+	})))
+	for _, tc := range []struct {
+		locale string
+		args   []string
+		want   string
+	}{
+		{"en_US.UTF-8", []string{"list", "--format", "table(name, url)"}, "NAME  URL\nclix  https://example.com/clix\njq    https://example.com/jq\n"},
+		{"en_US.UTF-8", []string{"list", "--format", "table[box](name)"}, "┌──────┐\n│ NAME │\n├──────┤\n│ clix │\n│ jq   │\n└──────┘\n"},
+		{"C", []string{"list", "--format", "table[box](name)"}, "+------+\n| NAME |\n+------+\n| clix |\n| jq   |\n+------+\n"},
+	} {
+		t.Setenv("LC_ALL", tc.locale)
+		term.ResetOutput()
+		if err := app.Run(context.Background(), tc.args); err != nil {
+			t.Fatalf("%q: %v", tc.args, err)
+		}
+		got := strings.ReplaceAll(term.WaitOutput(t, strings.ReplaceAll(tc.want, "\n", "\r\n"), 5*time.Second), "\r\n", "\n")
+		if got != tc.want {
+			t.Errorf("%q (LC_ALL=%s) on a terminal:\ngot  %q\nwant %q", tc.args, tc.locale, got, tc.want)
+		}
+	}
+}

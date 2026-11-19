@@ -1,0 +1,4 @@
+CPUS  MEMORY_GB  PREEMPTIBLE  LABELS                          ITEMS                            OWNER
+2     4.0        False        {'env': 'prod', 'team': 'web'}  ['http-server', 'https-server']  山田太郎
+16    15.5       True         {'env': 'dev'}                  []                               ops
+8     32.0       False        {}                              ['db', 'no-ip']

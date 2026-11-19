@@ -1,0 +1,3 @@
+web-1              http-server,https-server    2
+batch-worker-12                                0
+db                 db,no-ip                    2

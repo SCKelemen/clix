@@ -1,0 +1,12 @@
+---
+description = Front end, serves the public site
+name = web-1
+status = RUNNING
+---
+description = "Nightly batch jobs.\nRestarted by the scheduler; see runbook \"batch\"."
+name = batch-worker-12
+status = TERMINATED
+---
+description = 
+name = db
+status = RUNNING

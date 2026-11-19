@@ -81,7 +81,12 @@ func (e Extension) Extend(app *clix.App) error {
 		if e.Projections {
 			usage = "Output format: json, yaml, text, or NAME[ATTRIBUTES](PROJECTION) with " + strings.Join(projection.Names, ", ")
 			validate = validateProjectionFormat
-			names = append(slices.Clone(formats), projection.Names...)
+			names = slices.Clone(formats)
+			for _, n := range projection.Names {
+				if !slices.Contains(names, n) {
+					names = append(names, n)
+				}
+			}
 		}
 		fs.Var(clix.VarOptions{
 			FlagOptions: clix.FlagOptions{

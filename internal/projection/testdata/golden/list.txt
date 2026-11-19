@@ -1,0 +1,39 @@
+ - cpus: 2
+   creationTimestamp: 2026-01-15T09:30:00.000-08:00
+   description: Front end, serves the public site
+   labels: {'env': 'prod', 'team': 'web'}
+   machineType: https://www.googleapis.com/compute/v1/projects/demo/zones/us-central1-a/machineTypes/e2-medium
+   memoryGb: 4.0
+   name: web-1
+   networkInterfaces: [{'name': 'nic0', 'networkIP': '10.128.0.2', 'accessConfigs': [{'natIP': '34.1.2.3'}]}]
+   owner: 山田太郎
+   preemptible: False
+   status: RUNNING
+   tags: {'items': ['http-server', 'https-server']}
+   zone: https://www.googleapis.com/compute/v1/projects/demo/zones/us-central1-a
+ - cpus: 16
+   creationTimestamp: 2025-11-02T23:01:12.345-08:00
+   description: Nightly batch jobs.
+Restarted by the scheduler; see runbook "batch".
+   labels: {'env': 'dev'}
+   machineType: https://www.googleapis.com/compute/v1/projects/demo/zones/europe-west1-b/machineTypes/n2-highcpu-16
+   memoryGb: 15.5
+   name: batch-worker-12
+   networkInterfaces: [{'name': 'nic0', 'networkIP': '10.132.0.7'}, {'name': 'nic1', 'networkIP': '192.168.1.4'}]
+   owner: ops
+   preemptible: True
+   status: TERMINATED
+   tags: {'items': []}
+   zone: https://www.googleapis.com/compute/v1/projects/demo/zones/europe-west1-b
+ - cpus: 8
+   creationTimestamp: 2024-06-30T00:00:00.000-07:00
+   description: 
+   labels: {}
+   machineType: https://www.googleapis.com/compute/v1/projects/demo/zones/us-central1-a/machineTypes/n2-standard-8
+   memoryGb: 32.0
+   name: db
+   networkInterfaces: [{'name': 'nic0', 'networkIP': '10.128.0.9'}]
+   preemptible: False
+   status: RUNNING
+   tags: {'items': ['db', 'no-ip']}
+   zone: https://www.googleapis.com/compute/v1/projects/demo/zones/us-central1-a

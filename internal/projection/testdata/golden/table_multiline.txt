@@ -1,0 +1,5 @@
+NAME             DESCRIPTION                                       OWNER
+web-1            Front end, serves the public site                 山田太郎
+batch-worker-12  Nightly batch jobs.                               ops
+                 Restarted by the scheduler; see runbook "batch".
+db

@@ -1,0 +1,4 @@
+STATUS      NAME             CPUS
+RUNNING     web-1            2
+RUNNING     db               8
+TERMINATED  batch-worker-12  16

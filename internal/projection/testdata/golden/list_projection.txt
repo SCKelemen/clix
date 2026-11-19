@@ -1,0 +1,7 @@
+Instances
+ - web-1
+   RUNNING
+ - batch-worker-12
+   TERMINATED
+ - db
+   RUNNING

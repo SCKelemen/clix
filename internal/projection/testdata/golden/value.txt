@@ -1,0 +1,3 @@
+web-1	http-server;https-server	env=prod;team=web	4.0
+batch-worker-12		env=dev	15.5
+db	db;no-ip		32.0

@@ -1,0 +1,5 @@
+name,status,cpus,memory_gb,preemptible,items,labels,description
+web-1,RUNNING,2,4.0,False,http-server;https-server,env=prod;team=web,"Front end, serves the public site"
+batch-worker-12,TERMINATED,16,15.5,True,,env=dev,"Nightly batch jobs.
+Restarted by the scheduler; see runbook ""batch""."
+db,RUNNING,8,32.0,False,db;no-ip,,

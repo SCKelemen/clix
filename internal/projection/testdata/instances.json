@@ -1,0 +1,47 @@
+[
+  {
+    "name": "web-1",
+    "zone": "https://www.googleapis.com/compute/v1/projects/demo/zones/us-central1-a",
+    "machineType": "https://www.googleapis.com/compute/v1/projects/demo/zones/us-central1-a/machineTypes/e2-medium",
+    "status": "RUNNING",
+    "cpus": 2,
+    "memoryGb": 4.0,
+    "preemptible": false,
+    "creationTimestamp": "2026-01-15T09:30:00.000-08:00",
+    "description": "Front end, serves the public site",
+    "owner": "山田太郎",
+    "labels": {"env": "prod", "team": "web"},
+    "tags": {"items": ["http-server", "https-server"]},
+    "networkInterfaces": [{"name": "nic0", "networkIP": "10.128.0.2", "accessConfigs": [{"natIP": "34.1.2.3"}]}]
+  },
+  {
+    "name": "batch-worker-12",
+    "zone": "https://www.googleapis.com/compute/v1/projects/demo/zones/europe-west1-b",
+    "machineType": "https://www.googleapis.com/compute/v1/projects/demo/zones/europe-west1-b/machineTypes/n2-highcpu-16",
+    "status": "TERMINATED",
+    "cpus": 16,
+    "memoryGb": 15.5,
+    "preemptible": true,
+    "creationTimestamp": "2025-11-02T23:01:12.345-08:00",
+    "description": "Nightly batch jobs.\nRestarted by the scheduler; see runbook \"batch\".",
+    "owner": "ops",
+    "labels": {"env": "dev"},
+    "tags": {"items": []},
+    "networkInterfaces": [{"name": "nic0", "networkIP": "10.132.0.7"}, {"name": "nic1", "networkIP": "192.168.1.4"}]
+  },
+  {
+    "name": "db",
+    "zone": "https://www.googleapis.com/compute/v1/projects/demo/zones/us-central1-a",
+    "machineType": "https://www.googleapis.com/compute/v1/projects/demo/zones/us-central1-a/machineTypes/n2-standard-8",
+    "status": "RUNNING",
+    "cpus": 8,
+    "memoryGb": 32.0,
+    "preemptible": false,
+    "creationTimestamp": "2024-06-30T00:00:00.000-07:00",
+    "description": "",
+    "owner": null,
+    "labels": {},
+    "tags": {"items": ["db", "no-ip"]},
+    "networkInterfaces": [{"name": "nic0", "networkIP": "10.128.0.9"}]
+  }
+]

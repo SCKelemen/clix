@@ -1,0 +1,4 @@
+NAME             ENV   TEAM  NETWORK_INTERFACES_NAME  NETWORK_INTERFACES_NAME
+web-1            prod  web   ['nic0']                 nic0
+batch-worker-12  dev         ['nic0', 'nic1']         nic0
+db                           ['nic0']                 nic0
