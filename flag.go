@@ -358,7 +358,7 @@ func (o *StringVarOptions) merge(v StringVarOptions) {
 // Options can be used to build flags:
 //
 //	// Using functional options
-//	app.Flags().StringVar(WithFlagName("project"), WithFlagShort("p"), WithFlagUsage("Project name"), WithFlagValue(&project))
+//	app.Flags().StringVar(clix.WithFlagName("project"), clix.WithFlagShort("p"), clix.WithFlagUsage("Project name"), clix.WithStringValue(&project))
 //
 //	// Using struct (primary API)
 //	app.Flags().StringVar(clix.StringVarOptions{...})

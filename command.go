@@ -25,8 +25,8 @@ type Hook func(ctx *Context) error
 //
 //	// Create a group (organizes child commands)
 //	projectGroup := clix.NewGroup("project", "Manage projects",
-//		clix.NewCommand("list", "List projects", listProjects),
-//		clix.NewCommand("get", "Get a project", getProject),
+//		clix.NewCommand("list", clix.WithCommandShort("List projects"), clix.WithCommandRun(listProjects)),
+//		clix.NewCommand("get", clix.WithCommandShort("Get a project"), clix.WithCommandRun(getProject)),
 //	)
 //
 //	// Create a command (executable)
@@ -153,21 +153,17 @@ func NewCommand(name string, opts ...CommandOption) *Command {
 // NewGroup constructs a Command that acts as a group (interior node).
 // Groups organize child commands but do not execute (no Run handler).
 // Groups are used to create hierarchical command structures.
-// Accepts optional CommandOption arguments for additional configuration.
+// NewGroup takes the group's children, not CommandOption values; set other
+// fields on the returned Command, or apply options to it yourself.
 //
-//	// Struct-based (primary API)
 //	group := clix.NewGroup("project", "Manage projects",
-//		clix.NewCommand("list", ...),
-//		clix.NewCommand("get", ...),
+//		clix.NewCommand("list", clix.WithCommandRun(listProjects)),
+//		clix.NewCommand("get", clix.WithCommandRun(getProject)),
 //	)
 //	group.Long = "Detailed description..."
 //
-//	// Functional options
-//	group := clix.NewGroup("project", "Manage projects",
-//		clix.NewCommand("list", ...),
-//		clix.NewCommand("get", ...),
-//		WithCommandLong("Detailed description..."),
-//	)
+//	// Options can still be applied after construction:
+//	clix.WithCommandAliases("projects").ApplyCommand(group)
 func NewGroup(name, short string, children ...*Command) *Command {
 	cmd := &Command{
 		Name:     name,

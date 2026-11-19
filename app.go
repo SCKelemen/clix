@@ -27,12 +27,15 @@ const (
 //	app := clix.NewApp("myapp")
 //	app.Description = "A sample CLI application"
 //	app.Root = clix.NewGroup("myapp", "Main command",
-//		clix.NewCommand("hello", "Say hello", func(ctx *clix.Context) error {
-//			fmt.Println("Hello, World!")
-//			return nil
-//		}),
+//		clix.NewCommand("hello",
+//			clix.WithCommandShort("Say hello"),
+//			clix.WithCommandRun(func(ctx *clix.Context) error {
+//				fmt.Println("Hello, World!")
+//				return nil
+//			}),
+//		),
 //	)
-//	app.Run(context.Background(), nil)
+//	app.Main(context.Background())
 type App struct {
 	// Name is the application name, used in help output and configuration paths.
 	Name string
@@ -149,9 +152,10 @@ type AppOption interface {
 
 // NewApp constructs an application with sensible defaults. A minimal root command
 // is created automatically to hold default flags (help). You can replace
-// it with your own root command if needed: app.Root = clix.NewCommand("myroot")
+// it with your own root command if needed: app.Root = clix.NewCommand("myroot").
+// Flags already registered with app.Flags() move to the new root at Run.
 //
-// Example - three API styles:
+// Example - two API styles:
 //
 //	// 1. Struct-based (primary API)
 //	app := clix.NewApp("myapp")
@@ -163,11 +167,6 @@ type AppOption interface {
 //		clix.WithAppDescription("My application"),
 //		clix.WithAppVersion("1.0.0"),
 //	)
-//
-//	// 3. Builder-style
-//	app := clix.NewApp("myapp").
-//		SetDescription("My application").
-//		SetVersion("1.0.0")
 //
 // Note: While you can set Version directly, use the version extension to get
 // `cli --version` and `cli version` commands. The extension will set this field.
