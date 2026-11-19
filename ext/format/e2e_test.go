@@ -164,16 +164,15 @@ func TestFormatE2E_ConfigKey(t *testing.T) {
 // --format.
 func TestFormatE2E_AppShortFlagWins(t *testing.T) {
 	cases := []struct {
-		name    string
-		pending bool
-		setup   func(t *testing.T, app *clix.App, force *bool)
+		name  string
+		setup func(t *testing.T, app *clix.App, force *bool)
 	}{
-		{"app flag before AddExtension", false, nil},
-		{"app flag after AddExtension", false, func(t *testing.T, app *clix.App, force *bool) {
+		{"app flag before AddExtension", nil},
+		{"app flag after AddExtension", func(t *testing.T, app *clix.App, force *bool) {
 			app.AddExtension(format.Extension{})
 			addForce(app, force)
 		}},
-		{"app flag after a first Run", true, func(t *testing.T, app *clix.App, force *bool) {
+		{"app flag after a first Run", func(t *testing.T, app *clix.App, force *bool) {
 			app.AddExtension(format.Extension{})
 			if err := app.Run(context.Background(), []string{"get"}); err != nil {
 				t.Fatal(err)
@@ -183,9 +182,6 @@ func TestFormatE2E_AppShortFlagWins(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.pending {
-				t.Skip("pending core precedence rule (#36)")
-			}
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 			out := &bytes.Buffer{}
 			app := clix.NewApp("probe", clix.WithAppOut(out))

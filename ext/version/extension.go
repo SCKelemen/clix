@@ -122,6 +122,10 @@ func (s *versionSwitch) SetBool(b bool) error {
 
 func (s *versionSwitch) String() string { return strconv.FormatBool(s.on) }
 
+// Reset turns the switch off before the next Run of the same App, so a
+// --version in one Run does not carry over (see clix.FlagSet.Var).
+func (s *versionSwitch) Reset() { s.on = false }
+
 // Extend implements clix.Extension.
 func (e Extension) Extend(app *clix.App) error {
 	if app.Root == nil {

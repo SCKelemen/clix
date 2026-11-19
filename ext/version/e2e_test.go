@@ -168,19 +168,18 @@ func TestVersionE2E_AppShortFlagWins(t *testing.T) {
 		app.Flags().BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "verbose", Short: "v", Usage: "Verbose output"}, Value: verbose})
 	}
 	for _, tc := range []struct {
-		name    string
-		pending bool
-		setup   func(t *testing.T, app *clix.App, verbose *bool)
+		name  string
+		setup func(t *testing.T, app *clix.App, verbose *bool)
 	}{
-		{"app flag before AddExtension", false, func(t *testing.T, app *clix.App, verbose *bool) {
+		{"app flag before AddExtension", func(t *testing.T, app *clix.App, verbose *bool) {
 			addVerbose(app, verbose)
 			app.AddExtension(Extension{Version: "1.0.0"})
 		}},
-		{"app flag after AddExtension", false, func(t *testing.T, app *clix.App, verbose *bool) {
+		{"app flag after AddExtension", func(t *testing.T, app *clix.App, verbose *bool) {
 			app.AddExtension(Extension{Version: "1.0.0"})
 			addVerbose(app, verbose)
 		}},
-		{"app flag after a first Run", true, func(t *testing.T, app *clix.App, verbose *bool) {
+		{"app flag after a first Run", func(t *testing.T, app *clix.App, verbose *bool) {
 			app.AddExtension(Extension{Version: "1.0.0"})
 			if err := app.Run(context.Background(), []string{"--version"}); err != nil {
 				t.Fatal(err)
@@ -189,9 +188,6 @@ func TestVersionE2E_AppShortFlagWins(t *testing.T) {
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.pending {
-				t.Skip("pending core precedence rule (#36)")
-			}
 			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 			out := &bytes.Buffer{}
 			app := clix.NewApp("probe", clix.WithAppOut(out))

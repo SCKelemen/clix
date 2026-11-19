@@ -63,6 +63,10 @@ func (v *formatValue) Set(s string) error {
 
 func (v *formatValue) String() string { return v.s }
 
+// Reset lets one App run more than once: each Run starts from the
+// default again (see clix.FlagSet.Var).
+func (v *formatValue) Reset() { v.s = "" }
+
 // validateFormat accepts the formats in formats, ignoring case. An empty
 // value means the default, text.
 func validateFormat(value string) error {
