@@ -135,7 +135,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.printCommandHelp(cmd)
 	}
 
-	if configErr != nil {
+	if configErr != nil && !a.configErrorAllowed(cmd) {
 		return configErr
 	}
 
