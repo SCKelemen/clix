@@ -344,7 +344,7 @@ func (p *parser) comparison() (node, error) {
 // operand parses one operand of a binary operator and rejects the
 // operators clix does not implement when they follow it.
 func (p *parser) operand() (node, error) {
-	n, err := p.unary()
+	n, err := p.term()
 	if err != nil {
 		return nil, err
 	}
@@ -372,69 +372,19 @@ func (p *parser) rejectOperator() error {
 	return nil
 }
 
-// unary parses an operand with an optional minus sign, which clix allows
-// only in front of a number literal.
-func (p *parser) unary() (node, error) {
-	if !p.isOp("-") {
-		return p.postfix()
-	}
-	if err := p.advance(); err != nil {
-		return nil, err
-	}
-	n, err := p.postfix()
-	if err != nil {
-		return nil, err
-	}
-	return negate(p, n)
-}
-
-// negate returns the negation of a number literal, a computed number as in
-// jq ("-1.0" prints "-1").
+// negate returns the negation of a number literal. As in jq 1.8, a
+// literal stays a literal with its sign flipped (decNumber's minus, which
+// makes a zero positive: -0 is 0 and -0.0 is 0.0).
 func negate(p *parser, n node) (node, error) {
 	switch x := n.(type) {
 	case literalNode:
 		if num, ok := x.v.(number); ok {
-			return negatedNode{computed(-num.f)}, nil
+			return negatedNode{num.negated()}, nil
 		}
 	case negatedNode:
-		return negatedNode{computed(-x.v.f)}, nil
+		return negatedNode{x.v.negated()}, nil
 	}
 	return nil, p.unsupported("negation (unary -)", "only a negative number literal such as -1 is supported")
-}
-
-// postfix parses a term, an if expression, and any "?" after them.
-func (p *parser) postfix() (node, error) {
-	var n node
-	var err error
-	if p.tok.kind == tIdent {
-		switch p.tok.text {
-		case "if":
-			n, err = p.ifExpr()
-		case "reduce", "foreach":
-			return nil, p.unsupported(p.tok.text, "")
-		case "try", "catch":
-			return nil, p.unsupported("try/catch", `use the postfix "?" to ignore errors`)
-		case "label":
-			return nil, p.unsupported("label/break", "")
-		case "def":
-			return nil, p.unsupported("function definitions (def)", "")
-		case "import", "include":
-			return nil, p.unsupported("modules ("+p.tok.text+")", "")
-		}
-	}
-	if n == nil && err == nil {
-		n, err = p.term()
-	}
-	if err != nil {
-		return nil, err
-	}
-	for p.isOp("?") {
-		if err := p.advance(); err != nil {
-			return nil, err
-		}
-		n = tryNode{n}
-	}
-	return n, nil
 }
 
 func (p *parser) ifExpr() (node, error) {
@@ -484,22 +434,30 @@ func (p *parser) ifExpr() (node, error) {
 	return *n, nil
 }
 
-// term parses a term and its suffixes (.name, ."name", [e], [], and a "?"
-// right after one of them).
+// term parses a term and its suffixes, following jq 1.8's Term rule:
+// .name, ."name", [e], .[e], [] and .[], and "?". A "?" right after an
+// index or iteration makes that step optional (jq's INDEX_OPT and
+// EACH_OPT); any other "?" applies to the whole term so far (Term '?', a
+// try without catch). More suffixes may follow either: (e)?.a and
+// if ... end.a are terms.
 func (p *parser) term() (node, error) {
 	n, indexed, err := p.primary()
 	if err != nil {
 		return nil, err
 	}
 	for {
-		if indexed && p.isOp("?") {
+		switch {
+		case p.isOp("?"):
 			if err := p.advance(); err != nil {
 				return nil, err
 			}
-			n = optional(n)
-		}
-		indexed = true
-		switch {
+			if indexed {
+				n = optional(n)
+			} else {
+				n = tryNode{n}
+			}
+			indexed = false
+			continue
 		case p.tok.kind == tField:
 			n = indexNode{target: n, key: literalNode{p.tok.text}}
 			if err := p.advance(); err != nil {
@@ -530,6 +488,7 @@ func (p *parser) term() (node, error) {
 		default:
 			return n, nil
 		}
+		indexed = true
 	}
 }
 
@@ -650,7 +609,35 @@ func (p *parser) primary() (n node, indexed bool, err error) {
 			return n, false, err
 		}
 	case tIdent:
+		switch t.text {
+		case "if":
+			n, err := p.ifExpr()
+			return n, false, err
+		case "reduce", "foreach":
+			return nil, false, p.unsupported(t.text, "")
+		case "try", "catch":
+			return nil, false, p.unsupported("try/catch", `use the postfix "?" to ignore errors`)
+		case "label":
+			return nil, false, p.unsupported("label/break", "")
+		case "def":
+			return nil, false, p.unsupported("function definitions (def)", "")
+		case "import", "include":
+			return nil, false, p.unsupported("modules ("+t.text+")", "")
+		}
 		return p.call()
+	}
+	if p.isOp("-") {
+		// '-' Term: the minus applies to the whole term after it, suffixes
+		// included, as in jq 1.8.
+		if err := p.advance(); err != nil {
+			return nil, false, err
+		}
+		n, err := p.term()
+		if err != nil {
+			return nil, false, err
+		}
+		n, err = negate(p, n)
+		return n, false, err
 	}
 	return nil, false, p.unexpected()
 }
@@ -871,13 +858,15 @@ func constant(n node) (any, bool) {
 	return nil, false
 }
 
-// objectValue parses ": value". jq allows only terms joined by "|" here
-// (and a leading "-"), so {a: .x == 1} is a syntax error, as in jq.
+// objectValue parses ": value". As in jq 1.8 (DictExpr), the value is an
+// expression without a top-level comma: operands and the //, or, and and
+// comparison operators, joined by "|", so {a: .x == 1} and
+// {a: .x // 1} need no parentheses.
 func (p *parser) objectValue() (node, error) {
 	if err := p.advance(); err != nil { // :
 		return nil, err
 	}
-	left, err := p.objectTerm()
+	left, err := p.alt()
 	if err != nil {
 		return nil, err
 	}
@@ -885,28 +874,11 @@ func (p *parser) objectValue() (node, error) {
 		if err := p.advance(); err != nil {
 			return nil, err
 		}
-		right, err := p.objectTerm()
+		right, err := p.alt()
 		if err != nil {
 			return nil, err
 		}
 		left = pipeNode{left, right}
 	}
 	return left, nil
-}
-
-func (p *parser) objectTerm() (node, error) {
-	if p.isOp("-") {
-		if err := p.advance(); err != nil {
-			return nil, err
-		}
-		n, err := p.objectTerm()
-		if err != nil {
-			return nil, err
-		}
-		return negate(p, n)
-	}
-	if p.isKeyword("if") {
-		return nil, p.errorf(`unexpected "if": write (if ... end) in an object value`)
-	}
-	return p.term()
 }

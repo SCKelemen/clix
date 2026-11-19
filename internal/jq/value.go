@@ -20,10 +20,12 @@ import (
 // Values are immutable, so they may be shared freely.
 
 // number is a jq number. A literal (written in the input or in the filter)
-// keeps its decimal text, as jq 1.7 does when built with decNumber: it
+// keeps its decimal text, as jq 1.8 does when built with decNumber: it
 // prints as written (in canonical form) and compares exactly with other
-// literals. A computed number (the result of length, keys or negation)
-// has only its float64 value.
+// literals. Negating a literal and taking its length (absolute value)
+// keep it a literal, as in jq 1.8. A computed number (a length of a
+// string, array or object, or an array index from keys) has only its
+// float64 value.
 type number struct {
 	f   float64
 	lit *decimal
@@ -66,6 +68,29 @@ func (o *object) sortedKeys() []string {
 }
 
 func computed(f float64) number { return number{f: f} }
+
+// negated is -n, as jq 1.8's unary minus computes it: for a literal,
+// decNumber's minus (0 - n), which flips the sign of anything but zero
+// and makes a zero positive, keeping its digits and exponent.
+func (n number) negated() number {
+	if n.lit == nil {
+		return computed(-n.f)
+	}
+	d := *n.lit
+	d.neg = !d.neg && d.coef != "0"
+	return literalNumber(&d)
+}
+
+// abs is the absolute value of n, as jq 1.8's length of a number computes
+// it: for a literal, decNumber's abs, keeping its digits and exponent.
+func (n number) abs() number {
+	if n.lit == nil {
+		return computed(math.Abs(n.f))
+	}
+	d := *n.lit
+	d.neg = false
+	return literalNumber(&d)
+}
 
 func literalNumber(d *decimal) number { return number{f: d.float(), lit: d} }
 
@@ -151,7 +176,7 @@ func parseDecimal(s string) (*decimal, bool) {
 func isDigit(c byte) bool { return c >= '0' && c <= '9' }
 
 // String formats d the way decNumber's to-scientific-string does, which is
-// how jq 1.7 prints a literal: "1.0", "1E+2", "0.00001", "1.5E-7".
+// how jq 1.8 prints a literal: "1.0", "1E+2", "0.00001", "1.5E-7".
 func (d *decimal) String() string {
 	c := d.coef
 	adj := d.exp + len(c) - 1
@@ -187,7 +212,7 @@ func (d *decimal) String() string {
 	return b.String()
 }
 
-// float converts d to a float64 the way jq 1.7 does: it rounds d to 17
+// float converts d to a float64 the way jq 1.8 does: it rounds d to 17
 // significant digits (half up), then parses that. Out-of-range values
 // become ±Inf or 0.
 func (d *decimal) float() float64 {
@@ -276,7 +301,7 @@ func cmpInt(a, b int) int {
 	return 0
 }
 
-// cmpNumbers compares as jq 1.7 does: exactly when both are literals, and
+// cmpNumbers compares as jq 1.8 does: exactly when both are literals, and
 // as doubles otherwise.
 func cmpNumbers(a, b number) int {
 	if a.lit != nil && b.lit != nil {

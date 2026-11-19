@@ -377,7 +377,7 @@ func (g *fuzzGen) expr(d int) string {
 	}
 	switch g.r.Intn(16) {
 	case 0, 1:
-		return g.expr(d-1) + " | " + g.expr(d-1)
+		return g.expr(d-1) + g.pick([]string{" | ", " | ", " |\r\n", " | # note\n", " | # note \\\n still a note\n", " | # note \\\\\n"}) + g.expr(d-1)
 	case 2:
 		return g.expr(d-1) + ", " + g.expr(d-1)
 	case 3:
@@ -499,6 +499,9 @@ func (g *fuzzGen) term(d int) string {
 	case 12:
 		return paren(g.expr(d - 1))
 	case 13:
+		if g.decNum && g.r.Intn(2) == 0 {
+			return "-" + g.pick(fuzzLiteralNumbers)
+		}
 		return "-" + g.pick([]string{"1", "0", "1.5", "2"})
 	case 14:
 		return "@" + g.pick([]string{"tsv", "csv", "json", "text"})
@@ -517,13 +520,19 @@ func (g *fuzzGen) term(d int) string {
 // (e).a, [1,2][0] or {a: 1}.a?.
 func (g *fuzzGen) suffixed(d int) string {
 	var base string
-	switch g.r.Intn(4) {
+	switch g.r.Intn(6) {
 	case 0:
 		base = paren(g.expr(d))
 	case 1:
 		base = "[" + g.expr(d) + "]"
 	case 2:
 		base = g.objectCons(d)
+	case 3:
+		// jq 1.8: if ... end is a term that takes suffixes.
+		base = "if " + g.expr(d) + " then " + g.expr(d) + " else " + g.expr(d) + " end"
+	case 4:
+		// jq 1.8: e? is a term that takes suffixes.
+		base = paren(g.expr(d)) + "?"
 	default:
 		base = g.pick([]string{`"abc"`, "1", "null", "[1,2]", `{"a":1}`, "[]", "{}"})
 	}
@@ -572,12 +581,39 @@ func (g *fuzzGen) call1(d int) string {
 }
 
 // objectCons writes {...}; values are terms, as jq's grammar requires.
+// dictExpr returns an object value as jq 1.8 allows it without
+// parentheses (DictExpr): expressions with //, or, and, comparisons and
+// "|" but no top-level comma.
+func (g *fuzzGen) dictExpr(d int) string {
+	if d <= 0 {
+		return g.term(0)
+	}
+	switch g.r.Intn(7) {
+	case 0:
+		return g.dictExpr(d-1) + " | " + g.dictExpr(d-1)
+	case 1:
+		return g.term(d-1) + " // " + g.dictExpr(d-1)
+	case 2:
+		return g.term(d-1) + g.pick([]string{" and ", " or "}) + g.term(d-1)
+	case 3:
+		return g.term(d-1) + g.pick([]string{" == ", " != ", " < ", " >= "}) + g.term(d-1)
+	case 4:
+		return "if " + g.expr(d-1) + " then " + g.expr(d-1) + " else " + g.expr(d-1) + " end"
+	case 5:
+		return g.term(d-1) + "?"
+	}
+	return g.term(d)
+}
+
 func (g *fuzzGen) objectCons(d int) string {
 	var entries []string
 	for i := g.r.Intn(3); i >= 0; i-- {
 		value := g.path(0)
-		if d > 0 && g.r.Intn(2) == 0 {
+		switch {
+		case d > 0 && g.r.Intn(3) == 0:
 			value = paren(g.expr(d))
+		case d > 0 && g.r.Intn(2) == 0:
+			value = g.dictExpr(d)
 		}
 		switch g.r.Intn(5) {
 		case 0:

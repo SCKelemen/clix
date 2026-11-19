@@ -410,7 +410,7 @@ func length(v any) (any, error) {
 	case nil:
 		return computed(0), nil
 	case number:
-		return computed(math.Abs(x.f)), nil
+		return x.abs(), nil
 	case string:
 		n := 0
 		for range x {
@@ -481,11 +481,11 @@ func asciiCase(v any, upper bool) (any, error) {
 	return string(b), nil
 }
 
-// join is jq 1.7.1's
+// join is jq 1.8.1's definition (src/builtin.jq):
 //
 //	def join($x): reduce .[] as $i (null;
 //	    (if .==null then "" else .+$x end) +
-//	    ($i | if .==null then "" elif (type=="boolean" or type=="number") then tojson else . end)
+//	    ($i | if type=="boolean" or type=="number" then tostring else .//"" end)
 //	) // "";
 func join(v, sep any) (any, error) {
 	var acc any // null
@@ -652,12 +652,14 @@ func (ev *evaluator) call(c callNode, in any, emit emitFunc) error {
 			return emit(v)
 		}
 		if c.name == "last" {
+			// As in jq 1.8, last(empty) gives no output, like first(empty).
 			var last any
+			found := false
 			err := ev.eval(c.args[0], in, func(v any) error {
-				last = v
+				last, found = v, true
 				return nil
 			})
-			if err != nil {
+			if err != nil || !found {
 				return err
 			}
 			return emit(last)

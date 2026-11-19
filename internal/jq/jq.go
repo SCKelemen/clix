@@ -28,7 +28,7 @@ func Parse(expr string) (*Query, error) {
 
 // Write runs q on input (the text of one JSON value) and writes every
 // result to w followed by a newline: a string result raw (its text, as
-// jq -r prints it), any other result as jq 1.7 prints it by default
+// jq -r prints it), any other result as jq 1.8 prints it by default
 // (indented by two spaces). Results produced before a runtime error are
 // written; then the error is returned. Runtime errors are *RuntimeError
 // values with messages like jq's (`Cannot index string with string "a"`),

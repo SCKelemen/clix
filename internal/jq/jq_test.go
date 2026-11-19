@@ -49,9 +49,13 @@ var goldenCases = []struct {
 	{`{"\(1,2)"}`, `{"1":"x"}`, "{\n  \"1\": \"x\"\n}\n{\n  \"2\": null\n}\n", ""},
 	{"{(1): empty}", `null`, "", ""}, // a parse error; see TestParseErrors
 	{"1.0, 1e2, 1e-5, 1.5e-7, 100000000000000000001", `null`, "1.0\n1E+2\n0.00001\n1.5E-7\n100000000000000000001\n", ""},
-	{"-1.0, -0, (1e1000 | length), (123456789012345678 | length)", `null`, "-1\n-0\n1.7976931348623157e+308\n123456789012345680\n", ""},
+	// jq 1.8: unary minus and length keep a literal's digits; -0 is 0.
+	{"-1.0, -0, (1e1000 | length), (123456789012345678 | length)", `null`, "-1.0\n0\n1E+1000\n123456789012345678\n", ""},
+	{"-0.0, - -1, (-1.50 | length), (-0 | tostring)", `null`, "0.0\n1\n1.50\n0\n", ""},
+	{"length", `-123456789012345678901234567890`, "123456789012345678901234567890\n", ""},
+	{"-1 == -1.0, -0 == 0, (-2 | length) < 3", `null`, "true\ntrue\ntrue\n", ""},
 	{". == 100000000000000000000, . == 100000000000000000001, 1.0 == 1", `100000000000000000001`, "false\ntrue\ntrue\n", ""},
-	{"., length", `1e-7`, "1E-7\n1e-07\n", ""},
+	{"., length", `1e-7`, "1E-7\n1E-7\n", ""},
 	{"sort", `[3,1,null,"a",true,false,[1],{"a":1},1.0,1]`, "[\n  null,\n  false,\n  true,\n  1,\n  1.0,\n  1,\n  3,\n  \"a\",\n  [\n    1\n  ],\n  {\n    \"a\": 1\n  }\n]\n", ""},
 	{"sort_by(.a) | map(.b)", `[{"a":2,"b":1},{"a":1,"b":2},{"a":1,"b":3}]`, "[\n  2,\n  3,\n  1\n]\n", ""},
 	{"keys, keys_unsorted", `{"b":1,"a":2}`, "[\n  \"a\",\n  \"b\"\n]\n[\n  \"b\",\n  \"a\"\n]\n", ""},
@@ -64,7 +68,22 @@ var goldenCases = []struct {
 	{"length", `true`, "", "boolean (true) has no length"},
 	{"ascii_downcase, ascii_upcase", `"aBc É"`, "abc É\nABC É\n", ""},
 	{"[.[] | select(. > 1)]", `[1,2,3]`, "[\n  2,\n  3\n]\n", ""},
-	{"first, last, first(.[]|select(.>1)), [last(empty)]", `[1,2,3]`, "1\n3\n2\n[\n  null\n]\n", ""},
+	{"first, last, first(.[]|select(.>1)), [last(empty)]", `[1,2,3]`, "1\n3\n2\n[]\n", ""}, // jq 1.8: last(empty) is empty
+	// jq 1.8's grammar: an object value is an expression without a comma,
+	// and if ... end and e? are terms that take suffixes.
+	{"{a: .x == 1, b: .x // 1, c: if . then 1 else 2 end, d: 1?, e: -1.0 | length}", `null`,
+		"{\n  \"a\": false,\n  \"b\": 1,\n  \"c\": 2,\n  \"d\": 1,\n  \"e\": 1.0\n}\n", ""},
+	{"{a: .x or .y and true}", `{"x":false,"y":true}`, "{\n  \"a\": true\n}\n", ""},
+	{"if true then {\"a\":1} else 2 end.a, ([.[0]])?[0]", `[5]`, "1\n5\n", ""},
+	{"(1)?.b", `null`, "", `Cannot index number with`},
+	{"1 # the comment goes on \\\n 2", `null`, "1\n", ""},
+	{"[.[] | .a?.b]", `[{"a":{"b":1}},3]`, "[\n  1\n]\n", ""},
+	// jq 1.8's lexer: CR is whitespace, and a backslash continues a comment.
+	{"[1,\r\n2]", `null`, "[\n  1,\n  2\n]\n", ""},
+	{"[1, # comment \\\n 2,\n 3]", `null`, "[\n  1,\n  3\n]\n", ""},
+	{"[1, # comment \\\r\n 2,\r\n 3]", `null`, "[\n  1,\n  3\n]\n", ""},
+	{"[1, # comment \\\\\n 2]", `null`, "[\n  1,\n  2\n]\n", ""},
+	{"[1, # comment\r\n 2]", `null`, "[\n  1,\n  2\n]\n", ""},
 	{".a // \"none\"", `{"a":false}`, "none\n", ""},
 	{"if . then \"t\" elif . == false then \"f\" else \"n\" end", `null`, "n\n", ""},
 	{"[.[] | type]", `[null,true,1,"s",[],{}]`, "[\n  \"null\",\n  \"boolean\",\n  \"number\",\n  \"string\",\n  \"array\",\n  \"object\"\n]\n", ""},
@@ -217,9 +236,9 @@ func TestUnsupported(t *testing.T) {
 func TestParseErrors(t *testing.T) {
 	for _, filter := range []string{
 		"", " ", "# only a comment",
-		".a .", "..a", `.."a"`, "(1)?.b", "..?[0]", "if true then 1 else 2 end.a",
+		".a .", "..a", `.."a"`, "1, # the comment goes on \\\n 2", "{a: 1, 2}", "{a: 1 2}",
 		". == . == .", "1 < 2 < 3",
-		"[1,]", "{a: 1 == 1}", "{a: 1?}", "{a: .x // 1}", "{a: if . then 1 else 2 end}", "{1: 2}",
+		"[1,]", "{1: 2}",
 		"(", ")", "[", "{", "{a", "{a:", `"abc`, `"\x"`, `"\ud83d"`, `"\ude00"`, `"\(1"`, `"\()"`,
 		"if . then 1", "if . then 1 else 2", "if . 1 end", "@", "$", "!", ".[", ".[1",
 		"{(1): 2}", "{(true): 2}", "{([1]): 2}", "{({}): 2}", "{(1 == 1): 2}", "{(. | 1): 2}", "empty | {(null): 1}",

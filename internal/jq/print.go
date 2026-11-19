@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-// formatNumber formats n as jq 1.7 prints it: a literal in its canonical
+// formatNumber formats n as jq 1.8 prints it: a literal in its canonical
 // decimal form, a computed number like jq's jvp_dtoa_fmt.
 func formatNumber(n number) string {
 	if n.lit != nil {

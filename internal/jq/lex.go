@@ -64,20 +64,40 @@ func isIdentStart(c byte) bool {
 
 func isIdentChar(c byte) bool { return isIdentStart(c) || isDigit(c) }
 
-// skip skips whitespace and comments (# to the end of the line).
+// skip skips whitespace (spaces, tabs, newlines and carriage returns, as
+// in jq 1.8) and comments.
 func (l *lexer) skip() {
 	for l.pos < len(l.src) {
 		switch c := l.src[l.pos]; c {
 		case ' ', '\t', '\n', '\r':
 			l.pos++
 		case '#':
-			for l.pos < len(l.src) && l.src[l.pos] != '\n' {
-				l.pos++
-			}
+			l.pos = commentEnd(l.src, l.pos)
 		default:
 			return
 		}
 	}
+}
+
+// commentEnd returns the offset of the newline that ends the comment
+// starting at s[i] ('#'), or len(s). As in jq 1.8 ("Tcl-style" comments),
+// a backslash before a newline (or CRLF) continues the comment on the
+// next line, and two backslashes are an escaped backslash, so "\\" before
+// a newline does not.
+func commentEnd(s string, i int) int {
+	for i++; i < len(s); {
+		switch {
+		case s[i] == '\\' && i+1 < len(s) && (s[i+1] == '\\' || s[i+1] == '\n'):
+			i += 2
+		case s[i] == '\\' && i+2 < len(s) && s[i+1] == '\r' && s[i+2] == '\n':
+			i += 3
+		case s[i] == '\n':
+			return i
+		default:
+			i++
+		}
+	}
+	return len(s)
 }
 
 func (l *lexer) next() (token, error) {
@@ -320,9 +340,7 @@ func (l *lexer) matchParen(pos, nesting int) (int, error) {
 				return i, nil
 			}
 		case '#':
-			for i < len(s) && s[i] != '\n' {
-				i++
-			}
+			i = commentEnd(s, i)
 		case '"':
 			end, err := l.skipString(i, nesting)
 			if err != nil {

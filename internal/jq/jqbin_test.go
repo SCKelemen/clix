@@ -12,9 +12,14 @@ import (
 )
 
 // The differential tests compare Query.Write with the real jq (jq -r) on
-// the same input. They are skipped when jq is not installed, and need jq
-// 1.7 or later. When jq was built without decNumber (so it does not keep
-// number literals as written), cases marked literal are skipped.
+// the same input. The expectations follow jq 1.8.1, the current release,
+// which the Ubuntu CI runners have: its grammar (object values such as
+// {a: .x == 1}, "?" and if ... end as terms, \-continued comments) and its
+// numbers (unary minus and length keep a literal's digits; -0 is 0) differ
+// from jq 1.7's. The tests are skipped when jq is not installed or is
+// older than 1.8, with a message saying so. When jq was built without
+// decNumber (so it does not keep number literals as written), cases marked
+// literal are skipped.
 
 type jqBinary struct {
 	path    string
@@ -49,8 +54,8 @@ func findJQ() jqBinary {
 		}
 		major, _ := strconv.Atoi(m[1])
 		minor, _ := strconv.Atoi(m[2])
-		if major < 1 || (major == 1 && minor < 7) {
-			jqBin.skip = jqBin.version + " is older than jq 1.7"
+		if major < 1 || (major == 1 && minor < 8) {
+			jqBin.skip = jqBin.version + " is older than jq 1.8: the expectations follow jq 1.8.1, whose grammar and numbers differ from jq 1.7's (install jq 1.8 or later to run the differential tests)"
 			return
 		}
 		out, err = exec.Command(path, "-n", "1.0").Output()
