@@ -793,6 +793,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 			Label:    label,
 			Theme:    a.DefaultTheme,
 			Validate: promptValidator(flag),
+			Secret:   flag.Sensitive,
 		})
 		if err != nil {
 			if errors.Is(err, io.EOF) {

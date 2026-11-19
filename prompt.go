@@ -97,6 +97,11 @@ type PromptRequest struct {
 	// Default, or none, makes it Yes.
 	Confirm bool
 
+	// Secret reads a secret such as a password or token: the answer is
+	// never echoed or shown and is returned exactly as typed, without
+	// trimming spaces. See WithSecret.
+	Secret bool
+
 	// ContinueText is the text shown for the continue button in select prompts.
 	ContinueText string
 
@@ -138,6 +143,9 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 	if r.Confirm {
 		cfg.Confirm = true
 	}
+	if r.Secret {
+		cfg.Secret = true
+	}
 	if r.ContinueText != "" {
 		cfg.ContinueText = r.ContinueText
 	}
@@ -160,6 +168,7 @@ type PromptConfig struct {
 	Options              []SelectOption
 	MultiSelect          bool
 	Confirm              bool
+	Secret               bool
 	ContinueText         string
 	CommandHandler       PromptCommandHandler
 	KeyMap               PromptKeyMap
@@ -551,8 +560,10 @@ var DefaultPromptTheme = PromptTheme{
 // must not run concurrently.
 //
 // Confirm prompts accept y, yes, n and no (any case) and return "y" or "n".
-// Theme styles are written without their ANSI escapes when Out should not
-// get color (NO_COLOR, a pipe or file, TERM=dumb).
+// Secret prompts (WithSecret) turn echo off when In is a terminal and keep
+// the answer exactly as typed. Theme styles are written without their ANSI
+// escapes when Out should not get color (NO_COLOR, a pipe or file,
+// TERM=dumb).
 //
 // Example:
 //
@@ -606,7 +617,7 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 		label := st.render(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
-		if cfg.Default != "" {
+		if cfg.Default != "" && !cfg.Secret {
 			def := st.render(cfg.Theme.DefaultStyle, cfg.Default)
 			fmt.Fprintf(p.Out, " [%s]", def)
 		}
@@ -618,8 +629,14 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 
 		fmt.Fprint(p.Out, ": ")
 
-		value, err := readLine(ctx, p.In)
-		value = strings.TrimSpace(value)
+		var value string
+		var err error
+		if cfg.Secret {
+			value, err = readSecretLine(ctx, p.In, p.Out)
+		} else {
+			value, err = readLine(ctx, p.In)
+			value = strings.TrimSpace(value)
+		}
 		if err != nil {
 			return "", answer.Finish(err, invalid)
 		}

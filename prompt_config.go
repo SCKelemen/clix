@@ -176,6 +176,21 @@ func (t PromptTheme) Merge(o PromptTheme) PromptTheme {
 	return t
 }
 
+// WithSecret makes the prompt read a secret, such as a password or token
+// (functional option). The answer is never echoed or shown, and it is
+// returned exactly as typed: surrounding spaces are kept. On a terminal,
+// echo is turned off while the user types; when input is not a terminal,
+// a line is read as usual.
+//
+// Example:
+//
+//	token, err := prompter.Prompt(ctx, clix.WithLabel("API token"), clix.WithSecret())
+func WithSecret() PromptOption {
+	return TextPromptOption(func(cfg *PromptConfig) {
+		cfg.Secret = true
+	})
+}
+
 // ReadLine reads one line of prompt input from r and returns it without
 // its line ending ("\n" or "\r\n"). It never reads past the end of the
 // line, so prompts and other code can share r. It returns ctx.Err() as soon
