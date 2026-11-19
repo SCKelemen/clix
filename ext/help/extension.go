@@ -10,8 +10,8 @@ import (
 // Extension adds the help command to a clix app.
 // This provides command-based help similar to man pages:
 //
-//   - cli help                       - Show help for the root command
-//   - cli help --command [command]   - Show help for a specific command
+//   - cli help              - Show help for the root command
+//   - cli help [command]    - Show help for a specific command
 //
 // Note: Flag-based help (-h, --help) is handled by the core library
 // and does not require this extension. This extension only adds the
@@ -26,12 +26,12 @@ import (
 //
 //	app := clix.NewApp("myapp")
 //	app.AddExtension(help.Extension{})
-//	// Now your app has: myapp help --command [command]
+//	// Now your app has: myapp help [command]
 //
 //	// Users can now access help via:
 //	//   myapp help
-//	//   myapp help --command subcommand
-//	//   myapp help --command "subcommand nested"
+//	//   myapp help subcommand
+//	//   myapp help "subcommand nested"   (or --command "subcommand nested")
 type Extension struct {
 	// Extension has no configuration options.
 	// Simply add it to your app to enable the help command.
@@ -63,14 +63,15 @@ func findChild(cmd *clix.Command, name string) *clix.Command {
 func NewHelpCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("help")
 	cmd.Short = "Show help for commands"
-	cmd.Usage = fmt.Sprintf("%s help [--command <name>]", app.Name)
+	cmd.Usage = fmt.Sprintf("%s help [command]", app.Name)
 	cmd.IsExtensionCommand = true
 
 	var command string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:  "command",
-			Usage: "Command to show help for (space-separated for nested commands)",
+			Name:       "command",
+			Usage:      "Command to show help for (quote nested commands: \"group command\")",
+			Positional: true,
 		},
 		Value: &command,
 	})

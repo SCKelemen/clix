@@ -102,6 +102,34 @@ func TestHelpExtension(t *testing.T) {
 		}
 	})
 
+	t.Run("help takes the command as a positional argument", func(t *testing.T) {
+		app := clix.NewApp("test")
+		root := clix.NewCommand("test")
+		app.Root = root
+		group := clix.NewGroup("widgets", "Manage widgets")
+		get := clix.NewCommand("get")
+		get.Short = "Get a widget"
+		group.AddCommand(get)
+		root.AddCommand(group)
+		var output bytes.Buffer
+		app.Out = &output
+		app.AddExtension(Extension{})
+
+		if err := app.Run(context.Background(), []string{"help", "widgets"}); err != nil {
+			t.Fatalf("help widgets failed: %v", err)
+		}
+		if !strings.Contains(output.String(), "Manage widgets") {
+			t.Errorf("help widgets should describe the group, got: %s", output.String())
+		}
+		output.Reset()
+		if err := app.Run(context.Background(), []string{"help", "widgets get"}); err != nil {
+			t.Fatalf(`help "widgets get" failed: %v`, err)
+		}
+		if !strings.Contains(output.String(), "Get a widget") {
+			t.Errorf(`help "widgets get" should describe the nested command, got: %s`, output.String())
+		}
+	})
+
 	t.Run("flag-based help works without extension", func(t *testing.T) {
 		app := clix.NewApp("test")
 		root := clix.NewCommand("test")
