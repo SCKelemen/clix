@@ -906,3 +906,28 @@ func TestConformanceNoGoroutineLeaks(t *testing.T) {
 	_, _, _ = runRaw(t, []string{"x", "\r"}, clix.WithLabel("Name"))
 	_, _, _ = runRaw(t, []string{"\r"}, clix.WithLabel("Pick"), prompt.Select(envs))
 }
+
+// A secret prompt's validation message never shows what was typed, in
+// any mode.
+func TestConformanceSecretValidationRedacted(t *testing.T) {
+	v := clix.WithValidate(func(s string) error {
+		if s != "ok" {
+			return errors.New("token " + s + " is not valid")
+		}
+		return nil
+	})
+	for _, mode := range lineModes {
+		_, out, err := runLine(t, mode, "bad-SECRET\nok\n", clix.WithLabel("Token"), clix.WithSecret(), v)
+		if err != nil || strings.Contains(out, "SECRET") || !strings.Contains(out, "token [redacted] is not valid") {
+			t.Errorf("%s: err %v, output %q", mode, err, out)
+		}
+	}
+	p := raw(t, clix.WithLabel("Token"), clix.WithSecret(), v)
+	p.typeKeys(t, "b", "a", "d", "\r")
+	p.waitScreen(t, "token [redacted] is not valid")
+	p.typeKeys(t, "\x15", "o", "k", "\r")
+	p.mustFinish(t)
+	if strings.Contains(p.term.Output(), "bad") {
+		t.Fatal("secret shown")
+	}
+}

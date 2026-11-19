@@ -78,3 +78,13 @@ func TestDefaults(t *testing.T) {
 		t.Errorf("index defaults = %v, %v", got, ok)
 	}
 }
+
+func TestRedactSecret(t *testing.T) {
+	got := RedactSecret(`token "s3cr3t" is invalid (s3cr3t)`, "s3cr3t")
+	if got != "token [redacted] is invalid ([redacted])" {
+		t.Fatalf("got %q", got)
+	}
+	if RedactSecret("x", "") != "x" {
+		t.Fatal("empty secret")
+	}
+}

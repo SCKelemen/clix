@@ -655,6 +655,9 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 
 		if cfg.Validate != nil {
 			if err := cfg.Validate(value); err != nil {
+				if cfg.Secret {
+					err = errors.New(answer.RedactSecret(err.Error(), value))
+				}
 				invalid = err
 				p.printError(st, cfg, err.Error())
 				continue

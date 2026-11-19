@@ -635,7 +635,7 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 	}
 	if err := setAndValidate(flag, val); err != nil {
 		// A usage error, like the same value on the command line.
-		return false, usageErrorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
+		return false, usageErrorf("invalid value %s for --%s from environment variable %s: %w", shownValue(flag, val), flag.Name, name, redactErr(flag, err, val))
 	}
 	flag.set = true
 	flag.source = SourceEnvVar
@@ -713,7 +713,7 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 			slice.setItems(items)
 			if flag.Validate != nil {
 				if err := flag.Validate(slice.String()); err != nil {
-					return false, usageErrorf("invalid value %q for --%s from config file key %q: %w", slice.String(), flag.Name, key, err)
+					return false, usageErrorf("invalid value %s for --%s from config file key %q: %w", shownValue(flag, slice.String()), flag.Name, key, redactErr(flag, err, slice.String()))
 				}
 			}
 			flag.set = true
@@ -729,7 +729,7 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 		}
 	}
 	if err := setAndValidate(flag, val); err != nil {
-		return false, usageErrorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, key, err)
+		return false, usageErrorf("invalid value %s for --%s from config file key %q: %w", shownValue(flag, val), flag.Name, key, redactErr(flag, err, val))
 	}
 	flag.set = true
 	flag.source = SourceConfigFile
@@ -815,15 +815,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 // answers flag would accept: the value must parse for the flag's type and
 // then pass the flag's own Validate function.
 func promptValidator(flag *Flag) func(string) error {
-	return func(value string) error {
-		if err := checkValue(flag.Value, value); err != nil {
-			return err
-		}
-		if flag.Validate != nil {
-			return flag.Validate(value)
-		}
-		return nil
-	}
+	return flag.CheckValue
 }
 
 // checkValue reports whether raw parses for the built-in value types,

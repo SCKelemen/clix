@@ -3,6 +3,7 @@ package clix_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -41,5 +42,20 @@ func TestSecretPrompts(t *testing.T) {
 	clix.WithFlagSensitive().ApplyFlag(&fo)
 	if !fo.Sensitive {
 		t.Fatal("WithFlagSensitive")
+	}
+}
+
+// A validation message never shows the secret that was typed.
+func TestSecretValidationMessageIsRedacted(t *testing.T) {
+	out := &bytes.Buffer{}
+	tp := clix.TextPrompter{In: strings.NewReader("bad-SECRET\nok\n"), Out: out}
+	_, err := tp.Prompt(context.Background(), clix.WithLabel("Token"), clix.WithSecret(), clix.WithValidate(func(v string) error {
+		if v != "ok" {
+			return errors.New("token " + v + " is not valid")
+		}
+		return nil
+	}))
+	if err != nil || strings.Contains(out.String(), "SECRET") || !strings.Contains(out.String(), "token [redacted] is not valid") {
+		t.Fatalf("err %v, output %q", err, out.String())
 	}
 }

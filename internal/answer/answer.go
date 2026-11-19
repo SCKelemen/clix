@@ -7,6 +7,7 @@ package answer
 import (
 	"errors"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -125,4 +126,15 @@ func MultiDefault(values, labels []string, def string) ([]int, bool) {
 		idx = append(idx, n-1)
 	}
 	return idx, true
+}
+
+// RedactSecret removes a secret answer from a validation message, so a
+// secret prompt never shows what was typed: every occurrence of secret, and
+// of its quoted form, is replaced with "[redacted]".
+func RedactSecret(msg, secret string) string {
+	if secret == "" {
+		return msg
+	}
+	msg = strings.ReplaceAll(msg, strconv.Quote(secret), "[redacted]")
+	return strings.ReplaceAll(msg, secret, "[redacted]")
 }

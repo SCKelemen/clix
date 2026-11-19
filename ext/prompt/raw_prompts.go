@@ -175,6 +175,9 @@ func submitText(cfg *clix.PromptConfig, input string, confirm bool) (value, disp
 			if msg == "" {
 				msg = "invalid answer"
 			}
+			if cfg.Secret {
+				msg = answer.RedactSecret(msg, value)
+			}
 			return "", "", msg
 		}
 	}
