@@ -1,11 +1,15 @@
 package format
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/SCKelemen/clix/v2"
 	"github.com/SCKelemen/clix/v2/internal/jq"
+	"github.com/SCKelemen/clix/v2/internal/projection"
+	"github.com/SCKelemen/clix/v2/internal/resource"
 )
 
 // Extension registers the output flags on the app root, modeled on the
@@ -47,37 +51,55 @@ import (
 // replaces the extension's (Write then ignores it). App.Validate reports
 // replaced flags. Adding the extension twice registers the flags once.
 //
+// With Projections set, --format also accepts gcloud's format
+// expressions, NAME[ATTRIBUTES](PROJECTION), such as "table(name,
+// zone:label=LOCATION)" or "value(name)" (see the package documentation
+// for the supported subset). json, yaml and text, with nothing after
+// them, keep printing exactly as without Projections.
+//
 // Example:
 //
 //	app := clix.NewApp("myapp")
 //	app.AddExtension(format.Extension{})
 //	// Now --format, --json, --jq and --template are available globally
-type Extension struct{}
+type Extension struct {
+	// Projections makes --format accept gcloud's format expressions:
+	// table, csv, value, flattened, list, json and yaml with attributes
+	// and projections, and none. Off by default, so apps that do not set
+	// it are unchanged.
+	Projections bool
+}
 
 // formats lists the values the --format flag accepts.
 var formats = []string{clix.FormatJSON, clix.FormatYAML, clix.FormatText}
 
 // Extend implements clix.Extension.
-func (Extension) Extend(app *clix.App) error {
+func (e Extension) Extend(app *clix.App) error {
 	fs := app.Flags()
 	if _, ok := ours[*formatValue](app, "format"); !ok {
+		usage, validate, names := "Output format (json, yaml, text)", validateFormat, formats
+		if e.Projections {
+			usage = "Output format: json, yaml, text, or NAME[ATTRIBUTES](PROJECTION) with " + strings.Join(projection.Names, ", ")
+			validate = validateProjectionFormat
+			names = append(slices.Clone(formats), projection.Names...)
+		}
 		fs.Var(clix.VarOptions{
 			FlagOptions: clix.FlagOptions{
 				Name:     "format",
 				Short:    "f",
-				Usage:    "Output format (json, yaml, text)",
-				Validate: validateFormat,
+				Usage:    usage,
+				Validate: validate,
 				// An output setting, not an input: passing it does not stop
 				// Run from prompting for missing required flags.
 				Ambient: true,
 			},
 			Default: clix.FormatText,
-			Value:   &formatValue{},
+			Value:   &formatValue{projections: e.Projections},
 		})
 		// Shell completion offers the formats, not file names. When the app
 		// has its own --format, that flag keeps its own completion.
 		if _, ok := ours[*formatValue](app, "format"); ok {
-			fs.SetCompletion("format", clix.CompleteValues(formats...))
+			fs.SetCompletion("format", clix.CompleteValues(names...))
 		}
 	}
 	if _, ok := ours[*fieldsValue](app, "json"); !ok {
@@ -150,7 +172,10 @@ func ours[V clix.Value](app *clix.App, name string) (V, bool) {
 
 // formatValue holds the --format flag's value. Its type marks the flag as
 // registered by this extension.
-type formatValue struct{ s string }
+type formatValue struct {
+	s           string
+	projections bool // Extension.Projections: gcloud format expressions are accepted
+}
 
 func (v *formatValue) Set(s string) error {
 	v.s = s
@@ -220,6 +245,33 @@ func validateFormat(value string) error {
 	return fmt.Errorf("unknown format %q (valid formats: %s)", value, strings.Join(formats, ", "))
 }
 
+// isPlainFormat reports whether value is one of the formats --format
+// accepts without Projections (or empty, the default).
+func isPlainFormat(value string) bool {
+	return value == "" || validateFormat(value) == nil
+}
+
+// validateProjectionFormat accepts json, yaml and text, in any case, and
+// gcloud format expressions within clix's subset (see Extension).
+func validateProjectionFormat(value string) error {
+	if isPlainFormat(value) {
+		return nil
+	}
+	_, err := parseProjection(value)
+	return err
+}
+
+// parseProjection parses a gcloud format expression, naming what clix
+// does not support as --format's.
+func parseProjection(value string) (*projection.Format, error) {
+	f, err := projection.Parse(value)
+	var unsupported *resource.UnsupportedError
+	if errors.As(err, &unsupported) {
+		return nil, fmt.Errorf("%s is not supported in clix --format", unsupported.What)
+	}
+	return f, err
+}
+
 // splitFields splits a --json value on commas, trimming spaces and
 // dropping empty items.
 func splitFields(s string) []string {
@@ -272,6 +324,15 @@ func OutputFormat(app *clix.App) string {
 		return clix.FormatJSON
 	}
 	if app == nil {
+		return clix.FormatText
+	}
+	if v, ok := ours[*formatValue](app, "format"); ok && v.projections && !isPlainFormat(v.s) {
+		// A gcloud format expression: json(...) and yaml(...) are JSON
+		// and YAML, everything else is text for handlers that print
+		// with clix.FormatData themselves (Write prints the expression).
+		if f, err := projection.Parse(v.s); err == nil && (f.Name == clix.FormatJSON || f.Name == clix.FormatYAML) {
+			return f.Name
+		}
 		return clix.FormatText
 	}
 	if v, ok := app.Flags().String("format"); ok && v != "" {
