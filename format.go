@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -30,9 +31,28 @@ import (
 //   - Lists of plain values print one value per line; lists of objects
 //     print each object as a block of "key = value" lines, separated by a
 //     blank line.
-//   - Structs and other values are first converted with encoding/json, so
-//     json struct tags, omitempty and MarshalJSON methods decide their keys
-//     and values. A value encoding/json cannot handle prints with fmt's %v.
+//   - Structs and other values are first converted with encoding/json/v2,
+//     so json struct tags, omitempty, omitzero and MarshalJSON methods decide
+//     their keys and values; durations inside them print as "1m30s" and
+//     times in RFC 3339. A value encoding/json/v2 cannot handle prints with
+//     fmt's %v.
+//
+// JSON output is encoded with encoding/json/v2, indented by two spaces and
+// followed by a newline:
+//
+//   - Map keys are sorted, so the output is the same on every run.
+//   - <, > and & are not escaped (they only need escaping inside HTML).
+//   - time.Duration is an ISO 8601 duration ("PT1M30S"), time.Time is
+//     RFC 3339 with fractional seconds only when they are non-zero.
+//   - Nil slices and maps are [] and {}, a nil []byte is "".
+//   - omitempty leaves out only values that would be null, "", {} or [];
+//     use omitzero to leave out zero numbers, false and zero structs.
+//   - Invalid UTF-8 in strings is replaced with U+FFFD instead of failing.
+//
+// (A binary built with Go 1.26 or earlier, which lacks encoding/json/v2,
+// encodes JSON with encoding/json instead: durations are nanoseconds, nil
+// slices and maps are null, and omitempty also leaves out zero numbers and
+// false.)
 func FormatData(w io.Writer, data interface{}, format string) error {
 	switch strings.ToLower(format) {
 	case FormatJSON:
@@ -44,16 +64,57 @@ func FormatData(w io.Writer, data interface{}, format string) error {
 	}
 }
 
-// formatJSON formats data as JSON with indentation.
+// isoDuration formats d as an ISO 8601 duration of hours, minutes and
+// seconds, with fractional seconds when needed: "PT1M30S", "PT1.5S",
+// "-PT2H", "PT26H" (hours are not carried into days, whose length ISO 8601
+// leaves to the calendar), and "PT0S" for zero.
 //
-// &, < and > are written as is rather than as \u0026, \u003c and \u003e:
-// the escapes only matter when JSON is embedded in HTML, and they make URLs
-// in CLI output hard to read. Both spellings decode to the same value.
-func formatJSON(w io.Writer, data interface{}) error {
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	enc.SetIndent("", "  ")
-	return enc.Encode(data)
+// ISO 8601-1:2019 section 5.5.2.4 (durations) and ISO 8601-2:2019 section
+// 4.4.1.9 (negative durations); see also RFC 3339 Appendix A,
+// https://datatracker.ietf.org/doc/html/rfc3339#appendix-A
+//
+// TODO: switch to iso8601.FormatDuration once
+// github.com/SCKelemen/clix/v2/iso8601 lands.
+func isoDuration(d time.Duration) string {
+	if d == 0 {
+		return "PT0S"
+	}
+	var b strings.Builder
+	u := uint64(d)
+	if d < 0 {
+		b.WriteByte('-')
+		u = -u // also right for math.MinInt64
+	}
+	b.WriteString("PT")
+	h := u / uint64(time.Hour)
+	u -= h * uint64(time.Hour)
+	m := u / uint64(time.Minute)
+	u -= m * uint64(time.Minute)
+	sec, frac := u/uint64(time.Second), u%uint64(time.Second)
+	if h > 0 {
+		b.WriteString(strconv.FormatUint(h, 10) + "H")
+	}
+	if m > 0 {
+		b.WriteString(strconv.FormatUint(m, 10) + "M")
+	}
+	if sec > 0 || frac > 0 {
+		b.WriteString(strconv.FormatUint(sec, 10))
+		if frac > 0 {
+			b.WriteString("." + strings.TrimRight(fmt.Sprintf("%09d", frac), "0"))
+		}
+		b.WriteString("S")
+	}
+	return b.String()
+}
+
+// isoTime formats t in RFC 3339, the profile of ISO 8601 for timestamps,
+// with fractional seconds only when they are non-zero.
+// https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
+//
+// TODO: switch to iso8601.FormatTime once
+// github.com/SCKelemen/clix/v2/iso8601 lands.
+func isoTime(t time.Time) string {
+	return t.Format(time.RFC3339Nano)
 }
 
 // formatYAML formats data as YAML using go.yaml.in/yaml/v3.
@@ -280,6 +341,8 @@ type textFallback struct{ v interface{} }
 // a fmt.Stringer, or an error.
 func isTextScalar(v interface{}) bool {
 	switch v.(type) {
+	case json.RawMessage: // since Go 1.27 a jsontext.Value, whose String returns raw JSON
+		return false
 	case nil, fmt.Stringer, error:
 		return true
 	}
@@ -348,7 +411,7 @@ func textNode(v interface{}) interface{} {
 	if isTextScalar(v) {
 		return v
 	}
-	data, err := json.Marshal(v)
+	data, err := marshalForText(v)
 	if err != nil {
 		return textFallback{v}
 	}

@@ -10,7 +10,7 @@ import (
 
 type textUser struct {
 	UserName string `json:"user_name"`
-	Age      int    `json:"age,omitempty"`
+	Age      int    `json:"age,omitzero"`
 }
 
 // textLevel has a MarshalJSON method, which text output must honor.

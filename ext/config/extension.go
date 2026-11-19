@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -98,10 +97,9 @@ func configListCommand(app *clix.App) *clix.Command {
 
 		switch format {
 		case clix.FormatJSON:
-			enc := json.NewEncoder(app.Out)
-			enc.SetEscapeHTML(false)
-			enc.SetIndent("", "  ")
-			return enc.Encode(buildConfigTree(values))
+			// The same encoder as clix.FormatData (encoding/json/v2):
+			// sorted keys, two-space indent, no HTML escaping.
+			return clix.FormatData(app.Out, buildConfigTree(values), clix.FormatJSON)
 		default: // yaml or text default to YAML output
 			return writeYAMLTree(app.Out, values)
 		}
