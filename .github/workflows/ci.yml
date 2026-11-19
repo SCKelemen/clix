@@ -101,3 +101,63 @@ jobs:
 
       - name: Test
         run: go test -race ./...
+
+  completion:
+    name: Shell completion (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Shells whose absence fails the tests instead of skipping them
+          # (see requireEnv in ext/autocomplete/shells_test.go). pwsh is
+          # added when the runner image has it.
+          - os: ubuntu-latest
+            shells: bash5,bash-completion,zsh,fish
+          - os: macos-latest
+            shells: bash32,bash5,bash-completion,zsh,fish
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install shells (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bash bash-completion zsh fish
+
+      # macOS keeps /bin/bash 3.2 and /bin/zsh; Homebrew adds bash 5.
+      - name: Install shells (macOS)
+        if: runner.os == 'macOS'
+        run: brew install bash bash-completion@2 zsh fish
+
+      - name: Show shell versions
+        id: shells
+        shell: bash
+        run: |
+          shells='${{ matrix.shells }}'
+          for b in /bin/bash /usr/bin/bash /opt/homebrew/bin/bash "$(command -v bash)"; do
+            [ -x "$b" ] && echo "$b: $("$b" -c 'echo $BASH_VERSION')"
+          done
+          zsh --version
+          fish --version
+          if command -v pwsh >/dev/null; then
+            pwsh -NoLogo -NoProfile -Command '"pwsh " + $PSVersionTable.PSVersion'
+            shells="$shells,pwsh"
+          else
+            echo "::warning::pwsh is not installed; skipping the PowerShell tests"
+          fi
+          echo "required=$shells" >> "$GITHUB_OUTPUT"
+
+      # The TestShell_* tests drive the real shells (bash and zsh through a
+      # pty); TestBug_* and TestSharp_* are the regression tests.
+      - name: Test
+        env:
+          CLIX_COMPLETION_SHELLS: ${{ steps.shells.outputs.required }}
+        run: go test -race -count=1 -timeout 20m -v -run 'TestShell|TestBug|TestSharp' ./ext/autocomplete/
