@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -238,5 +240,32 @@ func TestVersionE2E_AppVersionCommandWins(t *testing.T) {
 	}
 	if got := run(t, app, out, "--version"); got != "probe version 1.0.0\n" {
 		t.Errorf("--version printed %q", got)
+	}
+}
+
+// version works with a config file that is not valid YAML or holds a
+// value a flag rejects (--format falls back to text, with a warning).
+func TestVersionE2E_BrokenConfig(t *testing.T) {
+	for _, content := range []string{"a: [\n", "format: xml\n"} {
+		app, out := e2eApp(t, Extension{Version: "1.2.3"})
+		errOut := &bytes.Buffer{}
+		app.Err = errOut
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		app.ConfigPath = path
+		if got := run(t, app, out, "version"); !strings.HasSuffix(got, "version = 1.2.3\n") {
+			t.Errorf("version with %q:\n%s", content, got)
+		}
+		if got := run(t, app, out, "version", "-f", "json"); !strings.Contains(got, `"version": "1.2.3"`) {
+			t.Errorf("version -f json with %q:\n%s", content, got)
+		}
+		if got := run(t, app, out, "--version"); got != "probe version 1.2.3\n" {
+			t.Errorf("--version with %q: %q", content, got)
+		}
+		if strings.Contains(content, "xml") && !strings.Contains(errOut.String(), "ignoring invalid value") {
+			t.Errorf("no warning for %q: %q", content, errOut.String())
+		}
 	}
 }

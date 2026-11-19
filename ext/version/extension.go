@@ -181,6 +181,9 @@ func newVersionCommand(app *clix.App, v info) *clix.Command {
 	cmd.Short = "Show version information"
 	cmd.Usage = fmt.Sprintf("%s version", app.Name)
 	cmd.IsExtensionCommand = true
+	// The version must print even when the config file is broken or holds
+	// a bad value (a bug report needs it most then).
+	clix.AllowConfigErrors(cmd)
 	cmd.Run = func(ctx *clix.Context) error {
 		return renderVersion(ctx.App, v)
 	}

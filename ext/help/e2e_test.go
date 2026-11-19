@@ -3,6 +3,8 @@ package help
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -239,5 +241,26 @@ func TestHelpE2E_IgnoresEnvironment(t *testing.T) {
 	t.Setenv("PROBE_COMMAND", "widgets")
 	if got := helpRun(t, app, out, "help"); !strings.HasPrefix(got, "PROBE\n") {
 		t.Errorf("help with PROBE_COMMAND=widgets:\n%s", got)
+	}
+}
+
+// Help works with a config file that is not valid YAML or holds a value a
+// flag rejects.
+func TestHelpE2E_BrokenConfig(t *testing.T) {
+	for _, content := range []string{"a: [\n", "format: xml\n"} {
+		app, out, errOut := e2eHelpApp(t)
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		app.ConfigPath = path
+		for _, args := range [][]string{{"help"}, {"help", "widgets", "get"}, {"--help"}} {
+			if got := helpRun(t, app, out, args...); got == "" {
+				t.Errorf("%q with %q: no help", args, content)
+			}
+		}
+		if strings.Contains(content, "xml") && !strings.Contains(errOut.String(), "ignoring invalid value") {
+			t.Errorf("no warning for %q: %q", content, errOut.String())
+		}
 	}
 }

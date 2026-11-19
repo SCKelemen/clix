@@ -88,6 +88,9 @@ func NewHelpCommand(app *clix.App) *clix.Command {
 	cmd.Short = "Show help for commands"
 	cmd.Usage = fmt.Sprintf("%s help [command...]", app.Name)
 	cmd.IsExtensionCommand = true
+	// Help must work even when the config file is broken or holds a bad
+	// value: it is what a user reaches for then.
+	clix.AllowConfigErrors(cmd)
 
 	var command []string
 	cmd.Flags.ArgsVar(clix.ArgsVarOptions{
