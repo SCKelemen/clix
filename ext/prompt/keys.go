@@ -677,3 +677,7 @@ func ReadKey(in io.Reader) (key Key, err error) {
 	ev, err := newKeyReader(in, st).next()
 	return ev.key, err
 }
+
+// maxEmptyReads bounds how many consecutive (0, nil) reads are tolerated
+// before giving up, mirroring bufio.
+const maxEmptyReads = 100

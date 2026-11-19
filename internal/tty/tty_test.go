@@ -1,10 +1,11 @@
-package tty
+package tty_test
 
 import (
 	"bytes"
 	"testing"
 
 	"github.com/SCKelemen/clix/v2/internal/ptytest"
+	"github.com/SCKelemen/clix/v2/internal/tty"
 )
 
 func TestStringWidth(t *testing.T) {
@@ -28,23 +29,23 @@ func TestStringWidth(t *testing.T) {
 		"zero​width‍!": 10,
 	}
 	for s, want := range cases {
-		if got := StringWidth(s); got != want {
-			t.Errorf("StringWidth(%q) = %d, want %d", s, got, want)
+		if got := tty.StringWidth(s); got != want {
+			t.Errorf("tty.StringWidth(%q) = %d, want %d", s, got, want)
 		}
 	}
 }
 
 func TestGraphemes(t *testing.T) {
-	if c, w := FirstGrapheme("éx"); c != "é" || w != 1 {
+	if c, w := tty.FirstGrapheme("éx"); c != "é" || w != 1 {
 		t.Errorf("FirstGrapheme = %q, %d", c, w)
 	}
-	if c, w := LastGrapheme("ab👍🏽"); c != "👍🏽" || w != 2 {
+	if c, w := tty.LastGrapheme("ab👍🏽"); c != "👍🏽" || w != 2 {
 		t.Errorf("LastGrapheme = %q, %d", c, w)
 	}
-	if c, _ := LastGrapheme("Café"); c != "é" {
-		t.Errorf("LastGrapheme(Café) = %q", c)
+	if c, _ := tty.LastGrapheme("Café"); c != "é" {
+		t.Errorf("tty.LastGrapheme(Café) = %q", c)
 	}
-	if c, _ := FirstGrapheme("\xffabc"); c != "\xff" {
+	if c, _ := tty.FirstGrapheme("\xffabc"); c != "\xff" {
 		t.Errorf("invalid UTF-8 byte should be its own cluster, got %q", c)
 	}
 }
@@ -61,8 +62,8 @@ func TestTruncate(t *testing.T) {
 		{"abc", 0, ""},
 	}
 	for _, c := range cases {
-		if got := Truncate(c.in, c.w, "…"); got != c.want {
-			t.Errorf("Truncate(%q, %d) = %q, want %q", c.in, c.w, got, c.want)
+		if got := tty.Truncate(c.in, c.w, "…"); got != c.want {
+			t.Errorf("tty.Truncate(%q, %d) = %q, want %q", c.in, c.w, got, c.want)
 		}
 	}
 }
@@ -77,11 +78,11 @@ func TestStripANSI(t *testing.T) {
 		"\x1b[38;2;10;20;30mrgb\x1b[m":                   "rgb",
 	}
 	for in, want := range cases {
-		if got := StripANSI(in); got != want {
-			t.Errorf("StripANSI(%q) = %q, want %q", in, got, want)
+		if got := tty.StripANSI(in); got != want {
+			t.Errorf("tty.StripANSI(%q) = %q, want %q", in, got, want)
 		}
 	}
-	if got := PadRight("\x1b[31m--watch\x1b[0m", 10); StripANSI(got) != "--watch   " {
+	if got := tty.PadRight("\x1b[31m--watch\x1b[0m", 10); tty.StripANSI(got) != "--watch   " {
 		t.Errorf("PadRight = %q", got)
 	}
 }
@@ -103,10 +104,10 @@ func TestUTF8(t *testing.T) {
 		t.Setenv("LC_ALL", c.all)
 		t.Setenv("LC_CTYPE", c.ctype)
 		t.Setenv("LANG", c.lang)
-		if got := UTF8(); got != c.want {
-			t.Errorf("LC_ALL=%q LC_CTYPE=%q LANG=%q: UTF8() = %v, want %v", c.all, c.ctype, c.lang, got, c.want)
+		if got := tty.UTF8(); got != c.want {
+			t.Errorf("LC_ALL=%q LC_CTYPE=%q LANG=%q: tty.UTF8() = %v, want %v", c.all, c.ctype, c.lang, got, c.want)
 		}
-		if got := Symbol("↑", "^"); (got == "↑") != c.want {
+		if got := tty.Symbol("↑", "^"); (got == "↑") != c.want {
 			t.Errorf("Symbol = %q", got)
 		}
 	}
@@ -136,7 +137,7 @@ func TestColorEnabled(t *testing.T) {
 			t.Setenv("CLICOLOR_FORCE", c.force)
 			t.Setenv("CLICOLOR", c.cli)
 			t.Setenv("TERM", c.term)
-			if got := ColorEnabled(c.w); got != c.want {
+			if got := tty.ColorEnabled(c.w); got != c.want {
 				t.Errorf("ColorEnabled = %v, want %v", got, c.want)
 			}
 		})
@@ -147,24 +148,24 @@ func TestInteractive(t *testing.T) {
 	pt := ptytest.New(t)
 	var buf bytes.Buffer
 	t.Setenv("TERM", "xterm")
-	if !Interactive(pt.TTY, pt.TTY) {
+	if !tty.Interactive(pt.TTY, pt.TTY) {
 		t.Error("pty in and out should be interactive")
 	}
-	if Interactive(pt.TTY, &buf) {
+	if tty.Interactive(pt.TTY, &buf) {
 		t.Error("a buffer as output is not interactive (app 2>log)")
 	}
-	if Interactive(&buf, pt.TTY) {
+	if tty.Interactive(&buf, pt.TTY) {
 		t.Error("a buffer as input is not interactive")
 	}
 	t.Setenv("TERM", "dumb")
-	if Interactive(pt.TTY, pt.TTY) {
+	if tty.Interactive(pt.TTY, pt.TTY) {
 		t.Error("TERM=dumb is not interactive")
 	}
 }
 
 func TestDisableEcho(t *testing.T) {
 	pt := ptytest.New(t)
-	restore, err := DisableEcho(pt.TTY)
+	restore, err := tty.DisableEcho(pt.TTY)
 	if err != nil {
 		t.Skipf("DisableEcho: %v", err)
 	}
@@ -182,10 +183,10 @@ func TestDisableEcho(t *testing.T) {
 
 func TestSize(t *testing.T) {
 	pt := ptytest.New(t)
-	if w, h, ok := Size(pt.TTY); !ok || w != 80 || h != 24 {
+	if w, h, ok := tty.Size(pt.TTY); !ok || w != 80 || h != 24 {
 		t.Fatalf("Size = %d, %d, %v", w, h, ok)
 	}
-	if _, _, ok := Size(&bytes.Buffer{}); ok {
+	if _, _, ok := tty.Size(&bytes.Buffer{}); ok {
 		t.Fatal("a buffer has no size")
 	}
 }

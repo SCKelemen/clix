@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/SCKelemen/clix/v2"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -266,8 +267,8 @@ func TestSelectPromptEdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("select matches by label prefix", func(t *testing.T) {
-		in := bytes.NewBufferString("Opt\n")
+	t.Run("select matches by unique label prefix", func(t *testing.T) {
+		in := bytes.NewBufferString("Opt\nOption A\n")
 		out := &bytes.Buffer{}
 
 		prompter := TerminalPrompter{In: in, Out: out}
@@ -282,9 +283,10 @@ func TestSelectPromptEdgeCases(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		// Should match first option with prefix
-		if value != "alpha" {
-			t.Fatalf("expected 'alpha', got %q", value)
+		// "Opt" is a prefix of both labels, so it is asked again; "Option A"
+		// is a prefix of one.
+		if value != "alpha" || !strings.Contains(out.String(), "matches more than one option") {
+			t.Fatalf("value %q, output %q", value, out.String())
 		}
 	})
 }
@@ -359,12 +361,9 @@ func TestMultiSelectPromptEdgeCases(t *testing.T) {
 				{Label: "Option B", Value: "b"},
 			},
 		})
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		// After toggling off, should be empty
-		if value != "" {
-			t.Fatalf("expected empty selection after toggle, got %q", value)
+		// After toggling off nothing is selected, which "done" refuses.
+		if err == nil || value != "" || !strings.Contains(out.String(), "Please select at least one option") {
+			t.Fatalf("value %q, err %v, output %q", value, err, out.String())
 		}
 	})
 }
