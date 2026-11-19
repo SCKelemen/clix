@@ -710,6 +710,10 @@ import (
 
 app.AddExtension(format.Extension{}) // --format/-f, --json, --jq/-q, --template/-t
 
+type Owner struct {
+        Login string `json:"login"`
+}
+
 type Repo struct {
         Name        string `json:"name"`
         DisplayName string `json:"displayName"`
@@ -718,7 +722,7 @@ type Repo struct {
 }
 
 cmd.Run = func(ctx *clix.Context) error {
-        repos := listRepos()
+        repos := []Repo{{Name: "clix", DisplayName: "CLI kit", Stars: 42, Owner: Owner{Login: "sam"}}}
         return format.Write(ctx, repos)
 }
 ```
@@ -775,9 +779,14 @@ A list whose elements are all objects prints as a table in text, the way gh prin
 The columns are the fields in the order the JSON output has them: struct fields in declaration order (an `omitempty` field missing from the first elements still goes where it is declared) and map keys sorted. A cell holds the field's text as in `key = value` lines: strings as they are, numbers, booleans, durations as `1m30s`, nothing for null, a list of plain values joined with `, `, and nested objects as compact JSON. Choose the columns with `clix.FormatDataWith` (or `format.WriteWith`); a column may be a dotted path into nested objects, and a path through a list collects the field of each element:
 
 ```go
+repos := []map[string]any{{
+        "name":   "clix",
+        "owner":  map[string]any{"login": "sam"},
+        "labels": []map[string]any{{"name": "cli"}, {"name": "go"}},
+}}
 return clix.FormatDataWith(ctx.App.Out, repos, clix.FormatOptions{
         Format:  format.OutputFormat(ctx.App),
-        Columns: []string{"name", "owner.login", "labels.name"},
+        Columns: []string{"name", "owner.login", "labels.name"}, // labels.name is "cli, go"
 })
 ```
 
@@ -847,6 +856,13 @@ Besides `text/template`'s own functions (`and`, `or`, `not`, `len`, `index`, `sl
 `ctx.Progress(label)` shows that a long-running operation is under way, like gcloud's `Waiting for operation...`. It writes to `App.Err` only, so `App.Out` stays clean for data:
 
 ```go
+type step struct {
+        Name string
+        Run  func(context.Context) error
+}
+
+var steps []step // uploading, migrating, switching traffic, ...
+
 cmd.Run = func(ctx *clix.Context) error {
         p := ctx.Progress("Deploying")
         for i, step := range steps {
@@ -879,15 +895,20 @@ An indicator ends once, at the first of `Done`, `Fail` (messages default to `don
 Optional styling hooks allow integration with packages like [`lipgloss`](https://github.com/charmbracelet/lipgloss):
 
 ```go
-import "github.com/charmbracelet/lipgloss"
-
-style := lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-app.DefaultTheme.PrefixStyle = clix.StyleFunc(style.Render)
-app.Styles.SectionHeading = clix.StyleFunc(style.Render)
+// A style is any value with a Render(...string) string method, such as a
+// lipgloss.Style: lipgloss.NewStyle().Foreground(lipgloss.Color("205")).
+// clix.StyleFunc turns a function into one.
+style := clix.StyleFunc(func(s ...string) string {
+        return "\x1b[38;5;205m" + strings.Join(s, " ") + "\x1b[0m"
+})
+app.DefaultTheme.PrefixStyle = style
+app.Styles.SectionHeading = style
 // Style app-level vs. command-level flags differently if desired
-app.Styles.AppFlagName = clix.StyleFunc(style.Render)
-app.Styles.CommandFlagName = clix.StyleFunc(style.Render)
+app.Styles.AppFlagName = style
+app.Styles.CommandFlagName = style
 ```
+
+[`examples/lipgloss`](examples/lipgloss) styles help and prompts with lipgloss.
 
 Key style hooks:
 
@@ -1462,6 +1483,7 @@ We welcome issues and pull requests. To keep the review cycle short:
 4. `examples/bubbles`, `examples/lipgloss`, `examples/multicli`, and `examples/survey` are separate modules: run `go build ./...`, `go vet ./...`, and `go test ./...` inside each one, and keep its `go.mod` tidy with `go mod tidy`.
 5. Run `golangci-lint run ./...`. CI pins golangci-lint v2.15.0 and lints the whole root module, which has no findings, so any finding fails the job; fix it in code rather than adding an exclusion to [`.golangci.yml`](.golangci.yml).
 6. Include tests and docs for new behavior, and add an entry under `Unreleased` in [`CHANGELOG.md`](CHANGELOG.md).
+7. Keep the Markdown files compiling. `TestDocsCompile` in [`docs_test.go`](docs_test.go), part of `go test ./...`, compiles every ```` ```go ```` block of every Markdown file against the working tree and reports errors at the file and line of the code; `TestDocsLinks` checks relative links and their `#anchors`. Start a reference listing that is not meant to compile, such as a struct without its unexported fields, with `// Abridged`; the test's doc comment describes the other kinds of block. Run them alone with `go test -run TestDocs .`.
 
 ### Testing in real terminals
 

@@ -129,9 +129,15 @@ app.AddExtension(version.Extension{
 Adds gh's output flags: `--format` / `-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq` / `-q` and `--template` / `-t`. Print a command's result with `format.Write`, which applies them all:
 
 ```go
+type Repo struct {
+	Name  string `json:"name"`
+	Stars int    `json:"stars"`
+}
+
 app.AddExtension(format.Extension{})
 
 cmd.Run = func(ctx *clix.Context) error {
+	repos := []Repo{{Name: "clix", Stars: 42}}
 	return format.Write(ctx, repos) // a slice of structs
 }
 // cli repos list                         a table on a terminal, tab-separated values in a pipe
