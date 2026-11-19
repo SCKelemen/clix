@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Exit status 2 instead of 1 for the config commands' refusals, which are mistakes in what was asked for rather than failures. In `config configurations`, these are: an invalid name; `create` or `rename` onto a name that exists; `activate`, `describe`, `delete` or `rename` of a configuration that does not exist; and deleting or renaming `default`, the active configuration or the one the command uses. In `config get`, `set` and `unset`, they are: an empty key path or one with spaces, an empty value, a value the schema or a flag rejects, and `get` of a secret without `--reveal`. `App.CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` and `ConfigurationFile` return these refusals as usage errors too, with the same messages, and a missing configuration still wraps `ErrConfigurationNotFound`. Exit status 1 is unchanged for `config get` of a key that is not set, as for `git config --get`, and for files that cannot be read, written or removed.
+
 ## [2.8.0] - 2026-11-19
 
 ### Added

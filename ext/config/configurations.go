@@ -201,7 +201,7 @@ func configurationsDescribeCommand(app *clix.App) *clix.Command {
 			return err
 		}
 		if !contains(names, name) {
-			return fmt.Errorf("configuration %q does not exist: %w", name, clix.ErrConfigurationNotFound)
+			return clix.UsageErrorf("configuration %q does not exist: %w", name, clix.ErrConfigurationNotFound)
 		}
 		values := clix.NewConfigManager(app.Name)
 		if err := values.Load(path); err != nil {
@@ -270,7 +270,7 @@ func configurationsDeleteCommand(app *clix.App) *clix.Command {
 				if _, err := app.ConfigurationFile(n); err != nil {
 					return err
 				}
-				return fmt.Errorf("configuration %q does not exist: %w", n, clix.ErrConfigurationNotFound)
+				return clix.UsageErrorf("configuration %q does not exist: %w", n, clix.ErrConfigurationNotFound)
 			}
 		}
 		if !yes && app.IsInteractive() {

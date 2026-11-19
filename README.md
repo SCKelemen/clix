@@ -1084,6 +1084,8 @@ The file is `App.ConfigPath`, or `$XDG_CONFIG_HOME/<app>/config.yaml`, written w
 
 `set` checks the value against the schema and against every flag that reads the key, so `config set format xml` is refused instead of breaking later runs. The config commands, `help`, `version` and shell completion still run when the file or the environment holds a value a flag rejects: they print a warning and use the flag's default (see `clix.AllowConfigErrors`). On a file that is not valid YAML, `list`, `get`, `set` and `unset` fail with a hint to run `config reset`, which removes it. `reset` removes only a regular file (through a symbolic link it removes the target and keeps the link) and never a directory. Keys of `Sensitive` flags are asked for with echo off; `set` then prints `key set`, `list` shows `[redacted]`, and `get` needs `--reveal`.
 
+A refusal caused by what was asked for is a usage error (exit status 2), as a bad flag is: an empty key path or one with spaces, an empty value, a value the schema or a flag rejects, and `get` of a secret without `--reveal`. A key that is not set is exit status 1 for `get`, as for `git config --get`, and a file that cannot be read, written or removed is 1 as well.
+
 Optional schemas can enforce types when setting values:
 
 ```go
@@ -1126,6 +1128,7 @@ The configuration a command uses is the one given with the Ambient `--configurat
 - **Symbolic links** are followed for reading and writing (`active_config` and configuration files may point into a dotfiles repository); `rename` renames a link itself, and `delete` removes only the link, never the file it points to.
 - **A missing configuration** named by `--configuration` or `<PREFIX>_CONFIGURATION` is a usage error (exit status 2), and one named by `active_config` an error (1). The config commands, help, version and completion still run (see `AllowConfigErrors`), so the selection can be repaired.
 - `default`, the activated configuration and the one the command uses cannot be deleted or renamed; activate another one first, or use `config reset` to clear `default`.
+- **Refusals are usage errors** (exit status 2): an invalid name, `create` or `rename` onto a name that exists, `activate`, `describe`, `delete` or `rename` of one that does not, and deleting or renaming one of the configurations above. The `App` methods return the same usage errors, and a missing configuration still matches `errors.Is(err, clix.ErrConfigurationNotFound)`. A file that cannot be read or written is exit status 1.
 - `--configuration` values and the names after `activate`, `describe`, `delete` and `rename` complete to the existing configurations. An app flag named `--configuration` wins over the extension's, as app flags always do; then only the environment variable and `active_config` select.
 
 The same operations are methods on `App` for programs and tests: `EnableConfigurations`, `Configuration` (the name in effect and its `Source`), `Configurations`, `ConfigurationFile`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` and `ConfigurationEnvVar`. `ConfigFile` and `SaveConfig` use the configuration in effect; `ConfigDir` is still the config directory.
