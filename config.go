@@ -34,6 +34,7 @@ type ConfigManager struct {
 	values  map[string]string
 	numbers map[string]string   // decimal form of YAML numbers written as 0x1F, 0755, 1e3, ...
 	lists   map[string][]string // the items of YAML lists of scalars, for slice flags
+	nodes   map[string]*yaml.Node // the YAML node each loaded key came from, which Save writes back
 	schemas map[string]ConfigSchema
 }
 
@@ -138,6 +139,10 @@ func NewConfigManager(name string) *ConfigManager {
 // to a nested "project: {name: ...}", is an error, because the winner would
 // otherwise be arbitrary. Keys pulled in with a YAML merge key ("<<") may
 // be overridden. Errors name the file.
+//
+// Save writes a loaded key that was not changed since exactly as it was
+// written (0x1F stays a hex number, "0755" a string, [a, "b,c"] a list of
+// two items), so saving never changes what a key reads.
 func (m *ConfigManager) Load(path string) error {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -162,6 +167,7 @@ func (m *ConfigManager) Load(path string) error {
 		values:  make(map[string]string),
 		numbers: make(map[string]string),
 		lists:   make(map[string][]string),
+		nodes:   make(map[string]*yaml.Node),
 		weak:    make(map[string]bool),
 	}
 	if err := f.document(&doc); err != nil {
@@ -177,7 +183,11 @@ func (m *ConfigManager) Load(path string) error {
 	if m.lists == nil {
 		m.lists = make(map[string][]string)
 	}
+	if m.nodes == nil {
+		m.nodes = make(map[string]*yaml.Node)
+	}
 	for k, v := range f.values {
+		m.nodes[k] = f.nodes[k]
 		m.values[k] = v
 		if n, ok := f.numbers[k]; ok {
 			m.numbers[k] = n
@@ -199,7 +209,8 @@ type flattener struct {
 	values  map[string]string
 	numbers map[string]string   // decimal form of numeric scalars
 	lists   map[string][]string // items of lists of scalars
-	weak    map[string]bool     // keys set through a merge key, which later keys may override
+	nodes   map[string]*yaml.Node
+	weak    map[string]bool // keys set through a merge key, which later keys may override
 }
 
 // document flattens the top-level mapping of doc.
@@ -307,7 +318,7 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 			// "key:" with no value is YAML null; treat it as unset.
 			return nil
 		}
-		return f.set(key, n.Value, yamlNumber(n), nil, weak, n.Line)
+		return f.set(key, n.Value, yamlNumber(n), nil, n, weak)
 	case yaml.MappingNode:
 		return f.mapping(key, n, weak)
 	case yaml.SequenceNode:
@@ -327,7 +338,7 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 					parts[i] = item.Value
 				}
 			}
-			return f.set(key, strings.Join(parts, ","), "", parts, weak, n.Line)
+			return f.set(key, strings.Join(parts, ","), "", parts, n, weak)
 		}
 		for i, item := range n.Content {
 			if err := f.value(key+"."+strconv.Itoa(i), item, weak); err != nil {
@@ -340,20 +351,21 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 	}
 }
 
-// set records a flattened value, rejecting a key that is already set
-// unless one of the two came from a merge key. items is non-nil for a
-// list of scalars.
-func (f *flattener) set(key, value, number string, items []string, weak bool, line int) error {
+// set records a flattened value read from node n, rejecting a key that
+// is already set unless one of the two came from a merge key. items is
+// non-nil for a list of scalars.
+func (f *flattener) set(key, value, number string, items []string, n *yaml.Node, weak bool) error {
 	if _, exists := f.values[key]; exists {
 		switch {
 		case weak:
 			// An explicit key, or an earlier merge source, wins.
 			return nil
 		case !f.weak[key]:
-			return fmt.Errorf("line %d: key %q is defined more than once", line, key)
+			return fmt.Errorf("line %d: key %q is defined more than once", n.Line, key)
 		}
 	}
 	f.values[key] = value
+	f.nodes[key] = savedNode(n)
 	f.weak[key] = weak
 	if number != "" {
 		f.numbers[key] = number
@@ -429,6 +441,15 @@ func (m *ConfigManager) numeric(key string) (string, bool) {
 
 // Save writes the configuration to the provided path in YAML format.
 // Dot-notation keys (e.g., "project.name") are saved as flat key:value pairs.
+//
+// Saving does not change what a key reads. A key loaded from a file and
+// not changed since (with Set, Delete or Reset) is written as the file had
+// it, with its YAML type, tag and quoting: "mask: 0x1F" stays a hex number
+// that an int flag reads as 31, and "tags: [a, \"b,c\"]" a list of two
+// items. A value given to Set is written plain when YAML reads that back as
+// the same text and number ("retries: 5", "debug: true"), and quoted
+// otherwise ("mode: \"0755\"", "version: \"1.10\""), so an int flag
+// reads it as it reads the same text on the command line.
 //
 // Config files often hold credentials or project identifiers, so a missing
 // directory is created with mode 0700 and the file is written with mode
@@ -514,12 +535,17 @@ func resolveSymlinks(path string) (string, error) {
 	return "", fmt.Errorf("config file %s: too many levels of symbolic links", path)
 }
 
-// writeYAML encodes the values as a flat YAML mapping.
+// writeYAML encodes the values as a flat YAML mapping. A key loaded from
+// a file and not changed since is written as it was read (see savedNode);
+// any other value as newScalar describes.
 func (m *ConfigManager) writeYAML(w io.Writer) error {
-	// Convert flat map[string]string to map[string]interface{} for YAML encoding
 	data := make(map[string]interface{}, len(m.values))
 	for k, v := range m.values {
-		data[k] = v
+		if n, ok := m.nodes[k]; ok {
+			data[k] = n
+		} else {
+			data[k] = newScalar(v)
+		}
 	}
 
 	encoder := yaml.NewEncoder(w)
@@ -530,6 +556,37 @@ func (m *ConfigManager) writeYAML(w io.Writer) error {
 	}
 	// Close flushes any output the encoder is still buffering.
 	return encoder.Close()
+}
+
+// savedNode returns a copy of the scalar or list of scalars n, with its
+// kind, tag, style and text, for Save to write back. Aliases are resolved,
+// and anchors and comments are left out, since keys are saved flat.
+func savedNode(n *yaml.Node) *yaml.Node {
+	n = resolveAlias(n)
+	c := &yaml.Node{Kind: n.Kind, Tag: n.Tag, Style: n.Style, Value: n.Value}
+	for _, item := range n.Content {
+		c.Content = append(c.Content, savedNode(item))
+	}
+	return c
+}
+
+// newScalar returns the YAML scalar Save writes for value, a value given
+// to Set: plain when YAML reads it back as the same text and, for a
+// number, the same number (5, 1.5, true, hello), and otherwise a quoted
+// string ("0755", "0x1F", "1.10", "", "null"), so the saved file reads
+// exactly as the value did before Save.
+func newScalar(value string) *yaml.Node {
+	n := &yaml.Node{Kind: yaml.ScalarNode, Value: value}
+	switch n.ShortTag() {
+	case "!!str", "!!bool", "!!timestamp":
+	case "!!int", "!!float":
+		if yamlNumber(n) != value {
+			n.Tag = "!!str"
+		}
+	default:
+		n.Tag = "!!str"
+	}
+	return n
 }
 
 // Get retrieves a value.
@@ -546,6 +603,7 @@ func (m *ConfigManager) Set(key, value string) {
 	m.values[key] = value
 	delete(m.numbers, key)
 	delete(m.lists, key)
+	delete(m.nodes, key)
 }
 
 // Delete removes a key from the configuration. It returns true if the key existed.
@@ -558,6 +616,7 @@ func (m *ConfigManager) Delete(key string) bool {
 		delete(m.values, key)
 		delete(m.numbers, key)
 		delete(m.lists, key)
+		delete(m.nodes, key)
 		return true
 	}
 	return false
@@ -568,6 +627,7 @@ func (m *ConfigManager) Reset() {
 	m.values = make(map[string]string)
 	m.numbers = nil
 	m.lists = nil
+	m.nodes = nil
 }
 
 // Values returns a copy of the stored values.
