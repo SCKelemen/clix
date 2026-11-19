@@ -417,7 +417,9 @@ func (m *ConfigManager) Save(path string) error {
 }
 
 // resolveSymlinks follows path while it is a symbolic link and returns the
-// file it finally names, which need not exist yet.
+// file it finally names, which need not exist yet: the file the kernel
+// opens for path, so Save writes the file Load reads. It gives up after
+// 255 links, as a loop would never end.
 func resolveSymlinks(path string) (string, error) {
 	current := path
 	for range 255 {
@@ -436,7 +438,15 @@ func resolveSymlinks(path string) (string, error) {
 			return "", err
 		}
 		if !filepath.IsAbs(link) {
-			link = filepath.Join(filepath.Dir(current), link)
+			// The kernel resolves a relative target from the directory the
+			// link is physically in, so ".." goes up from there, not from
+			// the path that led to the link (which may itself go through
+			// symbolic links, such as ~/.config into a dotfiles tree).
+			dir, err := filepath.EvalSymlinks(filepath.Dir(current))
+			if err != nil {
+				return "", err
+			}
+			link = filepath.Join(dir, link)
 		}
 		current = link
 	}
