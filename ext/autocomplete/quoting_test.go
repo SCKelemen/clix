@@ -3,6 +3,8 @@ package autocomplete
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -90,7 +92,9 @@ func TestAutocompleteHelpShowsInstallation(t *testing.T) {
 	if err := app.Run(context.Background(), []string{"autocomplete"}); err != nil {
 		t.Fatal(err)
 	}
-	for _, s := range []string{"source <(moln autocomplete bash)", `"${fpath[1]}/_moln"`, "moln autocomplete fish | source", "moln autocomplete powershell"} {
+	// bash 3.2 (the macOS /bin/bash) ignores source <(...), so bash users
+	// are told to eval the script.
+	for _, s := range []string{`eval "$(moln autocomplete bash)"`, `"${fpath[1]}/_moln"`, "moln autocomplete fish | source", "moln autocomplete powershell"} {
 		if !strings.Contains(out.String(), s) {
 			t.Errorf("autocomplete help does not explain %q:\n%s", s, out.String())
 		}
@@ -133,4 +137,51 @@ func TestScriptForOddAppName(t *testing.T) {
 			t.Errorf("%s: a newline in the app name escapes its quoting:\n%s", shell, text)
 		}
 	}
+}
+
+// Shell startup files run eval "$(app autocomplete bash)": a broken config
+// file or a bad config or environment value must not break them, and only
+// the script may reach standard output.
+func TestAutocompleteSurvivesConfigErrors(t *testing.T) {
+	want, err := script("probe", "bash")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ name, file, env string }{
+		{"MalformedFile", "key: [unclosed\n", ""},
+		{"BadConfigValue", "verbose: zzz\n", ""},
+		{"BadEnvValue", "", "zzz"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app, out, errw := configErrorApp(t, c.file, c.env)
+			if err := app.Run(context.Background(), []string{"autocomplete", "bash"}); err != nil {
+				t.Fatalf("autocomplete bash: %v", err)
+			}
+			if out.String() != want {
+				t.Errorf("standard output is not exactly the script:\n%s", out.String())
+			}
+			t.Logf("standard error: %q", errw.String())
+		})
+	}
+}
+
+// configErrorApp returns the probe app with a config file holding file
+// (when set) and PROBE_VERBOSE set to env (when set).
+func configErrorApp(t *testing.T, file, env string) (*clix.App, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if file != "" {
+		if err := os.MkdirAll(filepath.Join(dir, "probe"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "probe", "config.yaml"), []byte(file), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if env != "" {
+		t.Setenv("PROBE_VERBOSE", env)
+	}
+	out, errw := &bytes.Buffer{}, &bytes.Buffer{}
+	return newProbeApp(out, errw), out, errw
 }

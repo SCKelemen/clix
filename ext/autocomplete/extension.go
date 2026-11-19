@@ -38,7 +38,7 @@ import (
 //	// Now your app has: myapp autocomplete [shell]
 //
 //	// Users can load completion in the current shell:
-//	//   source <(myapp autocomplete bash)          # bash
+//	//   eval "$(myapp autocomplete bash)"          # bash (source <(...) is a no-op in bash 3.2)
 //	//   source <(myapp autocomplete zsh)           # zsh, after compinit
 //	//   myapp autocomplete fish | source           # fish
 //	// or install it:
@@ -91,6 +91,9 @@ func NewAutocompleteCommand(app *clix.App) *clix.Command {
 	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish|powershell]", app.Name)
 	cmd.Long = installHelp(app.Name)
 	cmd.IsExtensionCommand = true
+	// Shell startup files run "eval $(app autocomplete bash)": a broken
+	// config file or a bad config value must not break them.
+	clix.AllowConfigErrors(cmd)
 
 	var shell string
 	cmd.Flags.StringVar(clix.StringVarOptions{
@@ -136,7 +139,8 @@ installed version: commands where they are valid, the flags in scope, and
 values for flags and arguments.
 
 bash (3.2 or later):
-  source <(@NAME@ autocomplete bash)
+  eval "$(@NAME@ autocomplete bash)"
+  # ("source <(...)" does nothing in bash 3.2, the macOS /bin/bash)
   # or install it for bash-completion:
   @NAME@ autocomplete bash > ~/.local/share/bash-completion/completions/@NAME@
 

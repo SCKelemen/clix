@@ -52,7 +52,11 @@ func NewCompleteCommand(app *clix.App) *clix.Command {
 	cmd.Short = "Print shell completion candidates (used by completion scripts)"
 	cmd.Hidden = true
 	cmd.IsExtensionCommand = true
-	// Completion must keep working while the config file is broken.
+	// Completion must keep working while the configuration is broken: a
+	// config file that is not valid YAML, or a config or environment value
+	// that a flag rejects, is ignored for this command. The core reports it
+	// on App.Err, which every script discards, so it cannot become a
+	// candidate.
 	clix.AllowConfigErrors(cmd)
 
 	var shell, cur, line string

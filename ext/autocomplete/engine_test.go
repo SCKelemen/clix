@@ -316,6 +316,29 @@ func TestComplete_BrokenConfigFile(t *testing.T) {
 	assertSet(t, "probe widgets <TAB> with a broken config file", values(lines), []string{"get", "list", "ls"})
 }
 
+// A config or environment value that a flag rejects must not stop
+// completion: __complete ignores it, and the warning goes to App.Err, never
+// to standard output, where it would become a candidate.
+func TestComplete_ConfigValueErrors(t *testing.T) {
+	for _, c := range []struct{ name, file, env string }{
+		{"MalformedFile", "key: [unclosed\n", ""},
+		{"BadConfigValue", "verbose: zzz\n", ""},
+		{"BadEnvValue", "", "zzz"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			app, out, errw := configErrorApp(t, c.file, c.env)
+			lines, directive := runComplete(t, app, out, "--shell", "bash", "--cur=", "--line=probe widgets ")
+			assertSet(t, "bash probe widgets <TAB>", lines, []string{"get", "list", "ls"})
+			if directive != directiveNoFiles {
+				t.Errorf("directive = %s", directive)
+			}
+			if c.file != "key: [unclosed\n" && !strings.Contains(errw.String(), "zzz") {
+				t.Errorf("no warning about the bad value on App.Err: %q", errw.String())
+			}
+		})
+	}
+}
+
 func TestComplete_RequiredRootFlag(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	out := &bytes.Buffer{}
