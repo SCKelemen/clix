@@ -1,7 +1,10 @@
 package help
 
 import (
+	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/SCKelemen/clix/v2"
@@ -13,6 +16,20 @@ import (
 //   - cli help              - Show help for the root command
 //   - cli help [command...] - Show help for a specific command, such as
 //     "cli help group command"
+//
+// The words after "help" name the command, by name or alias, so
+// "cli help group command", "cli help \"group command\"" and
+// "cli help --command \"group command\"" are the same. Hidden commands are
+// left out of help listings, suggestions and completion, but "cli help
+// hidden-command" still shows their help. A word that names no command is
+// an error such as `unknown command "wigdets" for "cli"; did you mean
+// "widgets"?` (exit code 1 with clix.ExitCode).
+//
+// Help is written to App.Out. Like flag-based help, it is plain text when
+// NO_COLOR is set or App.Out is not a terminal (see clix.HelpRenderer).
+//
+// An app command named "help" replaces the extension's, and adding the
+// extension twice adds the command once.
 //
 // Note: Flag-based help (-h, --help) is handled by the core library
 // and does not require this extension. This extension only adds the
@@ -92,17 +109,89 @@ func NewHelpCommand(app *clix.App) *clix.Command {
 }
 
 // resolveCommand walks path from root, one command name (or alias) per
-// word. It reports the first word that does not name a child.
+// word. It reports the first word that does not name a child, with the
+// visible children whose names are close to it.
 func resolveCommand(root *clix.Command, path []string) (*clix.Command, error) {
 	cmd := root
 	for _, word := range path {
 		next := cmd.ResolvePath([]string{word})
 		if next == nil {
-			return nil, fmt.Errorf("unknown command %q for %q", word, cmd.Path())
+			msg := fmt.Sprintf("unknown command %q for %q", word, cmd.Path())
+			if s := suggestions(cmd, word); len(s) > 0 {
+				msg += "; did you mean " + quoteList(s) + "?"
+			}
+			return nil, errors.New(msg)
 		}
 		cmd = next
 	}
 	return cmd, nil
+}
+
+// suggestions returns the names of cmd's visible children that word may be
+// a typo of: within two edits (ignoring case), or a prefix of the name.
+func suggestions(cmd *clix.Command, word string) []string {
+	word = strings.ToLower(word)
+	type match struct {
+		name string
+		dist int
+	}
+	var matches []match
+	for _, child := range cmd.VisibleChildren() {
+		best := -1
+		for _, name := range append([]string{child.Name}, child.Aliases...) {
+			n := strings.ToLower(name)
+			d := editDistance(word, n)
+			if strings.HasPrefix(n, word) && d > 2 {
+				d = 2
+			}
+			if d <= 2 && (best < 0 || d < best) {
+				best = d
+			}
+		}
+		if best >= 0 {
+			matches = append(matches, match{child.Name, best})
+		}
+	}
+	sort.SliceStable(matches, func(i, j int) bool { return matches[i].dist < matches[j].dist })
+	names := make([]string, len(matches))
+	for i, m := range matches {
+		names[i] = m.name
+	}
+	return names
+}
+
+// editDistance is the Levenshtein distance between a and b, in runes.
+func editDistance(a, b string) int {
+	ra, rb := []rune(a), []rune(b)
+	prev := make([]int, len(rb)+1)
+	cur := make([]int, len(rb)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(ra); i++ {
+		cur[0] = i
+		for j := 1; j <= len(rb); j++ {
+			cost := 1
+			if ra[i-1] == rb[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(rb)]
+}
+
+// quoteList formats names as "a", "a" or "b", or "a", "b" or "c".
+func quoteList(names []string) string {
+	quoted := make([]string, len(names))
+	for i, n := range names {
+		quoted[i] = strconv.Quote(n)
+	}
+	if len(quoted) == 1 {
+		return quoted[0]
+	}
+	return strings.Join(quoted[:len(quoted)-1], ", ") + " or " + quoted[len(quoted)-1]
 }
 
 // completeCommandPath completes the help command's arguments: the names of
