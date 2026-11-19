@@ -207,7 +207,7 @@ scan:
 			if !sawWord {
 				sawWord = true
 				// The binary may be invoked as "app-name app-name child".
-				if a.namesMatch(tok, root.Name) {
+				if a.skipsRootName(tok) {
 					isPath[i] = true
 					continue
 				}
@@ -276,6 +276,23 @@ scan:
 	}
 
 	return cmd, positionals, stray, nil
+}
+
+// skipsRootName reports whether word, the first word on the command line,
+// is a repeat of the root's name ("app app child") that should be
+// skipped. It is skipped only when it cannot mean anything else: no child
+// has that name, and the root either has no Run handler or takes no
+// positional arguments. Otherwise "echo echo" would lose its argument and a
+// child named like the app would be unreachable.
+func (a *App) skipsRootName(word string) bool {
+	root := a.Root
+	if !a.namesMatch(word, root.Name) {
+		return false
+	}
+	if root.findChildMatch(word, a.CaseSensitive) != nil {
+		return false
+	}
+	return root.Run == nil || len(root.Flags.PositionalFlags()) == 0
 }
 
 // namesMatch reports whether word names a command called name, using the
