@@ -12,7 +12,11 @@ import (
 )
 
 // Run executes the application with the given context and arguments.
-// If args is nil, os.Args[1:] is used.
+// If args is nil, os.Args[1:] is used. Under go test those are the test
+// binary's own flags (-test.v and so on), so tests should always pass an
+// explicit slice, such as []string{} for no arguments. Main is the usual
+// entry point of a program: it calls Run with os.Args[1:], handles
+// signals, prints the error and exits.
 // The context is propagated to command handlers and can be used for cancellation.
 //
 // Run is not safe for concurrent use on the same App: it resets and fills
