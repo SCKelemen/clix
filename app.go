@@ -372,38 +372,50 @@ type Context struct {
 //
 // Flags are looked up on the executing command, then on each of its
 // ancestors (groups), then on the root, so a handler sees the flags of
-// every command on its path.
+// every command on its path. For a flag that Run filled in, the value is
+// the flag's parsed value in its canonical form (Value.String), so it
+// matches the bound variable whatever the source: a duration reads
+// "1m30s" whether it came from "90s" on the command line, in the
+// environment, in the config file or as the default.
 func (ctx *Context) resolveValue(key string) (string, Source, bool) {
-	sets := ctx.pathFlags()
+	type hit struct {
+		fs   *FlagSet
+		flag *Flag
+	}
+	var hits []hit
+	for _, fs := range ctx.pathFlags() {
+		if flag := fs.lookup(key); flag != nil {
+			hits = append(hits, hit{fs, flag})
+		}
+	}
 
 	// First check values the user supplied directly, innermost command
 	// first. A value typed at a prompt for a missing required flag counts
 	// as supplied directly but reports SourcePrompt.
-	for _, fs := range sets {
-		if flag := fs.lookup(key); flag != nil {
-			if flag.cliSet {
-				return flag.Value.String(), ctx.cliSource(fs), true
-			}
-			if flag.set && flag.source == SourcePrompt {
-				return flag.Value.String(), SourcePrompt, true
-			}
+	for _, h := range hits {
+		if h.flag.cliSet {
+			return h.flag.Value.String(), ctx.cliSource(h.fs), true
+		}
+		if h.flag.set && h.flag.source == SourcePrompt {
+			return h.flag.Value.String(), SourcePrompt, true
 		}
 	}
 
 	// Then check environment variables: a flag's EnvVar, its EnvVars
 	// aliases, and the APP_KEY default, in that order.
+	for _, h := range hits {
+		if h.flag.set && h.flag.source == SourceEnvVar {
+			return h.flag.Value.String(), SourceEnvVar, true
+		}
+	}
 	if ctx.App != nil {
-		isFlag := false
-		for _, fs := range sets {
-			if flag := fs.lookup(key); flag != nil {
-				isFlag = true
-				if _, val, ok := ctx.App.lookupFlagEnv(flag); ok {
-					return val, SourceEnvVar, true
-				}
+		for _, h := range hits {
+			if _, val, ok := ctx.App.lookupFlagEnv(h.flag); ok {
+				return val, SourceEnvVar, true
 			}
 		}
 		// Keys that are not flags only have the APP_KEY default.
-		if !isFlag {
+		if len(hits) == 0 {
 			if val, ok := os.LookupEnv(ctx.App.envVarName(key)); ok {
 				return val, SourceEnvVar, true
 			}
@@ -411,6 +423,11 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	}
 
 	// Then check config
+	for _, h := range hits {
+		if h.flag.set && h.flag.source == SourceConfigFile {
+			return h.flag.Value.String(), SourceConfigFile, true
+		}
+	}
 	if ctx.App != nil && ctx.App.Config != nil {
 		if v, ok := ctx.App.Config.Get(key); ok {
 			return v, SourceConfigFile, true
@@ -419,9 +436,9 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 
 	// Finally check defaults from flags (only if flag exists but wasn't
 	// set), innermost command first.
-	for _, fs := range sets {
-		if flag := fs.lookup(key); flag != nil && !flag.set && flag.Default != "" {
-			return flag.Default, SourceDefault, true
+	for _, h := range hits {
+		if !h.flag.set && h.flag.Default != "" {
+			return h.flag.Value.String(), SourceDefault, true
 		}
 	}
 
