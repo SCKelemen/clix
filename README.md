@@ -290,6 +290,24 @@ The other controls, all off by default:
 - `ConfigKey` gives a flag its own config key, such as `delete.force` for `delete:` / `  force: true`, instead of the flag's name.
 - `App.AutoEnv` and `App.AutoConfig` (`*bool`; nil means on) stop flags from reading the variable or key named after them, so only an explicit `EnvVar`, `EnvVars` or `ConfigKey` is read.
 
+#### Context flags
+
+Some flags set the context a command runs in rather than its inputs: where to connect (`--target`, `--token`, `--timeout`, `--api-version`) or how to print the result (`--format`). Mark them `Ambient` (or pass `clix.WithFlagAmbient()`) so that giving them does not turn off prompting for missing required flags: with an Ambient `--target`, `moln --target staging widgets create` asks for the widget's missing required flags, just as `moln widgets create` does.
+
+```go
+var target string
+app.Flags().StringVar(clix.StringVarOptions{
+        FlagOptions: clix.FlagOptions{
+                Name:    "target",
+                Usage:   "API endpoint",
+                Ambient: true, // context, not input: passing it still lets Run prompt
+        },
+        Value: &target,
+})
+```
+
+Any flag that is not Ambient still marks a scripted call: `moln --target staging widgets create --dry-run` returns a `*clix.MissingFlagsError` (see [Non-interactive use](#non-interactive-use) for the full rule). `Ambient` changes nothing else: the flag is parsed, read from the environment and the config file, checked when `Required` (and prompted for when missing), and shown in help like any other flag. The format extension's `--format` is Ambient.
+
 #### Config file values
 
 Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode: 0755` is `"0755"` and `date: 2024-01-02` is `"2024-01-02"`. Only int and float flags (and `Config.Int` and friends) read YAML's number, so `mode: 0755` sets an int flag to 493 and `0x1F` to 31. Nested maps flatten to dotted keys (`ports: {80: http}` is `ports.80`); a list of scalars is joined with commas (a slice flag gets its items one by one, so an item may contain a comma), and other lists flatten with indexes (`hosts.0.name`). A key written twice, for example nested and dotted, is an error that names the file. `Save` (which `config set` and `config unset` call) never changes what a key reads: a key it did not change is written back as the file had it, so `mask: 0x1F` stays a number and `tags: [a, "b,c"]` a list of two items, and a new value is quoted when YAML would read it differently (`mode: "0755"`). It replaces the file atomically with mode 0600, and writes through a symbolic link instead of replacing it.
@@ -445,7 +463,7 @@ moln [--project/-p] [--verbose/-v]
 
 **Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `moln --help deploy`, `moln project --help ls` and `moln deploy -fh` all show help, even when required flags are missing or there are extra arguments. A flag that uses `-h` (such as `--host`) on the command or on any command above it keeps `-h` after the command name, and the built-in help there has only `--help`: with a root `--host -h`, `moln deploy -h example.com` sets the host.
 
-**Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `moln version` never asks for `--project`.
+**Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `moln version` never asks for `--project`. When one is missing, `Run` prompts for it only if the app is interactive and no flag other than an `Ambient` one was given on the command line, wherever and however it was written; otherwise it returns a `*MissingFlagsError` (see [Non-interactive use](#non-interactive-use)).
 
 **Errors.** Every failure above is a usage error, as is a bad value from an environment variable or the config file: `clix.ExitCode` returns 2 for it and for a `*MissingFlagsError`.
 
@@ -587,6 +605,8 @@ Both APIs can be mixed. Options apply in order, so later options override earlie
 ```text
 missing required flags: --project (or $MYAPP_PROJECT)
 ```
+
+`Run` prompts only when no flags were passed, too: a command line with flags is a scripted call, and a script that forgot a flag should get an error, not a question. A flag counts as passed when it is set on the command line, by name (`--name v`, `--name=v`, `-n v`, `-nv`, or inside a cluster such as `-qn`) or by position, on any command of the path: the root, a group, or the command itself. Values from environment variables, the config file and defaults never count, and neither do flags marked `Ambient` (see [Context flags](#context-flags)), such as the format extension's `--format`. So, with an Ambient `--target`, `moln widgets create` and `moln --target staging widgets create` prompt for the missing required flags, while `moln --project p widgets create` and `moln widgets create blue` (a positional argument) return a `*clix.MissingFlagsError`.
 
 Users can turn prompts off explicitly with `<PREFIX>_DISABLE_PROMPTS=1` (for example, `MYAPP_DISABLE_PROMPTS=1`, like gcloud's `CLOUDSDK_CORE_DISABLE_PROMPTS`). This environment variable applies in every mode. Programs can choose a mode themselves:
 
@@ -894,7 +914,7 @@ app.AddExtension(version.Extension{
 
 #### Format Extension (`clix/ext/format`)
 
-Adds a global `--format` / `-f` flag (`-f` unless your app uses it) that takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. An app flag named `--format` replaces the extension's. Shell completion offers `json`, `yaml` and `text`. Read the selected value with `format.OutputFormat(app)` and pass it to `clix.FormatData`; see [Structured Output](#structured-output).
+Adds a global `--format` / `-f` flag (`-f` unless your app uses it) that takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. The extension's flag is `Ambient` (see [Context flags](#context-flags)), so `myapp --format json widgets create` still prompts for missing required flags. An app flag named `--format` replaces the extension's, with the app's own options. Shell completion offers `json`, `yaml` and `text`. Read the selected value with `format.OutputFormat(app)` and pass it to `clix.FormatData`; see [Structured Output](#structured-output).
 
 #### Prompt, Survey, and Validation Extensions
 
