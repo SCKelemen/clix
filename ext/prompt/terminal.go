@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"unicode"
 
-	"github.com/SCKelemen/clix/v2"
 	"golang.org/x/term"
 )
 
@@ -95,252 +95,39 @@ func (ts *TerminalState) restoreTerminal() error {
 	return term.Restore(ts.fd, ts.oldState)
 }
 
-// keyResult is the outcome of one ReadKey call.
-type keyResult struct {
-	key Key
-	err error
-}
-
-// pendingKeys holds, per input file, a key read still in flight after the
-// prompt waiting for it stopped (because of a signal or a done context).
-// The next prompt on the same input receives that key, so no keystroke is
-// lost and at most one goroutine waits per input.
-var pendingKeys = struct {
-	sync.Mutex
-	m map[*os.File]chan keyResult
-}{m: make(map[*os.File]chan keyResult)}
-
 // readKey reads one key from in, like ReadKey, but returns early with
 // clix.ErrCancelled if a signal arrives while the terminal is in raw mode,
-// or with ctx.Err() when ctx is done.
+// or with ctx.Err() when ctx is done. Nothing is left reading in, so a key
+// typed afterwards goes to the next prompt.
 func (ts *TerminalState) readKey(ctx context.Context, in *os.File) (Key, error) {
+	ev, err := ts.readEvent(ctx, in, nil, false)
+	return ev.key, err
+}
+
+// readEvent reads one key or bracketed paste (when collectPaste is set),
+// returning errResized when resized delivers a signal while waiting.
+func (ts *TerminalState) readEvent(ctx context.Context, in *os.File, resized <-chan os.Signal, collectPaste bool) (keyEvent, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-
-	pendingKeys.Lock()
-	ch := pendingKeys.m[in]
-	delete(pendingKeys.m, in)
-	pendingKeys.Unlock()
-	if ch == nil {
-		ch = make(chan keyResult, 1)
-		go func() {
-			key, err := ReadKey(in)
-			ch <- keyResult{key: key, err: err}
-		}()
+	if err := ctx.Err(); err != nil {
+		return keyEvent{key: KeyUnknown}, err
 	}
-
-	var interrupted <-chan struct{}
+	st, release := acquireReader(in)
+	defer release()
+	r := newKeyReader(in, st)
+	r.ctx = ctx
+	r.resized = resized
+	r.collectPaste = collectPaste
 	if ts != nil {
-		interrupted = ts.interrupted
+		r.interrupted = ts.interrupted
 	}
-
-	park := func() {
-		pendingKeys.Lock()
-		pendingKeys.m[in] = ch
-		pendingKeys.Unlock()
-	}
-	select {
-	case res := <-ch:
-		return res.key, res.err
-	case <-interrupted:
-		park()
-		return KeyUnknown, clix.ErrCancelled
-	case <-ctx.Done():
-		park()
-		return KeyUnknown, ctx.Err()
-	}
+	return r.next()
 }
 
-// ReadKey reads a single keypress from the terminal, returning the key code
-// and any special keys (arrows, enter, etc.)
-func ReadKey(in io.Reader) (key Key, err error) {
-	var buf [3]byte
-	n, err := in.Read(buf[:1])
-	if err != nil || n == 0 {
-		return KeyUnknown, err
-	}
-
-	// Check for escape sequence (arrow keys, etc.)
-	if buf[0] == 0x1b { // ESC
-		// Read more bytes to see if it's an escape sequence
-		n, err := in.Read(buf[1:])
-		if err != nil || n == 0 {
-			return KeyEscape, nil
-		}
-
-		// Check for arrow keys: ESC [ A (up), ESC [ B (down), etc.
-		if buf[1] == '[' {
-			// Need to read the third byte if we didn't get it
-			if n < 2 {
-				var extra [1]byte
-				if _, err := in.Read(extra[:]); err == nil {
-					buf[2] = extra[0]
-				} else {
-					// If we can't read the third byte, treat as escape
-					return KeyEscape, nil
-				}
-			}
-			// Handle the third byte
-			switch buf[2] {
-			case 'A':
-				return KeyUp, nil
-			case 'B':
-				return KeyDown, nil
-			case 'C':
-				return KeyRight, nil
-			case 'D':
-				return KeyLeft, nil
-			case 'H':
-				return KeyHome, nil
-			case 'F':
-				return KeyEnd, nil
-			case '1':
-				// Could be F1-F9: ESC [ 1 1 ~ through ESC [ 1 9 ~
-				// Also could be F10-F12 if followed by ESC [ [ 1 1 ~
-				// Read more bytes to check
-				var extra [3]byte
-				readCount, err := in.Read(extra[:])
-				if err == nil && readCount >= 2 {
-					// Check for double bracket: ESC [ [ (some terminals)
-					if extra[0] == '[' {
-						// ESC [ [ format - read one more byte for number
-						if readCount >= 3 {
-							switch extra[1] {
-							case '1':
-								switch extra[2] {
-								case '1':
-									return KeyF1, nil
-								case '2':
-									return KeyF2, nil
-								case '3':
-									return KeyF3, nil
-								case '4':
-									return KeyF4, nil
-								case '5':
-									return KeyF5, nil
-								case '7':
-									return KeyF6, nil
-								case '8':
-									return KeyF7, nil
-								case '9':
-									return KeyF8, nil
-								}
-							case '2':
-								switch extra[2] {
-								case '0':
-									return KeyF9, nil
-								case '1':
-									return KeyF10, nil
-								case '3':
-									return KeyF11, nil
-								case '4':
-									return KeyF12, nil
-								}
-							}
-						}
-					} else {
-						// ESC [ 1 X ~ format (F1-F9)
-						if readCount >= 3 && extra[1] == '~' {
-							switch extra[0] {
-							case '1':
-								return KeyF1, nil
-							case '2':
-								return KeyF2, nil
-							case '3':
-								return KeyF3, nil
-							case '4':
-								return KeyF4, nil
-							case '5':
-								return KeyF5, nil
-							case '6':
-								return KeyF6, nil
-							case '7':
-								return KeyF7, nil
-							case '8':
-								return KeyF8, nil
-							case '9':
-								return KeyF9, nil
-							}
-						} else if readCount >= 2 && extra[0] == ';' {
-							// Could be ESC [ 1 ; X ... (modified keys), skip for now
-							return KeyEscape, nil
-						}
-					}
-				}
-				return KeyEscape, nil
-			case '2':
-				// Could be F10-F12: ESC [ 2 0 ~ through ESC [ 2 4 ~
-				// Read more bytes to check
-				var extra [2]byte
-				if n, err := in.Read(extra[:]); err == nil && n >= 2 {
-					if extra[1] == '~' {
-						switch extra[0] {
-						case '0':
-							return KeyF10, nil
-						case '1':
-							return KeyF11, nil
-						case '3':
-							// Could be F13 (shift+F1) or F11 variant - treat as F11 for now
-							return KeyF11, nil
-						case '4':
-							return KeyF12, nil
-						}
-					}
-				}
-				return KeyEscape, nil
-			}
-			// If we got [ but didn't match, might be a longer sequence
-			// For now, just return escape
-			return KeyEscape, nil
-		}
-
-		// Check for VT100 style F-keys: ESC O P (F1), ESC O Q (F2), etc.
-		if buf[1] == 'O' {
-			// Need to read the third byte
-			if n < 2 {
-				var extra [1]byte
-				if _, err := in.Read(extra[:]); err == nil {
-					buf[2] = extra[0]
-				} else {
-					return KeyEscape, nil
-				}
-			}
-			switch buf[2] {
-			case 'P':
-				return KeyF1, nil
-			case 'Q':
-				return KeyF2, nil
-			case 'R':
-				return KeyF3, nil
-			case 'S':
-				return KeyF4, nil
-			}
-			return KeyEscape, nil
-		}
-
-		// Could be other escape sequences, but for now just return escape
-		return KeyEscape, nil
-	}
-
-	// Regular character
-	switch buf[0] {
-	case '\r', '\n':
-		return KeyEnter, nil
-	case '\t':
-		return KeyTab, nil
-	case 0x7f, 0x08: // Backspace/DEL
-		return KeyBackspace, nil
-	case 0x03: // Ctrl+C
-		return KeyCtrlC, nil
-	case ' ':
-		return KeySpace, nil
-	default:
-		return Key{rune(buf[0]), buf[0]}, nil
-	}
-}
-
-// Key represents a pressed key.
+// Key represents a pressed key. For characters, Rune is the character and
+// Code its byte value when it is ASCII (0 otherwise); for special keys,
+// Rune is 0 and Code identifies the key, so keys compare with ==.
 type Key struct {
 	Rune rune
 	Code byte
@@ -375,6 +162,15 @@ var (
 	KeyBackspace = Key{0x7f, 0x7f}
 	KeyCtrlC     = Key{0, 0x03}
 	KeySpace     = Key{' ', ' '}
+
+	KeyDelete        = Key{0, 0xE4} // Delete (forward delete)
+	KeyInsert        = Key{0, 0xE5} // Insert
+	KeyPageUp        = Key{0, 0xE6} // Page Up
+	KeyPageDown      = Key{0, 0xE7} // Page Down
+	KeyShiftTab      = Key{0, 0xE8} // Shift-Tab (back tab)
+	KeyWordLeft      = Key{0, 0xE9} // Ctrl/Alt-Left, Alt-b
+	KeyWordRight     = Key{0, 0xEA} // Ctrl/Alt-Right, Alt-f
+	KeyWordBackspace = Key{0, 0xEB} // Alt-Backspace
 )
 
 // IsSpecial returns true if this is a special key (arrow, enter, etc.)
@@ -388,9 +184,17 @@ func (k Key) IsSpecial() bool {
 		(k.Rune == 0 && k.Code != 0)
 }
 
-// IsPrintable returns true if the key represents a printable character.
+// IsPrintable returns true if the key represents a printable character,
+// including non-ASCII letters, marks and symbols. Space is reported as
+// KeySpace and is not "printable" here.
 func (k Key) IsPrintable() bool {
-	return !k.IsSpecial() && k.Rune >= 32 && k.Rune < 127
+	if k.IsSpecial() {
+		return false
+	}
+	if k.Rune < 127 {
+		return k.Rune >= 32
+	}
+	return unicode.IsPrint(k.Rune)
 }
 
 // String returns a string representation of the key.
