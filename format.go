@@ -28,9 +28,19 @@ import (
 //     maps are flattened with dotted keys ("go.os = linux"), lists of plain
 //     values are joined with ", ", and lists of objects use their index as
 //     a key part ("items.0.name = a").
-//   - Lists of plain values print one value per line; lists of objects
-//     print each object as a block of "key = value" lines, separated by a
-//     blank line.
+//   - Lists of plain values print one value per line.
+//   - Lists of objects (structs or maps) are tables, one row per element
+//     and one column per field. When w is a terminal, the table is aligned
+//     and has a header, which is bold unless color is off (NO_COLOR,
+//     CLICOLOR=0, TERM=dumb), and the widest columns are truncated to fit
+//     the terminal. Otherwise (a pipe, a file, a buffer) each row is one
+//     line of tab-separated values, with no header, no color and nothing
+//     truncated, so scripts can rely on it. The columns are the fields in
+//     the order the JSON output has them (struct fields in declaration
+//     order, map keys sorted); FormatDataWith can choose them. See
+//     FormatOptions.Columns for how cells are written.
+//   - Lists that mix objects with other values print each element as a
+//     block, separated by a blank line.
 //   - Structs and other values are first converted to JSON (as below), so
 //     json struct tags, omitempty, omitzero and MarshalJSON methods decide
 //     their keys and values; durations inside them print as "1m30s" and
@@ -65,13 +75,48 @@ import (
 // duration ("PT1M30S", as in JSON) and a json.RawMessage is decoded into
 // the value it holds. time.Time is RFC 3339 everywhere.
 func FormatData(w io.Writer, data interface{}, format string) error {
-	switch strings.ToLower(format) {
+	return FormatDataWith(w, data, FormatOptions{Format: format})
+}
+
+// FormatOptions configure FormatDataWith.
+type FormatOptions struct {
+	// Format is "json", "yaml" or "text" (case-insensitive); anything
+	// else, including "", is "text". See FormatData.
+	Format string
+
+	// Columns chooses the columns of a text table (a list of objects; see
+	// FormatData), in order. Each is a field's JSON name, or a dotted path
+	// such as "owner.login" into nested objects; a path through a list
+	// collects the field of every element ("labels.name"). A key that
+	// itself contains a dot is matched as a whole first. Empty means every
+	// top-level field, in the order of the JSON output. Rows without the
+	// field get an empty cell.
+	//
+	// A cell is the field's text as in "key = value" lines: strings as
+	// they are, numbers, booleans, durations as "1m30s", nothing for null,
+	// a list of plain values joined with ", ", and nested objects and
+	// lists of objects as compact JSON.
+	//
+	// The header of a column is its name split into words and upper-cased:
+	// "displayName", "display_name" and "display.name" become
+	// "DISPLAY NAME".
+	Columns []string
+
+	// HeaderStyle styles the header of a terminal table, when color is on.
+	// nil means bold.
+	HeaderStyle TextStyle
+}
+
+// FormatDataWith formats data to w as FormatData does, with the options
+// in opts.
+func FormatDataWith(w io.Writer, data interface{}, opts FormatOptions) error {
+	switch strings.ToLower(opts.Format) {
 	case FormatJSON:
 		return formatJSON(w, data)
 	case FormatYAML:
 		return formatYAML(w, data)
 	default:
-		return formatText(w, data)
+		return formatText(w, data, opts)
 	}
 }
 
@@ -268,7 +313,7 @@ func jsonNumbers(v interface{}) interface{} {
 }
 
 // formatText formats data as plain text (default).
-func formatText(w io.Writer, data interface{}) error {
+func formatText(w io.Writer, data interface{}, opts FormatOptions) error {
 	switch v := data.(type) {
 	case map[string]interface{}:
 		if scalarMap(v) {
@@ -293,7 +338,11 @@ func formatText(w io.Writer, data interface{}) error {
 		}
 		return formatTextList(w, list)
 	}
-	return writeTextNode(w, textNode(data))
+	node := textNode(data)
+	if rows, ok := tableRows(node); ok {
+		return writeTable(w, data, rows, opts, terminalOf(w))
+	}
+	return writeTextNode(w, node)
 }
 
 func formatTextMap(w io.Writer, m map[string]interface{}) error {

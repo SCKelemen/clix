@@ -9,6 +9,7 @@ import (
 	prcmd "github.com/SCKelemen/clix/v2/examples/gh/internal/pr"
 	repocmd "github.com/SCKelemen/clix/v2/examples/gh/internal/repo"
 	simplecmd "github.com/SCKelemen/clix/v2/examples/gh/internal/simple"
+	"github.com/SCKelemen/clix/v2/ext/format"
 )
 
 func newApp() *clix.App {
@@ -78,5 +79,7 @@ gh pr checkout 321`)
 	}
 
 	app.Root = root
+	// --format, --json, --jq and --template, as gh has them.
+	app.AddExtension(format.Extension{})
 	return app
 }

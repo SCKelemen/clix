@@ -319,7 +319,7 @@ scan:
 				break scan
 			}
 			scope[i] = len(path)
-			if ok && uses[len(uses)-1].needsNext && i+1 < len(args) {
+			if ok && uses[len(uses)-1].takesNext(args, i) {
 				i++ // skip the flag's value
 				isValue[i] = true
 			}
@@ -399,11 +399,11 @@ scan:
 			// with -f from deploy and -p from the root, could not be read
 			// in pass 1, so the next token was not set aside as -p's value
 			// and may be the command itself.
-			if u.needsNext && i+1 < scanned && !isValue[i+1] {
+			if u.takesNext(args, i) && i+1 < scanned && !isValue[i+1] {
 				return nil, nil, nil, "", usageErrorf("%s needs a value: write %s=VALUE, or put the flags after the command", u.name, tok)
 			}
 			err := setFromArg(u.flag, u.name, u.value, u.hasValue, func() (string, bool) {
-				if i+1 >= len(args) {
+				if !u.takesNext(args, i) {
 					return "", false
 				}
 				i++

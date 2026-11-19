@@ -86,6 +86,14 @@ type VarOptions struct {
 	// Value receives the flag's value. A Value with a SetBool(bool) error
 	// method, or an IsBoolFlag() bool method returning true, is a switch
 	// that takes no value on the command line.
+	//
+	// A Value with an OptionalValue() bool method returning true takes a
+	// value that may be left out, like the format extension's --json:
+	// "--name=v" and "--name v" set v, but when "--name" is the last
+	// argument or is followed by a flag (or "--"), Set is called with ""
+	// and the next token is parsed as usual. Such a flag never takes a
+	// following token that starts with "-" as its value; write
+	// "--name=-v" for that.
 	Value Value
 }
 

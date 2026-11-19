@@ -69,6 +69,15 @@ func usageErrorf(format string, args ...any) error {
 	return &usageError{err: fmt.Errorf(format, args...)}
 }
 
+// UsageErrorf formats an error like fmt.Errorf (including %w) and marks it
+// as a usage error, a mistake in how the program was invoked, so that
+// ExitCode returns 2 for it. Commands and extensions use it for problems
+// they can only detect while running, such as an output field that the
+// command's data does not have.
+func UsageErrorf(format string, args ...any) error {
+	return usageErrorf(format, args...)
+}
+
 // ExitCode maps an error returned by App.Run to a conventional process exit
 // status:
 //
