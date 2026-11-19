@@ -150,6 +150,7 @@ func (t *toggle) Set(s string) error {
 }
 func (t *toggle) String() string   { return fmt.Sprint(t.on) }
 func (t *toggle) IsBoolFlag() bool { return true }
+func (t *toggle) Reset()           { t.on = false }
 
 func TestVarCustomValue(t *testing.T) {
 	app, _ := newTestApp(t, "moln")

@@ -105,10 +105,13 @@ func (o *VarOptions) merge(v VarOptions) {
 // registration methods do not cover. Accepts either a VarOptions struct
 // (primary API) or functional options with WithValue.
 //
-// Before each Run after the first, the value is restored by passing the
-// text its String method returned before the first Run back to Set, when
-// that text has changed. A Value whose Set accumulates (appends) should
-// therefore start out empty.
+// An App may be run more than once (in tests, a REPL, ...). Before the
+// next Run, what a Run set is undone, unless the program changed the
+// value since. For a custom Value that needs a Reset() method: Run calls
+// Reset and then, if the value held something before the previous Run,
+// Set with that text. A Value without Reset keeps what the previous Run
+// set (unless the flag has a Default, which is applied again), and the
+// carry-over is recorded in FlagSet.Err, so App.Validate reports it.
 func (fs *FlagSet) Var(opts ...FlagOption) {
 	var varOpts VarOptions
 	for _, opt := range opts {
@@ -221,11 +224,9 @@ func (s *StringSliceValue) Strings() []string {
 // Set, which appends.
 func (s *StringSliceValue) snapshot() func() {
 	saved := s.Strings()
+	target := orNewTarget(&s.target)
 	return func() {
-		if s.target == nil {
-			s.target = new([]string)
-		}
-		*s.target = append([]string(nil), saved...)
+		*target = append([]string(nil), saved...)
 		s.changed = false
 	}
 }

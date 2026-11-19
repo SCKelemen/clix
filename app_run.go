@@ -21,10 +21,11 @@ import (
 //
 // Run is not safe for concurrent use on the same App: it resets and fills
 // the flags of the command tree. Calling Run several times in sequence is
-// supported: each Run first restores every flag (and its destination
-// variable) to the value it held before the first Run, so values parsed by
-// one Run never leak into the next. To run commands in parallel, build one
-// App per goroutine.
+// supported: each Run first undoes what the previous Run set in every flag
+// and its destination variable, so values parsed by one Run never leak
+// into the next, while a value the program assigned between two Runs is
+// kept. Custom values need a Reset method for this (see FlagSet.Var). To
+// run commands in parallel, build one App per goroutine.
 func (a *App) Run(ctx context.Context, args []string) error {
 	if a.Root == nil {
 		return errors.New("clix: no root command configured")
@@ -54,6 +55,13 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	configErr := a.ensureConfigLoaded(ctx)
 
 	rootFlags := a.Root.Flags
+
+	// Undo what the previous Run set (unless the program changed it
+	// since), and record what this one changes.
+	if err := a.startRun(); err != nil {
+		return err
+	}
+	defer a.finishRun()
 
 	// Find the command first, then parse every flag exactly once: flags bind
 	// to the innermost command that defines them and fall back to the root.
@@ -245,10 +253,6 @@ scan:
 		path[i].parent = path[i-1]
 	}
 	cmd := path[len(path)-1]
-
-	// Start every Run from the values flags held before the first one, so
-	// nothing parsed by a previous Run (on any command) carries over.
-	resetTree(root)
 
 	// Pass 2: parse flags and collect positionals.
 	for i := 0; i < len(args); i++ {
@@ -456,7 +460,9 @@ func (a *App) applyConfigToFlags(flags *FlagSet) error {
 		// switches, only come from the command line; MYAPP_FORCE or
 		// MYAPP_HELP must not hijack every run.
 		if isCommandLineOnly(flag) {
-			a.trySetFromDefault(flag)
+			if err := a.trySetFromDefault(flag); err != nil {
+				return err
+			}
 			continue
 		}
 
@@ -473,7 +479,9 @@ func (a *App) applyConfigToFlags(flags *FlagSet) error {
 			}
 			continue
 		}
-		a.trySetFromDefault(flag)
+		if err := a.trySetFromDefault(flag); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -632,11 +640,17 @@ func isNumericValue(v Value) bool {
 	return false
 }
 
-// trySetFromDefault sets a flag value from its default if available.
-func (a *App) trySetFromDefault(flag *Flag) {
-	if flag.hasDefault() {
-		flag.Value.Set(flag.Default)
+// trySetFromDefault sets a flag value from its default if available. A
+// default the flag rejects (one changed after registration, say) is an
+// error.
+func (a *App) trySetFromDefault(flag *Flag) error {
+	if !flag.hasDefault() {
+		return nil
 	}
+	if err := flag.Value.Set(flag.Default); err != nil {
+		return fmt.Errorf("clix: invalid default %q for --%s: %w", flag.Default, flag.Name, err)
+	}
+	return nil
 }
 
 // missingFlagsError describes missing flags together with the environment

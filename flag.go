@@ -125,7 +125,12 @@ type Flag struct {
 	cliSet bool   // Internal: tracks if flag was set via CLI argument (not env/config/default)
 	source Source // Internal: where a non-CLI value came from (env, config, or prompt) when set
 
-	restore func() // Internal: puts Value back as it was before the first Run
+	// Internal: what the last Run did to the value (see App.startRun).
+	undoRun    func() error // puts Value back as it was before the last Run; nil when it cannot
+	beforeRun  string       // Value.String() when the last Run started
+	afterRun   string       // Value.String() when the last Run ended
+	runChanged bool         // the last Run changed the value
+	leakNoted  bool         // a carried-over value was recorded in the FlagSet's errors
 
 	yieldsShort bool // Internal: the built-in --help, which gives up -h to any other flag
 	badDefault  bool // Internal: Default does not parse, so the flag has no default
