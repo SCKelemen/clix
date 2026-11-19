@@ -200,6 +200,16 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		path:    path,
 	}
 
+	err = runHandlers(runCtx, cmd)
+	// A progress indicator the handlers left running ends with them, so
+	// it never keeps drawing after Run returns.
+	a.endProgress(runCtx, err)
+	return err
+}
+
+// runHandlers runs cmd's PreRun, Run and PostRun handlers in order,
+// stopping at the first error.
+func runHandlers(runCtx *Context, cmd *Command) error {
 	if cmd.PreRun != nil {
 		if err := cmd.PreRun(runCtx); err != nil {
 			return err
