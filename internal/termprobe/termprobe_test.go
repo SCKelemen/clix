@@ -86,8 +86,10 @@ func TestRunRecordsInput(t *testing.T) {
 	if rep.KittyFlags != "1" || rep.DECCKM != "reset" || rep.DeviceAttrs != "\x1b[?62;22c" {
 		t.Errorf("report %+v", rep)
 	}
-	// The title, the kitty push, the queries and, at the end, the pop.
-	output := pty.Output()
+	// The title, the kitty push, the queries and, at the end, the pop. Run
+	// returns once it has written the pop, but the pty's reader may not
+	// have collected it yet, so wait for it.
+	output := pty.WaitOutput(t, "\x1b[<u", 5*time.Second)
 	for _, want := range []string{"\x1b]2;probe-test\x07", "\x1b[>1u", "\x1b[?u\x1b[?1$p\x1b[?2004$p\x1b[c", "\x1b[<u"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("probe output %q lacks %q", output, want)
