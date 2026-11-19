@@ -3,6 +3,7 @@ package clix
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -137,6 +138,25 @@ type boolFlag interface {
 	Value
 	SetBool(bool) error
 }
+
+// switchOf returns v as a boolean switch, or nil when v takes a value. A
+// Value is a switch when it has a SetBool(bool) error method (as BoolValue
+// does), or, following the standard library's flag package, an
+// IsBoolFlag() bool method that returns true.
+func switchOf(v Value) boolFlag {
+	if bf, ok := v.(boolFlag); ok {
+		return bf
+	}
+	if bf, ok := v.(interface{ IsBoolFlag() bool }); ok && bf.IsBoolFlag() {
+		return isBoolFlagValue{v}
+	}
+	return nil
+}
+
+// isBoolFlagValue adapts a Value with IsBoolFlag to boolFlag.
+type isBoolFlagValue struct{ Value }
+
+func (v isBoolFlagValue) SetBool(b bool) error { return v.Set(strconv.FormatBool(b)) }
 
 // FlagOptions contains common configuration for all flag types.
 // This struct is embedded in all *VarOptions types to provide a unified API.
@@ -466,6 +486,9 @@ func (o *DurationVarOptions) merge(v DurationVarOptions) {
 //	)
 type BoolVarOptions struct {
 	FlagOptions
+	// Default is the value when the flag is not provided. A switch that
+	// defaults to true is turned off with --name=false.
+	Default bool
 	// Value is a pointer to the variable that will store the flag value.
 	Value *bool
 }
@@ -474,6 +497,9 @@ type BoolVarOptions struct {
 // after functional options refines them instead of discarding them.
 func (o *BoolVarOptions) merge(v BoolVarOptions) {
 	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default {
+		o.Default = true
+	}
 	if v.Value != nil {
 		o.Value = v.Value
 	}
@@ -495,13 +521,22 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 			}
 		case boolValueOption:
 			boolOpts.Value = v.value
+		case boolDefaultOption:
+			boolOpts.Default = bool(v)
 		default:
 			opt.ApplyFlag(&boolOpts.FlagOptions)
 		}
 	}
 	value := &BoolValue{target: boolOpts.Value}
-	flag := boolOpts.FlagOptions.newFlag(value, "")
+	def := ""
+	if boolOpts.Default {
+		def = "true"
+	}
+	flag := boolOpts.FlagOptions.newFlag(value, def)
 	fs.addFlag(flag)
+	if boolOpts.Default {
+		_ = value.SetBool(true)
+	}
 }
 
 // DurationVar registers a duration flag. Accepts either a DurationVarOptions struct
@@ -775,7 +810,7 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 		panic("flag requires a value")
 	}
 	if flag.Positional {
-		if _, ok := flag.Value.(boolFlag); ok {
+		if switchOf(flag.Value) != nil {
 			panic("boolean flag cannot be positional: " + flag.Name)
 		}
 	}
@@ -951,6 +986,11 @@ func WithBoolValue(value *bool) FlagOption {
 	return boolValueOption{value: value}
 }
 
+// WithBoolDefault sets the bool flag default value.
+func WithBoolDefault(defaultValue bool) FlagOption {
+	return boolDefaultOption(defaultValue)
+}
+
 // WithIntegerValue sets the integer flag value pointer.
 func WithIntegerValue(value *int) FlagOption {
 	return integerValueOption{value: value}
@@ -1070,6 +1110,10 @@ type boolValueOption struct {
 }
 
 func (o boolValueOption) ApplyFlag(*FlagOptions) {}
+
+type boolDefaultOption bool
+
+func (o boolDefaultOption) ApplyFlag(*FlagOptions) {}
 
 type integerValueOption struct {
 	value *int

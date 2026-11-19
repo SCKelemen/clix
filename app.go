@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -621,6 +622,46 @@ func (ctx *Context) EffectiveFloat64(key string) (float64, Source, bool) {
 		return 0, 0, false
 	}
 	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	return parsed, source, true
+}
+
+// Int retrieves an int value using the same precedence as String.
+func (ctx *Context) Int(key string) (int, bool) {
+	v, _, ok := ctx.EffectiveInt(key)
+	return v, ok
+}
+
+// Int64 retrieves an int64 value using the same precedence as String.
+func (ctx *Context) Int64(key string) (int64, bool) {
+	v, _, ok := ctx.EffectiveInt64(key)
+	return v, ok
+}
+
+// Float64 retrieves a float64 value using the same precedence as String.
+func (ctx *Context) Float64(key string) (float64, bool) {
+	v, _, ok := ctx.EffectiveFloat64(key)
+	return v, ok
+}
+
+// Duration retrieves a time.Duration value (such as "90s" or "1m30s")
+// using the same precedence as String.
+func (ctx *Context) Duration(key string) (time.Duration, bool) {
+	v, _, ok := ctx.EffectiveDuration(key)
+	return v, ok
+}
+
+// EffectiveDuration retrieves a time.Duration value and returns both the
+// value and its source.
+// Precedence: command flags > app flags > env > config > defaults
+func (ctx *Context) EffectiveDuration(key string) (time.Duration, Source, bool) {
+	value, source, found := ctx.resolveValue(key)
+	if !found {
+		return 0, 0, false
+	}
+	parsed, err := time.ParseDuration(value)
 	if err != nil {
 		return 0, 0, false
 	}

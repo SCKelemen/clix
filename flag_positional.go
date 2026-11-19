@@ -34,8 +34,7 @@ func (fs *FlagSet) MapPositionals(args []string) ([]string, error) {
 				return nil, usageErrorf("invalid value for positional argument %s: %w", f.Name, err)
 			}
 		}
-		f.set = true
-		f.cliSet = true
+		f.markCLI()
 		argIdx++
 	}
 	return args[argIdx:], nil

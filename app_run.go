@@ -57,6 +57,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	if cmd != a.Root {
+		// Root flags given while another command runs are app flags.
+		for _, f := range rootFlags.flags {
+			if f.cliSet {
+				f.source = SourceAppFlag
+			}
+		}
+	}
 
 	// Check if global --version flag was set
 	if version, _ := rootFlags.Bool("version"); version {
@@ -484,8 +492,7 @@ func isBuiltinSwitch(flag *Flag) bool {
 	if flag.Name != "help" && flag.Name != "version" {
 		return false
 	}
-	_, ok := flag.Value.(boolFlag)
-	return ok
+	return switchOf(flag.Value) != nil
 }
 
 // autoEnv reports whether flags read <EnvPrefix>_<NAME> (App.AutoEnv).

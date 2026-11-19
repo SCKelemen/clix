@@ -153,8 +153,7 @@ func isFlagArg(arg string) bool {
 // takesValue reports whether flag consumes a value (every flag except
 // boolean switches).
 func takesValue(flag *Flag) bool {
-	_, isBool := flag.Value.(boolFlag)
-	return !isBool
+	return switchOf(flag.Value) == nil
 }
 
 // lookupArg finds the flag spelled name ("--long" or "-s") in the first set
@@ -176,7 +175,7 @@ func lookupArg(name string, sets ...*FlagSet) *Flag {
 // needs a separate value, next supplies the following argument.
 func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (string, bool)) error {
 	if !hasValue {
-		if bf, ok := flag.Value.(boolFlag); ok {
+		if bf := switchOf(flag.Value); bf != nil {
 			// A bare switch means "true"; Validate sees it exactly as if
 			// --name=true had been written.
 			if err := bf.SetBool(true); err != nil {
@@ -187,8 +186,7 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 					return usageErrorf("invalid value for %s: %w", flag.Name, err)
 				}
 			}
-			flag.set = true
-			flag.cliSet = true
+			flag.markCLI()
 			return nil
 		}
 		v, ok := next()
@@ -206,8 +204,7 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 			return usageErrorf("invalid value for %s: %w", flag.Name, err)
 		}
 	}
-	flag.set = true
-	flag.cliSet = true
+	flag.markCLI()
 	return nil
 }
 
@@ -226,7 +223,7 @@ func resetFlagState(fs *FlagSet) {
 		f.cliSet = false
 		f.source = SourceDefault
 		if isBuiltinSwitch(f) {
-			_ = f.Value.(boolFlag).SetBool(false)
+			_ = switchOf(f.Value).SetBool(false)
 		}
 		if f.restore == nil {
 			f.restore = snapshotValue(f.Value)
