@@ -67,6 +67,12 @@ func TestParseDurationAccepted(t *testing.T) {
 		{"PT0.0000000019S", Duration{Time: 1}},
 		{"PT0.9999999999S", Duration{Time: 999999999}},
 		{"PT0.3333333333333333333333H", Duration{Time: 1199999999999}},
+		// Digits past the 19th still count: each of these is just above a
+		// whole number of nanoseconds.
+		{"PT0.3333333333333333333334H", Duration{Time: 20 * m}},
+		{"P0.142857142857142857142858W", Duration{Days: 1}},
+		{"P0.00000000000001157407407407407407407408D", Duration{Time: 1}},
+		{"PT0." + strings.Repeat("9", 100) + "S", Duration{Time: 999999999}},
 		{"P1.5D", Duration{Days: 1, Time: 12 * h}},
 		{"P0.5D", Duration{Time: 12 * h}},
 		{"P1.5W", Duration{Weeks: 1, Days: 3, Time: 12 * h}},

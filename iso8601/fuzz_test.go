@@ -2,6 +2,8 @@ package iso8601
 
 import (
 	"errors"
+	"fmt"
+	"math/big"
 	"testing"
 	"time"
 )
@@ -168,6 +170,53 @@ func FuzzParseDuration(f *testing.F) {
 		}
 		if out2 := again.String(); out2 != out {
 			t.Fatalf("String not stable: %q then %q", out, out2)
+		}
+	})
+}
+
+// FuzzFracNanos checks fracNanos against an exact math/big evaluation of
+// floor(0.digits × unit), and checks ParseDuration end to end with the
+// fraction on each unit.
+func FuzzFracNanos(f *testing.F) {
+	f.Add([]byte("142857142857142857142858"), uint8(4))
+	f.Add([]byte("3333333333333333333334"), uint8(2))
+	f.Add([]byte("00000000000001157407407407407407407408"), uint8(3))
+	f.Add([]byte("9999999999999999999999999"), uint8(0))
+	units := [...]struct {
+		seconds uint64
+		format  string
+	}{
+		{1, "PT0.%sS"},
+		{secondsPerMinute, "PT0.%sM"},
+		{secondsPerHour, "PT0.%sH"},
+		{secondsPerDay, "P0.%sD"},
+		{secondsPerWeek, "P0.%sW"},
+	}
+	f.Fuzz(func(t *testing.T, raw []byte, unit uint8) {
+		if len(raw) == 0 {
+			return
+		}
+		digits := make([]byte, len(raw))
+		for i, b := range raw {
+			digits[i] = '0' + b%10
+		}
+		u := units[int(unit)%len(units)]
+
+		n, _ := new(big.Int).SetString(string(digits), 10)
+		n.Mul(n, new(big.Int).SetUint64(u.seconds*1e9))
+		n.Quo(n, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(len(digits))), nil))
+		want := n.Uint64()
+
+		if got := fracNanos(string(digits), u.seconds); got != want {
+			t.Fatalf("fracNanos(%s, %d) = %d, want %d", digits, u.seconds, got, want)
+		}
+		s := fmt.Sprintf(u.format, digits)
+		d, err := ParseDuration(s)
+		if err != nil {
+			t.Fatalf("ParseDuration(%q): %v", s, err)
+		}
+		if got, ok := d.Exact(); !ok || uint64(got) != want {
+			t.Fatalf("ParseDuration(%q) = %v, exactly %v; want %d ns", s, d, got, want)
 		}
 	})
 }

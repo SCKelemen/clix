@@ -3,7 +3,6 @@ package iso8601
 import (
 	"errors"
 	"math"
-	"math/bits"
 	"strconv"
 	"time"
 )
@@ -312,22 +311,19 @@ func addLimit(a, b, limit uint64) (uint64, bool) {
 	return a + b, true
 }
 
-var pow10 = [...]uint64{1, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10,
-	1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19}
-
-// fracNanos returns floor(0.frac × unitSeconds) in nanoseconds, computed
-// exactly from up to 19 fraction digits. Later digits add less than a
-// thousandth of a nanosecond even for a week, and are ignored.
+// fracNanos returns floor(0.frac × unitSeconds) in nanoseconds, exactly,
+// for any number of digits. It applies Horner's rule from the last digit,
+// v = (d×u + v) / 10 with u the unit in nanoseconds. Because
+// floor((a + floor(x)) / 10) = floor((a + x) / 10) for an integer a, every
+// step keeps the exact floor, and since v < u, d×u + v < 10u, which fits in
+// a uint64 even for a week (10u < 6.1e15).
 func fracNanos(frac string, unitSeconds uint64) uint64 {
-	frac = frac[:min(len(frac), 19)]
-	var n uint64
-	for i := range len(frac) {
-		n = n*10 + uint64(frac[i]-'0')
+	u := unitSeconds * 1e9
+	var v uint64
+	for i := len(frac) - 1; i >= 0; i-- {
+		v = (uint64(frac[i]-'0')*u + v) / 10
 	}
-	// n < 10^k and unit < 2^50, so hi < 10^k and Div64 cannot overflow.
-	hi, lo := bits.Mul64(n, unitSeconds*1e9)
-	q, _ := bits.Div64(hi, lo, pow10[len(frac)])
-	return q
+	return v
 }
 
 // String returns d in the ISO 8601 format with designators, with zero
