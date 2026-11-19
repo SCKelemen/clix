@@ -120,7 +120,7 @@ func isoTime(t time.Time) string {
 // formatYAML formats data as YAML using go.yaml.in/yaml/v3.
 // Close flushes any buffered output, so its error is reported too.
 func formatYAML(w io.Writer, data interface{}) error {
-	data, err := decodeRawJSON(data)
+	data, err := prepareYAML(data)
 	if err != nil {
 		return err
 	}
@@ -133,35 +133,44 @@ func formatYAML(w io.Writer, data interface{}) error {
 	return encoder.Close()
 }
 
-var rawMessageType = reflect.TypeOf(json.RawMessage(nil))
+var (
+	rawMessageType = reflect.TypeOf(json.RawMessage(nil))
+	durationType   = reflect.TypeOf(time.Duration(0))
+)
 
-// decodeRawJSON replaces each json.RawMessage in data with the JSON value it
-// holds, so YAML shows the document instead of a list of byte values. It
-// looks through maps, slices, arrays, pointers and interfaces, rebuilding
-// only the containers that hold a RawMessage (as map[K]interface{} and
-// []interface{}, which YAML encodes the same way). Struct fields are left
-// alone.
-func decodeRawJSON(data interface{}) (interface{}, error) {
-	v, changed, err := replaceRawJSON(reflect.ValueOf(data))
+// prepareYAML replaces the values YAML would show badly: a json.RawMessage
+// becomes the JSON value it holds (not a list of byte values), and a
+// time.Duration becomes an ISO 8601 duration string ("PT1M30S", as in JSON
+// output) instead of yaml's "1m30s". It looks through maps, slices, arrays,
+// pointers and interfaces, rebuilding only the containers that hold such a
+// value (as map[K]interface{} and []interface{}, which YAML encodes the
+// same way). Struct fields are left alone, since rebuilding a struct would
+// change its YAML keys. time.Time needs nothing: yaml writes it in RFC 3339
+// with fractional seconds only when they are non-zero.
+func prepareYAML(data interface{}) (interface{}, error) {
+	v, changed, err := replaceForYAML(reflect.ValueOf(data))
 	if err != nil || !changed {
 		return data, err
 	}
 	return v, nil
 }
 
-func replaceRawJSON(rv reflect.Value) (interface{}, bool, error) {
+func replaceForYAML(rv reflect.Value) (interface{}, bool, error) {
 	if !rv.IsValid() {
 		return nil, false, nil
 	}
-	if rv.Type() == rawMessageType {
+	switch rv.Type() {
+	case rawMessageType:
 		return jsonToYAMLValue(rv.Bytes())
+	case durationType:
+		return isoDuration(time.Duration(rv.Int())), true, nil
 	}
 	switch rv.Kind() {
 	case reflect.Interface, reflect.Pointer:
 		if rv.IsNil() {
 			return nil, false, nil
 		}
-		return replaceRawJSON(rv.Elem())
+		return replaceForYAML(rv.Elem())
 	case reflect.Map:
 		type entry struct {
 			key, value reflect.Value
@@ -170,7 +179,7 @@ func replaceRawJSON(rv reflect.Value) (interface{}, bool, error) {
 		found := false
 		iter := rv.MapRange()
 		for iter.Next() {
-			v, changed, err := replaceRawJSON(iter.Value())
+			v, changed, err := replaceForYAML(iter.Value())
 			if err != nil {
 				return nil, false, err
 			}
@@ -197,7 +206,7 @@ func replaceRawJSON(rv reflect.Value) (interface{}, bool, error) {
 		items := make([]interface{}, rv.Len())
 		found := false
 		for i := range items {
-			v, changed, err := replaceRawJSON(rv.Index(i))
+			v, changed, err := replaceForYAML(rv.Index(i))
 			if err != nil {
 				return nil, false, err
 			}

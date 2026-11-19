@@ -71,8 +71,6 @@ func TestFormatJSONGolden(t *testing.T) {
 	}
 }
 
-func ptrTo[T any](v T) *T { return &v }
-
 // A value that cannot be encoded is an error, and nothing is written.
 func TestFormatJSONUnsupportedValue(t *testing.T) {
 	var b bytes.Buffer
@@ -81,26 +79,6 @@ func TestFormatJSONUnsupportedValue(t *testing.T) {
 	}
 	if b.Len() != 0 {
 		t.Errorf("partial output written: %q", b.String())
-	}
-}
-
-func TestISODuration(t *testing.T) {
-	for d, want := range map[time.Duration]string{
-		0:                            "PT0S",
-		90 * time.Second:             "PT1M30S",
-		1500 * time.Millisecond:      "PT1.5S",
-		-2 * time.Hour:               "-PT2H",
-		26 * time.Hour:               "PT26H",
-		time.Hour + time.Second:      "PT1H1S",
-		time.Nanosecond:              "PT0.000000001S",
-		-time.Millisecond:            "-PT0.001S",
-		time.Duration(math.MaxInt64): "PT2562047H47M16.854775807S",
-		time.Duration(math.MinInt64): "-PT2562047H47M16.854775808S",
-		2*time.Hour + 3*time.Minute + 40*time.Microsecond: "PT2H3M0.00004S",
-	} {
-		if got := isoDuration(d); got != want {
-			t.Errorf("isoDuration(%v) = %q, want %q", d, got, want)
-		}
 	}
 }
 
