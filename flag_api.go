@@ -91,7 +91,7 @@ type VarOptions struct {
 
 // merge applies the non-zero fields of v on top of o.
 func (o *VarOptions) merge(v VarOptions) {
-	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	v.ApplyFlag(&o.FlagOptions)
 	if v.Default != "" {
 		o.Default = v.Default
 	}
@@ -134,7 +134,7 @@ func (fs *FlagSet) Var(opts ...FlagOption) {
 	if varOpts.Value == nil {
 		panic("flag requires a value")
 	}
-	flag := varOpts.FlagOptions.newFlag(varOpts.Value, varOpts.Default)
+	flag := varOpts.newFlag(varOpts.Value, varOpts.Default)
 	fs.addFlag(flag)
 	fs.applyDefault(flag)
 }
@@ -333,7 +333,7 @@ type StringSliceVarOptions struct {
 
 // merge applies the non-zero fields of v on top of o.
 func (o *StringSliceVarOptions) merge(v StringSliceVarOptions) {
-	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	v.ApplyFlag(&o.FlagOptions)
 	if v.Default != nil {
 		o.Default = v.Default
 	}
