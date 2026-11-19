@@ -77,8 +77,11 @@ var unitDesignators = [...]byte{'Y', 'M', 'W', 'D', 'H', 'M', 'S'}
 // for example P1Y2M3DT4H5M6.5S, P2W, PT36H or -P1D. The rules are:
 //
 //   - Components appear in the order above, each at most once. A zero
-//     component may be omitted (P1YT1S), as ISO 8601 allows; the duration
-//     ABNF in RFC 3339 Appendix A is stricter and would reject this.
+//     component may be omitted, as ISO 8601 allows. The duration ABNF in
+//     RFC 3339 Appendix A is stricter: a component there can only be
+//     followed by the next smaller one (dur-hour = 1*DIGIT "H"
+//     [dur-minute]), so it rejects PT1H30S and P1Y1D, which this function
+//     accepts.
 //   - At least one component is required, and a "T" must be followed by at
 //     least one of H, M or S. "P" and "PT" alone are errors.
 //   - ISO 8601-1:2019 gives the week form PnW as an alternative to the

@@ -45,8 +45,10 @@ func TestParseDurationAccepted(t *testing.T) {
 		{"PT0H0M0S", Duration{}},
 		{"-PT0S", Duration{}},
 
-		// Zero components may be omitted, as ISO 8601 allows (RFC 3339's
-		// ABNF does not).
+		// Zero components may be omitted, as ISO 8601 allows. RFC 3339
+		// Appendix A's ABNF accepts P1YT1S (dur-date [dur-time]) but
+		// rejects PT1H30S and P1Y1D, where a component skips the next
+		// smaller one.
 		{"P1YT1S", Duration{Years: 1, Time: s}},
 		{"PT1H30S", Duration{Time: h + 30*s}},
 		{"P1Y1D", Duration{Years: 1, Days: 1}},
