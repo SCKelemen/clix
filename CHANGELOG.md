@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `TestDocsCompile` and `TestDocsLinks` (`docs_test.go`), run by `go test ./...` and so by CI: every ```` ```go ```` block of every Markdown file is compiled against the working tree, with errors reported at the Markdown file and line, and relative links and their `#anchors` must resolve. A block that starts with `// Abridged` is a reference listing and is not compiled. This replaces a script that was run by hand.
+
+### Fixed
+
+- Go examples in the README and `ext/README.md` that did not compile: the `format.Write` example used an undeclared `Owner` type and `listRepos` function, the `FormatDataWith`, `ext/format` and Progress examples used undeclared `repos` and `steps`, and the styling example needed lipgloss; it now uses `clix.StyleFunc` and points at `examples/lipgloss`.
+
 ## [2.8.0] - 2026-11-19
 
 ### Added
