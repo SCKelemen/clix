@@ -145,6 +145,8 @@ func TestParseDurationRejected(t *testing.T) {
 		{"PT.5S", 2, `expected a number of hours, minutes or seconds after 'T', found '.'`},
 		{"P.5D", 1, `expected a number, found '.'`},
 		{"P１D", 1, `expected a number, found '１'`},
+		{"P1\xffD", 2, `expected designator Y, M, W or D, found byte 0xff`},
+		{"PT1\ufffdS", 3, "expected designator H, M or S, found '\ufffd'"},
 		{"P1D ", 3, `expected a number, found ' '`},
 
 		// Units out of order or repeated.

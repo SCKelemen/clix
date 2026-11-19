@@ -52,12 +52,17 @@ func (p *scanner) peek() byte {
 	return 0
 }
 
-// found describes the character at pos for an error message.
+// found describes the character at pos for an error message. A byte that
+// does not start valid UTF-8 is shown as a byte, so it cannot be mistaken
+// for a literal U+FFFD.
 func (p *scanner) found(pos int) string {
 	if pos >= len(p.s) {
 		return "end of input"
 	}
-	r, _ := utf8.DecodeRuneInString(p.s[pos:])
+	r, size := utf8.DecodeRuneInString(p.s[pos:])
+	if r == utf8.RuneError && size == 1 {
+		return fmt.Sprintf("byte 0x%02x", p.s[pos])
+	}
 	return strconv.QuoteRune(r)
 }
 
