@@ -141,6 +141,8 @@ type Flag struct {
 	wantShort  string // Internal: the short name requested at registration
 	registered bool   // Internal: wantShort has been recorded
 	owner             // Internal: the app or the extension that registered the flag
+
+	completion CompletionFunc // Internal: shell completion for values (see FlagSet.SetCompletion)
 }
 
 // owner records who defined a flag or command: the app, or the extension
