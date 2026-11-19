@@ -117,6 +117,14 @@ type App struct {
 	// non-ASCII letters always match exactly.
 	CaseSensitive bool
 
+	// ExpandAliases makes Run expand user-defined aliases, which are stored
+	// in the config file under "aliases.<name>" (see ExpandAlias,
+	// CheckAlias and ext/alias, which sets this field and adds "alias set",
+	// "alias list" and "alias delete"). An alias is only looked up for the
+	// first argument, when it names no command, so aliases never shadow
+	// commands, and it never runs a shell.
+	ExpandAliases bool
+
 	// ProgressMode controls how Context.Progress reports long-running
 	// work. The default, ProgressAuto, animates a spinner when Err is a
 	// terminal and prints one plain line otherwise; ProgressPlain always

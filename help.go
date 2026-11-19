@@ -112,6 +112,9 @@ func (p helpPrinter) render(cmd *Command) {
 	p.renderInheritedFlags(cmd)
 	p.renderGlobalFlags(cmd)
 	p.renderChildren(cmd)
+	if isRoot {
+		p.renderUserAliases()
+	}
 
 	if cmd.Example != "" {
 		example := strings.ReplaceAll(cmd.Example, "\n", "\n  ")
@@ -296,6 +299,30 @@ func (p helpPrinter) renderChildSection(title string, children []*Command) {
 			desc = child.Long
 		}
 		p.row(p.style(p.App.Styles.ChildName, commandNames(child)), p.style(p.App.Styles.ChildDesc, desc))
+	}
+	_, _ = fmt.Fprintln(p.w)
+}
+
+// renderUserAliases lists the aliases users defined (see
+// App.ExpandAliases) under ALIAS COMMANDS, as gh's help does. An alias a
+// command now shadows is left out: it never runs.
+func (p helpPrinter) renderUserAliases() {
+	if !p.App.ExpandAliases {
+		return
+	}
+	aliases := p.App.Aliases()
+	var names []string
+	for _, n := range p.App.AliasNames() {
+		if p.App.Root.findChildMatch(n, p.App.CaseSensitive) == nil {
+			names = append(names, n)
+		}
+	}
+	if len(names) == 0 {
+		return
+	}
+	p.heading("ALIAS COMMANDS")
+	for _, n := range names {
+		p.row(p.style(p.App.Styles.ChildName, n), p.style(p.App.Styles.ChildDesc, fmt.Sprintf("Alias for %q", aliases[n])))
 	}
 	_, _ = fmt.Fprintln(p.w)
 }

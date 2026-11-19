@@ -862,6 +862,7 @@ This design is inspired by [goldmark's extension system](https://github.com/yuin
 Everything else is opt-in via extensions, including:
 - Command-based help (`cli help`)
 - Config management commands (`cli config`)
+- Command aliases (`cli alias`)
 - Shell completion (`cli autocomplete`)
 - Version information (`cli version`)
 - Output format selection (`--format`)
@@ -878,6 +879,7 @@ import (
         "os"
 
         "github.com/SCKelemen/clix/v2"
+        "github.com/SCKelemen/clix/v2/ext/alias"
         "github.com/SCKelemen/clix/v2/ext/autocomplete"
         "github.com/SCKelemen/clix/v2/ext/config"
         "github.com/SCKelemen/clix/v2/ext/format"
@@ -891,6 +893,7 @@ app.Root = clix.NewCommand("myapp")
 // Add extensions for optional features
 app.AddExtension(help.Extension{})         // Adds: myapp help [command...]
 app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset (Configurations: true adds named configurations)
+app.AddExtension(alias.Extension{})        // Adds: myapp alias set|list|delete, and expands aliases
 app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [bash|zsh|fish|powershell]
 app.AddExtension(format.Extension{})       // Adds: --format / -f (-f unless your app uses it): json|yaml|text, default text
 app.AddExtension(version.Extension{        // Adds: myapp version, --version / -v (-v unless your app uses it)
@@ -992,6 +995,31 @@ The configuration a command uses is the one given with the Ambient `--configurat
 
 The same operations are methods on `App` for programs and tests: `EnableConfigurations`, `Configuration` (the name in effect and its `Source`), `Configurations`, `ConfigurationFile`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` and `ConfigurationEnvVar`. `ConfigFile` and `SaveConfig` use the configuration in effect; `ConfigDir` is still the config directory.
 
+#### Alias Extension (`clix/ext/alias`)
+
+Adds gh-style aliases: shortcuts that users define for longer command lines.
+
+```text
+myapp alias set co 'pr checkout'              # myapp co 123  runs  myapp pr checkout 123
+myapp alias set il 'issue list --label=$1'    # myapp il bug --web  runs  myapp issue list --label=bug --web
+myapp alias set co 'pr checkout --force' --clobber
+myapp alias list                              # name: expansion (JSON or YAML with --format)
+myapp alias delete co                         # or --all
+```
+
+Aliases are stored in the config file under `aliases.<name>` (`aliases: {co: pr checkout}` written by hand works too) and expanded by `Run` when `App.ExpandAliases` is set, which the extension does. `$1`, `$2`, ... are replaced by the arguments after the alias, and the arguments after the highest `$N` used are appended, as gh does; an alias that needs more arguments than it got is a usage error. Root help lists them under ALIAS COMMANDS, and shell completion offers them as the first word and, after one, completes as for its expansion.
+
+The rules, which are also the security model:
+
+- **No shell aliases.** gh's `alias set --shell` and `!` expansions run a shell; clix has neither: `--shell` is an unknown flag, and an expansion starting with `!` is refused when it is set and when a hand-edited config file holds one. An alias only ever becomes the arguments of one of the app's own commands.
+- **Nothing is evaluated.** The expansion is split into words with shell-like quoting (`'...'`, `"..."`, backslashes), but `$VAR`, globs, `~`, backquotes and `$(...)` stay literal text.
+- **Arguments are never split again.** Each one replaces its `$N` as a whole word, or as the part of the word where `$N` is (`--label=$1`), so an argument such as `"1 --force"` cannot add flags or words.
+- **Aliases never shadow commands.** `alias set` refuses a name that a root command or command alias has, hidden commands and extensions' commands included (`alias`, `help`, `config`, ...), and a command added later wins over an existing alias (`alias list` warns).
+- **One expansion, into a command.** The expansion must start with a root command, so an alias cannot name another alias and is expanded once.
+- **Only the first argument**, and only when the root takes no positional arguments of its own; flags before an alias are not supported (as in gh).
+
+Alias names are a letter or digit followed by letters, digits, hyphens and underscores, matched like command names (ASCII case is ignored unless `App.CaseSensitive`). The core API is `App.ExpandAliases`, `Aliases`, `AliasNames`, `CheckAlias`, `SetAlias`, `DeleteAlias`, `ExpandAlias` and `AliasConfigPrefix`. An app command named `alias` replaces the extension's.
+
 #### Autocomplete Extension (`clix/ext/autocomplete`)
 
 Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion script on stdout (and nothing else, so it can be redirected to a file); without a shell it shows help, including installation steps. To load it:
@@ -1004,6 +1032,7 @@ Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion 
 The scripts are thin wrappers that ask the program itself through a hidden `__complete` command, so completion always matches the installed version and no command name or description ever becomes shell code. Completion follows the parser:
 
 - commands and aliases where they are valid, never hidden or shadowed ones;
+- user aliases (see the alias extension) as the first word, and after one, what its expansion takes;
 - the flags in scope (the command's, its ancestors' and the root's; long and short), leaving out flags already given, except repeatable ones, and the other flags of a mutually exclusive group once one is given;
 - values for flags and positional arguments registered with `cmd.Flags.SetCompletion(name, fn)`, for example `clix.CompleteValues("eu", "us")` or `clix.CompleteOptions(options...)` (the same `SelectOption` list a select prompt uses); `true`/`false` for `--switch=`;
 - `--flag=value` forms (including file names after `--file=`), nothing but arguments after `--`, and file names when nothing else is known, quoted so that names containing `$(...)` or backquotes are inserted literally, also inside `"` and `'`.

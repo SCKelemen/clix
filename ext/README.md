@@ -64,6 +64,15 @@ Adds command-based help similar to man pages:
 
 **Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
 
+### Alias Extension (`clix/ext/alias`)
+
+Adds gh-style command aliases, stored in the config file under `aliases.<name>`:
+- `cli alias set <name> <expansion> [--clobber]` - Create a shortcut; `$1`, `$2`, ... take the arguments after it, the rest are appended
+- `cli alias list` - List the aliases
+- `cli alias delete <name>` or `--all` - Delete aliases
+
+Aliases never run a shell (there is no `--shell`, and `!` expansions are refused), never shadow a command, and only ever expand into one of the app's commands. See "Alias Extension" in the main README for the full rules.
+
 ### Config Extension (`clix/ext/config`)
 
 Adds configuration management commands using dot-separated key paths (e.g. `project.default`):
