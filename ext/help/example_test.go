@@ -16,7 +16,7 @@ func ExampleExtension() {
 
 	// Now the app will have:
 	//   example help                    - Show root help
-	//   example help --command [name]   - Show command help
+	//   example help [command...]       - Show command help, such as "example help group command"
 	//
 	// Flag-based help still works without the extension:
 	//   example -h, example --help

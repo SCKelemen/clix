@@ -72,6 +72,9 @@ func (h HelpRenderer) renderArguments(w io.Writer, cmd *Command) {
 	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "ARGUMENTS"))
 	for _, flag := range positionals {
 		label := "<" + flag.Name + ">"
+		if flag.IsVariadic() {
+			label += "..."
+		}
 		renderedName := renderText(nameStyle, label)
 		usage := flag.Usage
 		if flag.Required {
@@ -114,10 +117,14 @@ func (h HelpRenderer) buildUsageLine(cmd *Command) string {
 	b.WriteString(cmd.Path())
 	b.WriteString(" [flags]")
 	for _, f := range cmd.Flags.PositionalFlags() {
+		dots := ""
+		if f.IsVariadic() {
+			dots = "..."
+		}
 		if f.Required {
-			fmt.Fprintf(&b, " <%s>", f.Name)
+			fmt.Fprintf(&b, " <%s>%s", f.Name, dots)
 		} else {
-			fmt.Fprintf(&b, " [%s]", f.Name)
+			fmt.Fprintf(&b, " [%s%s]", f.Name, dots)
 		}
 	}
 	return b.String()
