@@ -32,7 +32,8 @@ import (
 //	}
 type ConfigManager struct {
 	values  map[string]string
-	numbers map[string]string // decimal form of YAML numbers written as 0x1F, 0755, 1e3, ...
+	numbers map[string]string   // decimal form of YAML numbers written as 0x1F, 0755, 1e3, ...
+	lists   map[string][]string // the items of YAML lists of scalars, for slice flags
 	schemas map[string]ConfigSchema
 }
 
@@ -160,6 +161,7 @@ func (m *ConfigManager) Load(path string) error {
 	f := flattener{
 		values:  make(map[string]string),
 		numbers: make(map[string]string),
+		lists:   make(map[string][]string),
 		weak:    make(map[string]bool),
 	}
 	if err := f.document(&doc); err != nil {
@@ -172,12 +174,20 @@ func (m *ConfigManager) Load(path string) error {
 	if m.numbers == nil {
 		m.numbers = make(map[string]string)
 	}
+	if m.lists == nil {
+		m.lists = make(map[string][]string)
+	}
 	for k, v := range f.values {
 		m.values[k] = v
 		if n, ok := f.numbers[k]; ok {
 			m.numbers[k] = n
 		} else {
 			delete(m.numbers, k)
+		}
+		if items, ok := f.lists[k]; ok {
+			m.lists[k] = items
+		} else {
+			delete(m.lists, k)
 		}
 	}
 	return nil
@@ -187,8 +197,9 @@ func (m *ConfigManager) Load(path string) error {
 // scalar's text as written.
 type flattener struct {
 	values  map[string]string
-	numbers map[string]string // decimal form of numeric scalars
-	weak    map[string]bool   // keys set through a merge key, which later keys may override
+	numbers map[string]string   // decimal form of numeric scalars
+	lists   map[string][]string // items of lists of scalars
+	weak    map[string]bool     // keys set through a merge key, which later keys may override
 }
 
 // document flattens the top-level mapping of doc.
@@ -296,7 +307,7 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 			// "key:" with no value is YAML null; treat it as unset.
 			return nil
 		}
-		return f.set(key, n.Value, yamlNumber(n), weak, n.Line)
+		return f.set(key, n.Value, yamlNumber(n), nil, weak, n.Line)
 	case yaml.MappingNode:
 		return f.mapping(key, n, weak)
 	case yaml.SequenceNode:
@@ -308,14 +319,15 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 			}
 		}
 		if scalars {
-			// A list of scalars is joined with commas.
+			// A list of scalars reads as its items joined with commas;
+			// slice flags get the items themselves.
 			parts := make([]string, len(n.Content))
 			for i, item := range n.Content {
 				if item = resolveAlias(item); item.ShortTag() != "!!null" {
 					parts[i] = item.Value
 				}
 			}
-			return f.set(key, strings.Join(parts, ","), "", weak, n.Line)
+			return f.set(key, strings.Join(parts, ","), "", parts, weak, n.Line)
 		}
 		for i, item := range n.Content {
 			if err := f.value(key+"."+strconv.Itoa(i), item, weak); err != nil {
@@ -329,8 +341,9 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 }
 
 // set records a flattened value, rejecting a key that is already set
-// unless one of the two came from a merge key.
-func (f *flattener) set(key, value, number string, weak bool, line int) error {
+// unless one of the two came from a merge key. items is non-nil for a
+// list of scalars.
+func (f *flattener) set(key, value, number string, items []string, weak bool, line int) error {
 	if _, exists := f.values[key]; exists {
 		switch {
 		case weak:
@@ -346,6 +359,11 @@ func (f *flattener) set(key, value, number string, weak bool, line int) error {
 		f.numbers[key] = number
 	} else {
 		delete(f.numbers, key)
+	}
+	if items != nil {
+		f.lists[key] = items
+	} else {
+		delete(f.lists, key)
 	}
 	return nil
 }
@@ -390,6 +408,13 @@ func yamlNumber(n *yaml.Node) string {
 func (m *ConfigManager) number(key string) (string, bool) {
 	v, ok := m.numbers[key]
 	return v, ok
+}
+
+// list returns the items of key's value when the config file wrote it as
+// a YAML list of scalars.
+func (m *ConfigManager) list(key string) ([]string, bool) {
+	items, ok := m.lists[key]
+	return items, ok
 }
 
 // numeric returns the text to parse as a number for key: YAML's numeric
@@ -520,6 +545,7 @@ func (m *ConfigManager) Set(key, value string) {
 	}
 	m.values[key] = value
 	delete(m.numbers, key)
+	delete(m.lists, key)
 }
 
 // Delete removes a key from the configuration. It returns true if the key existed.
@@ -531,6 +557,7 @@ func (m *ConfigManager) Delete(key string) bool {
 	if _, ok := m.values[key]; ok {
 		delete(m.values, key)
 		delete(m.numbers, key)
+		delete(m.lists, key)
 		return true
 	}
 	return false
@@ -540,6 +567,7 @@ func (m *ConfigManager) Delete(key string) bool {
 func (m *ConfigManager) Reset() {
 	m.values = make(map[string]string)
 	m.numbers = nil
+	m.lists = nil
 }
 
 // Values returns a copy of the stored values.

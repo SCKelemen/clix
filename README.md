@@ -292,7 +292,7 @@ The other controls, all off by default:
 
 #### Config file values
 
-Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode: 0755` is `"0755"` and `date: 2024-01-02` is `"2024-01-02"`. Only int and float flags (and `Config.Int` and friends) read YAML's number, so `mode: 0755` sets an int flag to 493 and `0x1F` to 31. Nested maps flatten to dotted keys (`ports: {80: http}` is `ports.80`); a list of scalars is joined with commas, and other lists flatten with indexes (`hosts.0.name`). A key written twice, for example nested and dotted, is an error that names the file. `Save` replaces the file atomically with mode 0600, and writes through a symbolic link instead of replacing it.
+Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode: 0755` is `"0755"` and `date: 2024-01-02` is `"2024-01-02"`. Only int and float flags (and `Config.Int` and friends) read YAML's number, so `mode: 0755` sets an int flag to 493 and `0x1F` to 31. Nested maps flatten to dotted keys (`ports: {80: http}` is `ports.80`); a list of scalars is joined with commas (a slice flag gets its items one by one, so an item may contain a comma), and other lists flatten with indexes (`hosts.0.name`). A key written twice, for example nested and dotted, is an error that names the file. `Save` replaces the file atomically with mode 0600, and writes through a symbolic link instead of replacing it.
 
 #### Checking definitions in a test
 
@@ -415,7 +415,7 @@ moln [--project/-p] [--verbose/-v]
 - Values: `--name value`, `--name=value`, `-n value`, `-n=value` and `-nvalue`. `--name=` sets the empty string.
 - Boolean flags never consume the next token: `--force` is true, `--force=false` is false, and in `deploy --force false` the word `false` is a positional argument.
 - One-letter short flags can be clustered: `-fv` is `-f -v`. The first letter that takes a value takes the rest of the token as its value (`-frus` sets `--region` to `us`), or the next token if it is the last letter (`-fr us`). A cluster with a letter that is not a flag is an unknown flag.
-- Repeating a flag replaces its value, so the last one wins, except slice flags (`StringSliceVar`), which append: `-t a -t b,c` is `[a b c]`.
+- Repeating a flag replaces its value, so the last one wins, except slice flags (`StringSliceVar`), which append: `-t a -t b,c` is `[a b c]`. A slice value is split on commas with the spaces around each item trimmed, and an item in double quotes may contain commas: `--tag '"a,b", c'` is `[a,b c]`. Environment variables follow the same rule.
 
 **Where a flag may appear, and which flag a name means.** A flag may be written before the path, between path segments or after it. Its name is looked up on the command in effect at that point (the deepest command matched so far), then on each ancestor up to the root. A cluster's letters are looked up the same way, so `deploy -fv` sets `deploy --force` and the root's `--verbose`.
 

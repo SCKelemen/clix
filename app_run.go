@@ -627,6 +627,21 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 	if !ok {
 		return false, nil
 	}
+	if slice, isSlice := flag.Value.(*StringSliceValue); isSlice {
+		// A YAML list goes to a slice flag item by item, so an item may
+		// contain commas or quotes.
+		if items, ok := a.Config.list(key); ok {
+			slice.setItems(items)
+			if flag.Validate != nil {
+				if err := flag.Validate(slice.String()); err != nil {
+					return false, usageErrorf("invalid value %q for --%s from config file key %q: %w", slice.String(), flag.Name, key, err)
+				}
+			}
+			flag.set = true
+			flag.source = SourceConfigFile
+			return true, nil
+		}
+	}
 	if isNumericValue(flag.Value) {
 		// Numeric flags read YAML's numeric value: 0x1F is 31 and 0755 is
 		// 493, as in YAML; every other flag gets the text as written.

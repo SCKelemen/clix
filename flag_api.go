@@ -1,7 +1,6 @@
 package clix
 
 import (
-	"encoding/csv"
 	"fmt"
 	"strings"
 	"time"
@@ -172,11 +171,24 @@ func (fs *FlagSet) applyDefault(flag *Flag) {
 	}
 }
 
-// StringSliceValue implements Value for repeatable string flags. Each Set
-// splits its argument as one line of comma-separated values (quote a value
-// that contains a comma: --tag '"a,b"'). The first Set in a Run replaces
-// the default and later ones append, so --tag a --tag b,c gives
-// [a b c].
+// StringSliceValue implements Value for repeatable string flags. The first
+// Set in a Run replaces the default and later ones append, so
+// --tag a --tag b,c gives [a b c]. A YAML list in the config file is used
+// item by item. Text from the command line, an environment variable or a
+// config string is split into items like this:
+//
+//   - items are separated by commas, and spaces around an item are
+//     trimmed: "a, b" is [a b], and "a,,b" is [a "" b];
+//   - an item that starts with a double quote ends at the closing quote,
+//     so it may contain commas and keep surrounding spaces; inside it, two
+//     double quotes stand for one: `"a,b", c` is [a,b c];
+//   - a double quote anywhere else is an ordinary character: `a"b` is
+//     [a"b];
+//   - empty (or all-space) text is an empty list.
+//
+// An unterminated quoted item, or text after a closing quote other than
+// spaces and a comma, is an error. String joins the items the same way,
+// quoting where needed, so it reads back unchanged.
 type StringSliceValue struct {
 	target  *[]string
 	changed bool
@@ -185,31 +197,31 @@ type StringSliceValue struct {
 // Set parses value and appends it, replacing the default on the first
 // call.
 func (s *StringSliceValue) Set(value string) error {
-	items, err := splitCSV(value)
+	items, err := splitList(value)
 	if err != nil {
 		return err
 	}
-	if s.target == nil {
-		s.target = new([]string)
-	}
-	if !s.changed {
-		*s.target = nil
-		s.changed = true
-	}
-	*s.target = append(*s.target, items...)
+	s.setItems(items)
 	return nil
 }
 
-// String returns the values as one line of comma-separated values.
+// setItems appends items, replacing the default on the first call.
+func (s *StringSliceValue) setItems(items []string) {
+	target := orNewTarget(&s.target)
+	if !s.changed {
+		*target = nil
+		s.changed = true
+	}
+	*target = append(*target, items...)
+}
+
+// String returns the values joined with commas, quoting an item as
+// splitList expects when it would not read back otherwise.
 func (s *StringSliceValue) String() string {
-	if s.target == nil || len(*s.target) == 0 {
+	if s.target == nil {
 		return ""
 	}
-	var b strings.Builder
-	w := csv.NewWriter(&b)
-	_ = w.Write(*s.target)
-	w.Flush()
-	return strings.TrimSuffix(b.String(), "\n")
+	return joinList(*s.target)
 }
 
 // Strings returns a copy of the current values.
@@ -231,14 +243,72 @@ func (s *StringSliceValue) snapshot() func() {
 	}
 }
 
-// splitCSV splits one line of comma-separated values.
-func splitCSV(value string) ([]string, error) {
-	if value == "" {
+// splitList splits text into list items by the rules documented on
+// StringSliceValue.
+func splitList(text string) ([]string, error) {
+	if strings.TrimSpace(text) == "" {
 		return nil, nil
 	}
-	r := csv.NewReader(strings.NewReader(value))
-	r.FieldsPerRecord = -1
-	return r.Read()
+	var items []string
+	i := 0
+	for {
+		for i < len(text) && (text[i] == ' ' || text[i] == '\t') {
+			i++
+		}
+		if i < len(text) && text[i] == '"' {
+			var b strings.Builder
+			closed := false
+			for i++; i < len(text); i++ {
+				if text[i] != '"' {
+					b.WriteByte(text[i])
+					continue
+				}
+				if i+1 < len(text) && text[i+1] == '"' {
+					b.WriteByte('"')
+					i++
+					continue
+				}
+				i++
+				closed = true
+				break
+			}
+			if !closed {
+				return nil, fmt.Errorf("unterminated quote in %q", text)
+			}
+			for i < len(text) && (text[i] == ' ' || text[i] == '\t') {
+				i++
+			}
+			if i < len(text) && text[i] != ',' {
+				return nil, fmt.Errorf("unexpected %q after a quoted item in %q", text[i], text)
+			}
+			items = append(items, b.String())
+		} else {
+			end := len(text)
+			if j := strings.IndexByte(text[i:], ','); j >= 0 {
+				end = i + j
+			}
+			items = append(items, strings.TrimSpace(text[i:end]))
+			i = end
+		}
+		if i >= len(text) {
+			return items, nil
+		}
+		i++ // the comma
+	}
+}
+
+// joinList joins items with commas so that splitList reads them back:
+// an item is quoted when it contains a comma, starts with a double quote
+// or has surrounding spaces, and a single empty item is written as "".
+func joinList(items []string) string {
+	parts := make([]string, len(items))
+	for i, item := range items {
+		if strings.ContainsRune(item, ',') || strings.HasPrefix(item, `"`) || strings.TrimSpace(item) != item || (item == "" && len(items) == 1) {
+			item = `"` + strings.ReplaceAll(item, `"`, `""`) + `"`
+		}
+		parts[i] = item
+	}
+	return strings.Join(parts, ",")
 }
 
 // StringSliceVarOptions describes the configuration for adding a
@@ -273,9 +343,10 @@ func (o *StringSliceVarOptions) merge(v StringSliceVarOptions) {
 }
 
 // StringSliceVar registers a repeatable string flag: each occurrence adds
-// one or more comma-separated values (see StringSliceValue). An
-// environment variable or config value holds a comma-separated list, and a
-// YAML list in the config file works too. Accepts either a
+// one or more comma-separated values (see StringSliceValue for the exact
+// rules). An environment variable holds a comma-separated list with
+// the same rules; in the config file, a YAML list is used item by item
+// and a string is split like an environment variable. Accepts either a
 // StringSliceVarOptions struct (primary API) or functional options.
 func (fs *FlagSet) StringSliceVar(opts ...FlagOption) {
 	var sliceOpts StringSliceVarOptions
