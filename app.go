@@ -101,8 +101,10 @@ type App struct {
 	boundFlags *FlagSet
 
 	// Extensions for optional batteries-included features
-	extensions     []Extension
-	extensionsOnce sync.Once
+	extMu      sync.Mutex
+	extensions []Extension
+	extApplied int   // extensions[:extApplied] have been applied
+	extErr     error // the first error an extension returned
 }
 
 // AppOption configures an App using the functional options pattern.

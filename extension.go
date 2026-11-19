@@ -29,32 +29,37 @@ type Extension interface {
 
 // AddExtension registers an extension with the application. Extensions are
 // applied lazily when the app runs, or can be applied immediately by calling
-// ApplyExtensions().
+// ApplyExtensions(). An extension added after a Run is applied by the next
+// Run, and one added by another extension's Extend is applied right after
+// it.
 func (a *App) AddExtension(ext Extension) {
-	if a.extensions == nil {
-		a.extensions = make([]Extension, 0)
-	}
 	a.extensions = append(a.extensions, ext)
 }
 
-// ApplyExtensions processes all registered extensions in order. This is
-// typically called automatically during Run(), but can be called manually
-// for testing or early initialization.
-// Extensions are applied exactly once using sync.Once for thread-safety.
+// ApplyExtensions applies, in order, every registered extension that has
+// not been applied yet. Run calls it automatically, but it can be called
+// manually for testing or early initialization. Each extension is applied
+// exactly once, and ApplyExtensions is safe for concurrent use.
+//
+// If an extension returns an error, the extensions after it are not
+// applied and the error is returned by this and every later call (and so
+// by every later Run): the App is left partly extended and must not run.
 func (a *App) ApplyExtensions() error {
-	if len(a.extensions) == 0 {
-		return nil
+	a.extMu.Lock()
+	defer a.extMu.Unlock()
+	if a.extErr != nil {
+		return a.extErr
 	}
-
-	var extErr error
-	a.extensionsOnce.Do(func() {
-		for _, ext := range a.extensions {
-			if err := ext.Extend(a); err != nil {
-				extErr = err
-				return
-			}
+	for a.extApplied < len(a.extensions) {
+		ext := a.extensions[a.extApplied]
+		a.extApplied++
+		if ext == nil {
+			continue
 		}
-	})
-
-	return extErr
+		if err := ext.Extend(a); err != nil {
+			a.extErr = err
+			return err
+		}
+	}
+	return nil
 }
