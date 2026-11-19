@@ -161,20 +161,28 @@ func takesValue(flag *Flag) bool {
 // lookupArg finds the flag spelled name ("--long" or "-s") in the first set
 // that defines it.
 //
-// The nearest definition wins, with one exception that keeps extensions
-// from overriding the app: a flag that an extension added to a command it
-// does not own (such as the app's deploy) loses to a definition by a
-// better owner (the app, or an extension added earlier) further out on
-// the path. A command's own flags (the app's on the app's commands, an
-// extension's on its own commands) always win at their command.
+// The nearest definition wins, with two exceptions. The built-in --help
+// gives -h up to any other flag on the path that wants it, so the root's
+// --host -h is also -h after a command name. And, to keep extensions from
+// overriding the app, a flag that an extension added to a command it does
+// not own (such as the app's deploy) loses to a definition by a better
+// owner (the app, or an extension added earlier) further out on the path.
+// A command's own flags (the app's on the app's commands, an extension's
+// on its own commands) always win at their command.
 func lookupArg(name string, sets ...*FlagSet) *Flag {
-	var best *Flag
+	var best, help *Flag
 	for _, fs := range sets {
 		if fs == nil {
 			continue
 		}
 		f, ok := fs.index[name]
 		if !ok {
+			continue
+		}
+		if f.yieldsShort && name != "--"+f.Name {
+			if help == nil {
+				help = f
+			}
 			continue
 		}
 		if best == nil || f.rank < best.rank {
@@ -184,7 +192,27 @@ func lookupArg(name string, sets ...*FlagSet) *Flag {
 			}
 		}
 	}
+	if best == nil {
+		return help
+	}
 	return best
+}
+
+// shownShort returns the short name help shows for flag, one of cmd's
+// flags: none when the short name means another flag on cmd's path, as
+// -h does when an ancestor has --host -h (see lookupArg).
+func shownShort(cmd *Command, flag *Flag) string {
+	if flag.Short == "" || !flag.yieldsShort {
+		return flag.Short
+	}
+	var sets []*FlagSet
+	for c := cmd; c != nil; c = c.parent {
+		sets = append(sets, c.Flags)
+	}
+	if lookupArg("-"+flag.Short, sets...) != flag {
+		return ""
+	}
+	return flag.Short
 }
 
 // setFromArg applies one command-line occurrence of flag. name is the flag as

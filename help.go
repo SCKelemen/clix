@@ -94,8 +94,8 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "FLAGS"))
 	for _, flag := range flags {
 		var names []string
-		if flag.Short != "" {
-			names = append(names, "-"+flag.Short)
+		if short := shownShort(cmd, flag); short != "" {
+			names = append(names, "-"+short)
 		}
 		names = append(names, "--"+flag.Name)
 		renderedNames := renderText(nameStyle, strings.Join(names, ", "))

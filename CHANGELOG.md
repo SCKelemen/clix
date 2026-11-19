@@ -41,7 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A first word equal to the root's name was always skipped, so `echo Echo` lost its argument and a child named like the app was unreachable. It is now skipped only when nothing else can use it.
 - An extension error was returned only by the first `Run`, and extensions added after the first `Run` (or by another extension) were never applied.
 - `Run` panicked on a `&Command{}` appended to `Children` after a `Run`, on a `Root` replaced after a `Run`, and on `--help` in a zero-value `App` (nil `Out`).
-- The built-in `--help` took `-h` from a `--host` flag on a hand-built `Command` or a `WithAppRoot` root.
+- The built-in `--help` took `-h` from a `--host` flag on a hand-built `Command` or a `WithAppRoot` root, and every command's own `--help` kept `-h`, so after a command name `-h` showed help instead of setting the root's or a group's `--host`; help then lists `--help` without `-h`.
 - Command names matched with Unicode case folding, so `ſtatus` (U+017F) ran `status` and a Kelvin sign matched `k`, which let argv words slip past allow and deny lists. Matching now folds ASCII letters only.
 - An unparsable `Default` (such as `"eighty"` for an int flag) was ignored silently and satisfied `Required`; it is now recorded in `FlagSet.Err` and counts as no default.
 - A bare `--force` skipped `Validate`, while `--force=true` ran it.

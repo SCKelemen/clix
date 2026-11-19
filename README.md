@@ -443,7 +443,7 @@ moln [--project/-p] [--verbose/-v]
 - A group followed by a word that is not a child fails with `unknown command: moln project nope`. The word `help` is not special there: `moln project help ls` is an unknown command, because the `help` command from `ext/help` only exists at the root.
 - A command with a `Run` handler and children runs its handler when the next word is not a child. `moln db users` runs `db` with `name` set to `users`; a command that takes no positional arguments fails with `unexpected arguments`.
 
-**Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `moln --help deploy`, `moln project --help ls` and `moln deploy -fh` all show help, even when required flags are missing or there are extra arguments. A command may use `-h` for its own flag (such as `--host`); the built-in help then has only `--help`.
+**Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `moln --help deploy`, `moln project --help ls` and `moln deploy -fh` all show help, even when required flags are missing or there are extra arguments. A flag that uses `-h` (such as `--host`) on the command or on any command above it keeps `-h` after the command name, and the built-in help there has only `--help`: with a root `--host -h`, `moln deploy -h example.com` sets the host.
 
 **Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `moln version` never asks for `--project`.
 
@@ -761,7 +761,7 @@ Extensions never override your definitions. Everything registered while an exten
 - This holds along the whole command path: if an extension adds `--project` to your `deploy` while your root defines `--project`, `deploy --project x` sets your root flag.
 - An extension's own commands keep their own flags: `config get --key k` uses ext/config's `--key` even if your root has a `--key`, and that is not reported, since there is nothing to fix.
 - A flag registered while the app is running (in a handler or hook) on a flag set no extension owns never takes a name from an existing flag.
-- The built-in `--help` gives `-h` up to any flag that wants it.
+- The built-in `--help` gives `-h` up to any flag that wants it, on the same command or on one above it, so a root `--host -h` is also `-h` after a command name.
 
 `FlagSet.Err` and `App.Validate` report every override and name both owners, numbering extensions in the order they were added, for example `extension #1 (version.Extension): -v is used by the app's --verbose; version is available as --version only`. Commands and flags that extensions added to the root move along if you replace `app.Root` after `ApplyExtensions`.
 
