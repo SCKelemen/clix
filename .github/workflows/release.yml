@@ -15,7 +15,7 @@ jobs:
       # Create the GitHub Release for the pushed tag.
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v5
         with:
@@ -33,7 +33,7 @@ jobs:
         run: go test ./...
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           draft: false
