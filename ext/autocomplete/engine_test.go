@@ -3,6 +3,7 @@ package autocomplete
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -86,7 +87,7 @@ func TestComplete_FlagsInScope(t *testing.T) {
 
 func TestComplete_FlagsOutOfScope(t *testing.T) {
 	got, _ := completeWords(t, "--", "rm")
-	assertSet(t, "probe rm --<TAB>", got, []string{"--force", "--path", "--help", "--verbose", "--org"})
+	assertSet(t, "probe rm --<TAB>", got, []string{"--force", "--dry-run", "--path", "--help", "--verbose", "--org"})
 	got, _ = completeWords(t, "--", "widgets")
 	assertSet(t, "probe widgets --<TAB>", got, []string{"--all", "--help", "--verbose", "--org"})
 	got, _ = completeWords(t, "-")
@@ -106,6 +107,35 @@ func TestComplete_GivenFlagsLeftOut(t *testing.T) {
 	// Repeatable flags stay.
 	got, _ = completeWords(t, "--", "cp", "--tag", "red")
 	assertSet(t, "probe cp --tag red --<TAB>", got, []string{"--tag", "--files", "--help", "--verbose", "--org"})
+}
+
+// Once one flag of a mutually exclusive group is given, the others are not
+// offered (rm has --force | --dry-run), however it was written.
+func TestComplete_MutuallyExclusiveLeftOut(t *testing.T) {
+	want := []string{"--path", "--help", "--verbose", "--org"}
+	for _, words := range [][]string{{"rm", "--force"}, {"rm", "--dry-run"}, {"--force", "rm"}, {"rm", "--dry-run=false"}, {"rm", "x", "--force"}} {
+		got, _ := completeWords(t, "--", words...)
+		assertSet(t, fmt.Sprintf("probe %s --<TAB>", strings.Join(words, " ")), got, want)
+	}
+	got, _ := completeWords(t, "--d", "rm", "--force")
+	if len(got) != 0 {
+		t.Errorf("probe rm --force --d<TAB> = %q, want nothing", got)
+	}
+}
+
+// A group may name a flag of a command above, and is resolved as Run
+// resolves it.
+func TestComplete_MutuallyExclusiveAcrossCommands(t *testing.T) {
+	app, out := testApp(t)
+	rm := app.Root.ResolvePath([]string{"rm"})
+	rm.Flags.MarkMutuallyExclusive("verbose", "path")
+	lines, _ := runComplete(t, app, out, "--cur=--", "--", "probe", "-v", "rm")
+	assertSet(t, "probe -v rm --<TAB>", values(lines), []string{"--force", "--dry-run", "--help", "--org"})
+	lines, _ = runComplete(t, app, out, "--cur=--", "--", "probe", "rm", "--path", "x")
+	assertSet(t, "probe rm --path x --<TAB>", values(lines), []string{"--force", "--dry-run", "--help", "--org"})
+	// Another command's groups do not apply.
+	lines, _ = runComplete(t, app, out, "--cur=--", "--", "probe", "-v", "widgets", "list")
+	assertSet(t, "probe -v widgets list --<TAB>", values(lines), []string{"--help", "--all", "--org"})
 }
 
 func TestComplete_FlagValueSeparate(t *testing.T) {

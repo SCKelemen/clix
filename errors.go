@@ -77,8 +77,8 @@ func usageErrorf(format string, args ...any) error {
 //     produced by signal.NotifyContext on Ctrl-C)
 //   - 2 for command-line usage errors, such as an unknown flag or command,
 //     a malformed flag value (whether it came from the command line, an
-//     environment variable or the config file), unexpected arguments, or a
-//     *MissingFlagsError
+//     environment variable or the config file), unexpected arguments, a
+//     *MissingFlagsError, or a *FlagGroupError
 //   - 1 for anything else
 //
 // Typical use:
@@ -100,6 +100,10 @@ func ExitCode(err error) int {
 	}
 	var usage *usageError
 	if errors.As(err, &usage) {
+		return 2
+	}
+	var group *FlagGroupError
+	if errors.As(err, &group) {
 		return 2
 	}
 	return 1
