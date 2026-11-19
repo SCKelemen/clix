@@ -1,0 +1,6 @@
+#!/bin/sh
+# A plugin of the gh example: "gh hello ARGS" runs this file when its
+# directory is on PATH (see "gh plugin list"). gh passes the arguments
+# after the plugin's name as they are, and sets GH_PLUGIN_NAME,
+# GH_APP_NAME and GH_APP_PATH; GH_APP_VERSION when the app has a version.
+echo "Hello from $GH_PLUGIN_NAME, a plugin of $GH_APP_NAME: $*"
