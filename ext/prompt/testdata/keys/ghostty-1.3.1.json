@@ -1,0 +1,2115 @@
+{
+  "terminal": "Ghostty",
+  "version": "1.3.1",
+  "term": "xterm-ghostty",
+  "captured": "2026-11-19",
+  "method": "AppleScript: send key (key events through Ghostty's encoder and keybindings), perform action \"text:...\" (typed text), input text (paste)",
+  "notes": [
+    "send key carries no text, so printable keys (letters, digits, space) are typed with the text action instead.",
+    "Ghostty's default keybindings turn alt+left/right into ESC b / ESC f and cmd+left/right/backspace into Ctrl-A / Ctrl-E / Ctrl-U.",
+    "In kitty mode, send key with control and a letter produces no bytes: the scripted key event has no unshifted code point, which Ghostty's kitty encoder needs (a key press on a keyboard sends CSI 99;5u for Ctrl-C). Those entries are empty; keys_test.go covers the CSI u forms from the kitty specification."
+  ],
+  "modes": [
+    {
+      "mode": "normal",
+      "replies": "\u001b[?0u\u001b[?1;2$y\u001b[?2004;1$y\u001b[?62;22;52c",
+      "kittyFlags": "0",
+      "decckm": "reset",
+      "bracketedPaste": "set",
+      "deviceAttrs": "\u001b[?62;22;52c"
+    },
+    {
+      "mode": "decckm",
+      "replies": "\u001b[?0u\u001b[?1;1$y\u001b[?2004;1$y\u001b[?62;22;52c",
+      "kittyFlags": "0",
+      "decckm": "set",
+      "bracketedPaste": "set",
+      "deviceAttrs": "\u001b[?62;22;52c"
+    },
+    {
+      "mode": "kitty",
+      "replies": "\u001b[?1u\u001b[?1;2$y\u001b[?2004;1$y\u001b[?62;22;52c",
+      "kittyFlags": "1",
+      "decckm": "reset",
+      "bracketedPaste": "set",
+      "deviceAttrs": "\u001b[?62;22;52c"
+    }
+  ],
+  "entries": [
+    {
+      "name": "up",
+      "mode": "normal",
+      "sent": "send key \"arrowUp\"",
+      "bytes": "\u001b[A",
+      "hex": "1b5b41",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "down",
+      "mode": "normal",
+      "sent": "send key \"arrowDown\"",
+      "bytes": "\u001b[B",
+      "hex": "1b5b42",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "left",
+      "mode": "normal",
+      "sent": "send key \"arrowLeft\"",
+      "bytes": "\u001b[D",
+      "hex": "1b5b44",
+      "reads": 1,
+      "want": [
+        "Left"
+      ]
+    },
+    {
+      "name": "right",
+      "mode": "normal",
+      "sent": "send key \"arrowRight\"",
+      "bytes": "\u001b[C",
+      "hex": "1b5b43",
+      "reads": 1,
+      "want": [
+        "Right"
+      ]
+    },
+    {
+      "name": "home",
+      "mode": "normal",
+      "sent": "send key \"home\"",
+      "bytes": "\u001b[H",
+      "hex": "1b5b48",
+      "reads": 1,
+      "want": [
+        "Home"
+      ]
+    },
+    {
+      "name": "end",
+      "mode": "normal",
+      "sent": "send key \"end\"",
+      "bytes": "\u001b[F",
+      "hex": "1b5b46",
+      "reads": 1,
+      "want": [
+        "End"
+      ]
+    },
+    {
+      "name": "pageup",
+      "mode": "normal",
+      "sent": "send key \"pageUp\"",
+      "bytes": "\u001b[5~",
+      "hex": "1b5b357e",
+      "reads": 1,
+      "want": [
+        "PageUp"
+      ]
+    },
+    {
+      "name": "pagedown",
+      "mode": "normal",
+      "sent": "send key \"pageDown\"",
+      "bytes": "\u001b[6~",
+      "hex": "1b5b367e",
+      "reads": 1,
+      "want": [
+        "PageDown"
+      ]
+    },
+    {
+      "name": "insert",
+      "mode": "normal",
+      "sent": "send key \"insert\"",
+      "bytes": "\u001b[2~",
+      "hex": "1b5b327e",
+      "reads": 1,
+      "want": [
+        "Insert"
+      ]
+    },
+    {
+      "name": "delete",
+      "mode": "normal",
+      "sent": "send key \"delete\"",
+      "bytes": "\u001b[3~",
+      "hex": "1b5b337e",
+      "reads": 1,
+      "want": [
+        "Delete"
+      ]
+    },
+    {
+      "name": "backspace",
+      "mode": "normal",
+      "sent": "send key \"backspace\"",
+      "bytes": "",
+      "hex": "7f",
+      "reads": 1,
+      "want": [
+        "Backspace"
+      ]
+    },
+    {
+      "name": "tab",
+      "mode": "normal",
+      "sent": "send key \"tab\"",
+      "bytes": "\t",
+      "hex": "09",
+      "reads": 1,
+      "want": [
+        "Tab"
+      ]
+    },
+    {
+      "name": "shift+tab",
+      "mode": "normal",
+      "sent": "send key \"tab\" modifiers \"shift\"",
+      "bytes": "\u001b[Z",
+      "hex": "1b5b5a",
+      "reads": 1,
+      "want": [
+        "ShiftTab"
+      ]
+    },
+    {
+      "name": "enter",
+      "mode": "normal",
+      "sent": "send key \"enter\"",
+      "bytes": "\r",
+      "hex": "0d",
+      "reads": 1,
+      "want": [
+        "Enter"
+      ]
+    },
+    {
+      "name": "escape",
+      "mode": "normal",
+      "sent": "send key \"escape\"",
+      "bytes": "\u001b",
+      "hex": "1b",
+      "reads": 1,
+      "want": [
+        "Escape"
+      ]
+    },
+    {
+      "name": "ctrl+a",
+      "mode": "normal",
+      "sent": "send key \"a\" modifiers \"control\"",
+      "bytes": "\u0001",
+      "hex": "01",
+      "reads": 1,
+      "want": [
+        "Ctrl+A"
+      ]
+    },
+    {
+      "name": "ctrl+e",
+      "mode": "normal",
+      "sent": "send key \"e\" modifiers \"control\"",
+      "bytes": "\u0005",
+      "hex": "05",
+      "reads": 1,
+      "want": [
+        "Ctrl+E"
+      ]
+    },
+    {
+      "name": "ctrl+b",
+      "mode": "normal",
+      "sent": "send key \"b\" modifiers \"control\"",
+      "bytes": "\u0002",
+      "hex": "02",
+      "reads": 1,
+      "want": [
+        "Ctrl+B"
+      ]
+    },
+    {
+      "name": "ctrl+f",
+      "mode": "normal",
+      "sent": "send key \"f\" modifiers \"control\"",
+      "bytes": "\u0006",
+      "hex": "06",
+      "reads": 1,
+      "want": [
+        "Ctrl+F"
+      ]
+    },
+    {
+      "name": "ctrl+k",
+      "mode": "normal",
+      "sent": "send key \"k\" modifiers \"control\"",
+      "bytes": "\u000b",
+      "hex": "0b",
+      "reads": 1,
+      "want": [
+        "Ctrl+K"
+      ]
+    },
+    {
+      "name": "ctrl+u",
+      "mode": "normal",
+      "sent": "send key \"u\" modifiers \"control\"",
+      "bytes": "\u0015",
+      "hex": "15",
+      "reads": 1,
+      "want": [
+        "Ctrl+U"
+      ]
+    },
+    {
+      "name": "ctrl+w",
+      "mode": "normal",
+      "sent": "send key \"w\" modifiers \"control\"",
+      "bytes": "\u0017",
+      "hex": "17",
+      "reads": 1,
+      "want": [
+        "Ctrl+W"
+      ]
+    },
+    {
+      "name": "ctrl+n",
+      "mode": "normal",
+      "sent": "send key \"n\" modifiers \"control\"",
+      "bytes": "\u000e",
+      "hex": "0e",
+      "reads": 1,
+      "want": [
+        "Ctrl+N"
+      ]
+    },
+    {
+      "name": "ctrl+p",
+      "mode": "normal",
+      "sent": "send key \"p\" modifiers \"control\"",
+      "bytes": "\u0010",
+      "hex": "10",
+      "reads": 1,
+      "want": [
+        "Ctrl+P"
+      ]
+    },
+    {
+      "name": "ctrl+c",
+      "mode": "normal",
+      "sent": "send key \"c\" modifiers \"control\"",
+      "bytes": "\u0003",
+      "hex": "03",
+      "reads": 1,
+      "want": [
+        "Ctrl+C"
+      ]
+    },
+    {
+      "name": "ctrl+d",
+      "mode": "normal",
+      "sent": "send key \"d\" modifiers \"control\"",
+      "bytes": "\u0004",
+      "hex": "04",
+      "reads": 1,
+      "want": [
+        "Ctrl+D"
+      ]
+    },
+    {
+      "name": "alt+left",
+      "mode": "normal",
+      "sent": "send key \"arrowLeft\" modifiers \"option\"",
+      "bytes": "\u001bb",
+      "hex": "1b62",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "alt+right",
+      "mode": "normal",
+      "sent": "send key \"arrowRight\" modifiers \"option\"",
+      "bytes": "\u001bf",
+      "hex": "1b66",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "alt+backspace",
+      "mode": "normal",
+      "sent": "send key \"backspace\" modifiers \"option\"",
+      "bytes": "\u001b",
+      "hex": "1b7f",
+      "reads": 1,
+      "want": [
+        "WordBackspace"
+      ]
+    },
+    {
+      "name": "ctrl+left",
+      "mode": "normal",
+      "sent": "send key \"arrowLeft\" modifiers \"control\"",
+      "bytes": "\u001b[1;5D",
+      "hex": "1b5b313b3544",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "ctrl+right",
+      "mode": "normal",
+      "sent": "send key \"arrowRight\" modifiers \"control\"",
+      "bytes": "\u001b[1;5C",
+      "hex": "1b5b313b3543",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "ctrl+shift+left",
+      "mode": "normal",
+      "sent": "send key \"arrowLeft\" modifiers \"control,shift\"",
+      "bytes": "\u001b[1;6D",
+      "hex": "1b5b313b3644",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "ctrl+shift+right",
+      "mode": "normal",
+      "sent": "send key \"arrowRight\" modifiers \"control,shift\"",
+      "bytes": "\u001b[1;6C",
+      "hex": "1b5b313b3643",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "alt+shift+left",
+      "mode": "normal",
+      "sent": "send key \"arrowLeft\" modifiers \"option,shift\"",
+      "bytes": "\u001b[1;4D",
+      "hex": "1b5b313b3444",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "alt+shift+right",
+      "mode": "normal",
+      "sent": "send key \"arrowRight\" modifiers \"option,shift\"",
+      "bytes": "\u001b[1;4C",
+      "hex": "1b5b313b3443",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "shift+left",
+      "mode": "normal",
+      "sent": "send key \"arrowLeft\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2D",
+      "hex": "1b5b313b3244",
+      "reads": 1,
+      "want": [
+        "Left"
+      ]
+    },
+    {
+      "name": "shift+right",
+      "mode": "normal",
+      "sent": "send key \"arrowRight\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2C",
+      "hex": "1b5b313b3243",
+      "reads": 1,
+      "want": [
+        "Right"
+      ]
+    },
+    {
+      "name": "shift+up",
+      "mode": "normal",
+      "sent": "send key \"arrowUp\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2A",
+      "hex": "1b5b313b3241",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "shift+down",
+      "mode": "normal",
+      "sent": "send key \"arrowDown\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2B",
+      "hex": "1b5b313b3242",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "alt+up",
+      "mode": "normal",
+      "sent": "send key \"arrowUp\" modifiers \"option\"",
+      "bytes": "\u001b[1;3A",
+      "hex": "1b5b313b3341",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "alt+down",
+      "mode": "normal",
+      "sent": "send key \"arrowDown\" modifiers \"option\"",
+      "bytes": "\u001b[1;3B",
+      "hex": "1b5b313b3342",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "ctrl+up",
+      "mode": "normal",
+      "sent": "send key \"arrowUp\" modifiers \"control\"",
+      "bytes": "\u001b[1;5A",
+      "hex": "1b5b313b3541",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "ctrl+down",
+      "mode": "normal",
+      "sent": "send key \"arrowDown\" modifiers \"control\"",
+      "bytes": "\u001b[1;5B",
+      "hex": "1b5b313b3542",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "shift+home",
+      "mode": "normal",
+      "sent": "send key \"home\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2H",
+      "hex": "1b5b313b3248",
+      "reads": 1,
+      "want": [
+        "Home"
+      ]
+    },
+    {
+      "name": "shift+end",
+      "mode": "normal",
+      "sent": "send key \"end\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2F",
+      "hex": "1b5b313b3246",
+      "reads": 1,
+      "want": [
+        "End"
+      ]
+    },
+    {
+      "name": "cmd+left",
+      "mode": "normal",
+      "sent": "send key \"arrowLeft\" modifiers \"command\"",
+      "bytes": "\u0001",
+      "hex": "01",
+      "reads": 1,
+      "want": [
+        "Ctrl+A"
+      ]
+    },
+    {
+      "name": "cmd+right",
+      "mode": "normal",
+      "sent": "send key \"arrowRight\" modifiers \"command\"",
+      "bytes": "\u0005",
+      "hex": "05",
+      "reads": 1,
+      "want": [
+        "Ctrl+E"
+      ]
+    },
+    {
+      "name": "cmd+backspace",
+      "mode": "normal",
+      "sent": "send key \"backspace\" modifiers \"command\"",
+      "bytes": "\u0015",
+      "hex": "15",
+      "reads": 1,
+      "want": [
+        "Ctrl+U"
+      ]
+    },
+    {
+      "name": "f1",
+      "mode": "normal",
+      "sent": "send key \"f1\"",
+      "bytes": "\u001bOP",
+      "hex": "1b4f50",
+      "reads": 1,
+      "want": [
+        "F1"
+      ]
+    },
+    {
+      "name": "f2",
+      "mode": "normal",
+      "sent": "send key \"f2\"",
+      "bytes": "\u001bOQ",
+      "hex": "1b4f51",
+      "reads": 1,
+      "want": [
+        "F2"
+      ]
+    },
+    {
+      "name": "f3",
+      "mode": "normal",
+      "sent": "send key \"f3\"",
+      "bytes": "\u001bOR",
+      "hex": "1b4f52",
+      "reads": 1,
+      "want": [
+        "F3"
+      ]
+    },
+    {
+      "name": "f4",
+      "mode": "normal",
+      "sent": "send key \"f4\"",
+      "bytes": "\u001bOS",
+      "hex": "1b4f53",
+      "reads": 1,
+      "want": [
+        "F4"
+      ]
+    },
+    {
+      "name": "f5",
+      "mode": "normal",
+      "sent": "send key \"f5\"",
+      "bytes": "\u001b[15~",
+      "hex": "1b5b31357e",
+      "reads": 1,
+      "want": [
+        "F5"
+      ]
+    },
+    {
+      "name": "f12",
+      "mode": "normal",
+      "sent": "send key \"f12\"",
+      "bytes": "\u001b[24~",
+      "hex": "1b5b32347e",
+      "reads": 1,
+      "want": [
+        "F12"
+      ]
+    },
+    {
+      "name": "type é",
+      "mode": "normal",
+      "sent": "perform action \"text:é\"",
+      "bytes": "é",
+      "hex": "c3a9",
+      "reads": 1,
+      "want": [
+        "rune:é"
+      ],
+      "edit": "é"
+    },
+    {
+      "name": "type e+U+0301",
+      "mode": "normal",
+      "sent": "perform action \"text:é\"",
+      "bytes": "é",
+      "hex": "65cc81",
+      "reads": 1,
+      "edit": "é"
+    },
+    {
+      "name": "type 日本語",
+      "mode": "normal",
+      "sent": "perform action \"text:日本語\"",
+      "bytes": "日本語",
+      "hex": "e697a5e69cace8aa9e",
+      "reads": 1,
+      "edit": "日本語"
+    },
+    {
+      "name": "type ZWJ emoji",
+      "mode": "normal",
+      "sent": "perform action \"text:👩\\u200d💻\"",
+      "bytes": "👩‍💻",
+      "hex": "f09f91a9e2808df09f92bb",
+      "reads": 1,
+      "edit": "👩‍💻"
+    },
+    {
+      "name": "type flag",
+      "mode": "normal",
+      "sent": "perform action \"text:🇸🇪\"",
+      "bytes": "🇸🇪",
+      "hex": "f09f87b8f09f87aa",
+      "reads": 1,
+      "edit": "🇸🇪"
+    },
+    {
+      "name": "type José 日本",
+      "mode": "normal",
+      "sent": "perform action \"text:José 日本\"",
+      "bytes": "José 日本",
+      "hex": "4a6f73c3a920e697a5e69cac",
+      "reads": 1,
+      "edit": "José 日本"
+    },
+    {
+      "name": "paste multi-line",
+      "mode": "normal",
+      "sent": "input text \"line one\\nline two\"",
+      "bytes": "\u001b[200~line one\nline two\u001b[201~",
+      "hex": "1b5b3230307e6c696e65206f6e650a6c696e652074776f1b5b3230317e",
+      "reads": 3,
+      "want": [
+        "paste"
+      ],
+      "edit": "line one"
+    },
+    {
+      "name": "paste CRLF",
+      "mode": "normal",
+      "sent": "input text \"alpha\\r\\nbeta\"",
+      "bytes": "\u001b[200~alpha\r\nbeta\u001b[201~",
+      "hex": "1b5b3230307e616c7068610d0a626574611b5b3230317e",
+      "reads": 2,
+      "want": [
+        "paste"
+      ],
+      "edit": "alpha"
+    },
+    {
+      "name": "paste non-ASCII",
+      "mode": "normal",
+      "sent": "input text \"é 日本語 👩\\u200d💻 🇸🇪\"",
+      "bytes": "\u001b[200~é 日本語 👩‍💻 🇸🇪\u001b[201~",
+      "hex": "1b5b3230307ec3a920e697a5e69cace8aa9e20f09f91a9e2808df09f92bb20f09f87b8f09f87aa1b5b3230317e",
+      "reads": 2,
+      "want": [
+        "paste:é 日本語 👩‍💻 🇸🇪"
+      ],
+      "edit": "é 日本語 👩‍💻 🇸🇪"
+    },
+    {
+      "name": "paste tab",
+      "mode": "normal",
+      "sent": "input text \"a\\tb\"",
+      "bytes": "\u001b[200~a\tb\u001b[201~",
+      "hex": "1b5b3230307e6109621b5b3230317e",
+      "reads": 3,
+      "want": [
+        "paste:a\tb"
+      ],
+      "edit": "a b"
+    },
+    {
+      "name": "up",
+      "mode": "decckm",
+      "sent": "send key \"arrowUp\"",
+      "bytes": "\u001bOA",
+      "hex": "1b4f41",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "down",
+      "mode": "decckm",
+      "sent": "send key \"arrowDown\"",
+      "bytes": "\u001bOB",
+      "hex": "1b4f42",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "left",
+      "mode": "decckm",
+      "sent": "send key \"arrowLeft\"",
+      "bytes": "\u001bOD",
+      "hex": "1b4f44",
+      "reads": 1,
+      "want": [
+        "Left"
+      ]
+    },
+    {
+      "name": "right",
+      "mode": "decckm",
+      "sent": "send key \"arrowRight\"",
+      "bytes": "\u001bOC",
+      "hex": "1b4f43",
+      "reads": 1,
+      "want": [
+        "Right"
+      ]
+    },
+    {
+      "name": "home",
+      "mode": "decckm",
+      "sent": "send key \"home\"",
+      "bytes": "\u001bOH",
+      "hex": "1b4f48",
+      "reads": 1,
+      "want": [
+        "Home"
+      ]
+    },
+    {
+      "name": "end",
+      "mode": "decckm",
+      "sent": "send key \"end\"",
+      "bytes": "\u001bOF",
+      "hex": "1b4f46",
+      "reads": 1,
+      "want": [
+        "End"
+      ]
+    },
+    {
+      "name": "pageup",
+      "mode": "decckm",
+      "sent": "send key \"pageUp\"",
+      "bytes": "\u001b[5~",
+      "hex": "1b5b357e",
+      "reads": 1,
+      "want": [
+        "PageUp"
+      ]
+    },
+    {
+      "name": "pagedown",
+      "mode": "decckm",
+      "sent": "send key \"pageDown\"",
+      "bytes": "\u001b[6~",
+      "hex": "1b5b367e",
+      "reads": 1,
+      "want": [
+        "PageDown"
+      ]
+    },
+    {
+      "name": "insert",
+      "mode": "decckm",
+      "sent": "send key \"insert\"",
+      "bytes": "\u001b[2~",
+      "hex": "1b5b327e",
+      "reads": 1,
+      "want": [
+        "Insert"
+      ]
+    },
+    {
+      "name": "delete",
+      "mode": "decckm",
+      "sent": "send key \"delete\"",
+      "bytes": "\u001b[3~",
+      "hex": "1b5b337e",
+      "reads": 1,
+      "want": [
+        "Delete"
+      ]
+    },
+    {
+      "name": "backspace",
+      "mode": "decckm",
+      "sent": "send key \"backspace\"",
+      "bytes": "",
+      "hex": "7f",
+      "reads": 1,
+      "want": [
+        "Backspace"
+      ]
+    },
+    {
+      "name": "tab",
+      "mode": "decckm",
+      "sent": "send key \"tab\"",
+      "bytes": "\t",
+      "hex": "09",
+      "reads": 1,
+      "want": [
+        "Tab"
+      ]
+    },
+    {
+      "name": "shift+tab",
+      "mode": "decckm",
+      "sent": "send key \"tab\" modifiers \"shift\"",
+      "bytes": "\u001b[Z",
+      "hex": "1b5b5a",
+      "reads": 1,
+      "want": [
+        "ShiftTab"
+      ]
+    },
+    {
+      "name": "enter",
+      "mode": "decckm",
+      "sent": "send key \"enter\"",
+      "bytes": "\r",
+      "hex": "0d",
+      "reads": 1,
+      "want": [
+        "Enter"
+      ]
+    },
+    {
+      "name": "escape",
+      "mode": "decckm",
+      "sent": "send key \"escape\"",
+      "bytes": "\u001b",
+      "hex": "1b",
+      "reads": 1,
+      "want": [
+        "Escape"
+      ]
+    },
+    {
+      "name": "ctrl+a",
+      "mode": "decckm",
+      "sent": "send key \"a\" modifiers \"control\"",
+      "bytes": "\u0001",
+      "hex": "01",
+      "reads": 1,
+      "want": [
+        "Ctrl+A"
+      ]
+    },
+    {
+      "name": "ctrl+e",
+      "mode": "decckm",
+      "sent": "send key \"e\" modifiers \"control\"",
+      "bytes": "\u0005",
+      "hex": "05",
+      "reads": 1,
+      "want": [
+        "Ctrl+E"
+      ]
+    },
+    {
+      "name": "ctrl+b",
+      "mode": "decckm",
+      "sent": "send key \"b\" modifiers \"control\"",
+      "bytes": "\u0002",
+      "hex": "02",
+      "reads": 1,
+      "want": [
+        "Ctrl+B"
+      ]
+    },
+    {
+      "name": "ctrl+f",
+      "mode": "decckm",
+      "sent": "send key \"f\" modifiers \"control\"",
+      "bytes": "\u0006",
+      "hex": "06",
+      "reads": 1,
+      "want": [
+        "Ctrl+F"
+      ]
+    },
+    {
+      "name": "ctrl+k",
+      "mode": "decckm",
+      "sent": "send key \"k\" modifiers \"control\"",
+      "bytes": "\u000b",
+      "hex": "0b",
+      "reads": 1,
+      "want": [
+        "Ctrl+K"
+      ]
+    },
+    {
+      "name": "ctrl+u",
+      "mode": "decckm",
+      "sent": "send key \"u\" modifiers \"control\"",
+      "bytes": "\u0015",
+      "hex": "15",
+      "reads": 1,
+      "want": [
+        "Ctrl+U"
+      ]
+    },
+    {
+      "name": "ctrl+w",
+      "mode": "decckm",
+      "sent": "send key \"w\" modifiers \"control\"",
+      "bytes": "\u0017",
+      "hex": "17",
+      "reads": 1,
+      "want": [
+        "Ctrl+W"
+      ]
+    },
+    {
+      "name": "ctrl+n",
+      "mode": "decckm",
+      "sent": "send key \"n\" modifiers \"control\"",
+      "bytes": "\u000e",
+      "hex": "0e",
+      "reads": 1,
+      "want": [
+        "Ctrl+N"
+      ]
+    },
+    {
+      "name": "ctrl+p",
+      "mode": "decckm",
+      "sent": "send key \"p\" modifiers \"control\"",
+      "bytes": "\u0010",
+      "hex": "10",
+      "reads": 1,
+      "want": [
+        "Ctrl+P"
+      ]
+    },
+    {
+      "name": "ctrl+c",
+      "mode": "decckm",
+      "sent": "send key \"c\" modifiers \"control\"",
+      "bytes": "\u0003",
+      "hex": "03",
+      "reads": 1,
+      "want": [
+        "Ctrl+C"
+      ]
+    },
+    {
+      "name": "ctrl+d",
+      "mode": "decckm",
+      "sent": "send key \"d\" modifiers \"control\"",
+      "bytes": "\u0004",
+      "hex": "04",
+      "reads": 1,
+      "want": [
+        "Ctrl+D"
+      ]
+    },
+    {
+      "name": "alt+left",
+      "mode": "decckm",
+      "sent": "send key \"arrowLeft\" modifiers \"option\"",
+      "bytes": "\u001bb",
+      "hex": "1b62",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "alt+right",
+      "mode": "decckm",
+      "sent": "send key \"arrowRight\" modifiers \"option\"",
+      "bytes": "\u001bf",
+      "hex": "1b66",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "alt+backspace",
+      "mode": "decckm",
+      "sent": "send key \"backspace\" modifiers \"option\"",
+      "bytes": "\u001b",
+      "hex": "1b7f",
+      "reads": 1,
+      "want": [
+        "WordBackspace"
+      ]
+    },
+    {
+      "name": "ctrl+left",
+      "mode": "decckm",
+      "sent": "send key \"arrowLeft\" modifiers \"control\"",
+      "bytes": "\u001b[1;5D",
+      "hex": "1b5b313b3544",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "ctrl+right",
+      "mode": "decckm",
+      "sent": "send key \"arrowRight\" modifiers \"control\"",
+      "bytes": "\u001b[1;5C",
+      "hex": "1b5b313b3543",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "ctrl+shift+left",
+      "mode": "decckm",
+      "sent": "send key \"arrowLeft\" modifiers \"control,shift\"",
+      "bytes": "\u001b[1;6D",
+      "hex": "1b5b313b3644",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "ctrl+shift+right",
+      "mode": "decckm",
+      "sent": "send key \"arrowRight\" modifiers \"control,shift\"",
+      "bytes": "\u001b[1;6C",
+      "hex": "1b5b313b3643",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "alt+shift+left",
+      "mode": "decckm",
+      "sent": "send key \"arrowLeft\" modifiers \"option,shift\"",
+      "bytes": "\u001b[1;4D",
+      "hex": "1b5b313b3444",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "alt+shift+right",
+      "mode": "decckm",
+      "sent": "send key \"arrowRight\" modifiers \"option,shift\"",
+      "bytes": "\u001b[1;4C",
+      "hex": "1b5b313b3443",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "shift+left",
+      "mode": "decckm",
+      "sent": "send key \"arrowLeft\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2D",
+      "hex": "1b5b313b3244",
+      "reads": 1,
+      "want": [
+        "Left"
+      ]
+    },
+    {
+      "name": "shift+right",
+      "mode": "decckm",
+      "sent": "send key \"arrowRight\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2C",
+      "hex": "1b5b313b3243",
+      "reads": 1,
+      "want": [
+        "Right"
+      ]
+    },
+    {
+      "name": "shift+up",
+      "mode": "decckm",
+      "sent": "send key \"arrowUp\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2A",
+      "hex": "1b5b313b3241",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "shift+down",
+      "mode": "decckm",
+      "sent": "send key \"arrowDown\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2B",
+      "hex": "1b5b313b3242",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "alt+up",
+      "mode": "decckm",
+      "sent": "send key \"arrowUp\" modifiers \"option\"",
+      "bytes": "\u001b[1;3A",
+      "hex": "1b5b313b3341",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "alt+down",
+      "mode": "decckm",
+      "sent": "send key \"arrowDown\" modifiers \"option\"",
+      "bytes": "\u001b[1;3B",
+      "hex": "1b5b313b3342",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "ctrl+up",
+      "mode": "decckm",
+      "sent": "send key \"arrowUp\" modifiers \"control\"",
+      "bytes": "\u001b[1;5A",
+      "hex": "1b5b313b3541",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "ctrl+down",
+      "mode": "decckm",
+      "sent": "send key \"arrowDown\" modifiers \"control\"",
+      "bytes": "\u001b[1;5B",
+      "hex": "1b5b313b3542",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "shift+home",
+      "mode": "decckm",
+      "sent": "send key \"home\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2H",
+      "hex": "1b5b313b3248",
+      "reads": 1,
+      "want": [
+        "Home"
+      ]
+    },
+    {
+      "name": "shift+end",
+      "mode": "decckm",
+      "sent": "send key \"end\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2F",
+      "hex": "1b5b313b3246",
+      "reads": 1,
+      "want": [
+        "End"
+      ]
+    },
+    {
+      "name": "cmd+left",
+      "mode": "decckm",
+      "sent": "send key \"arrowLeft\" modifiers \"command\"",
+      "bytes": "\u0001",
+      "hex": "01",
+      "reads": 1,
+      "want": [
+        "Ctrl+A"
+      ]
+    },
+    {
+      "name": "cmd+right",
+      "mode": "decckm",
+      "sent": "send key \"arrowRight\" modifiers \"command\"",
+      "bytes": "\u0005",
+      "hex": "05",
+      "reads": 1,
+      "want": [
+        "Ctrl+E"
+      ]
+    },
+    {
+      "name": "cmd+backspace",
+      "mode": "decckm",
+      "sent": "send key \"backspace\" modifiers \"command\"",
+      "bytes": "\u0015",
+      "hex": "15",
+      "reads": 1,
+      "want": [
+        "Ctrl+U"
+      ]
+    },
+    {
+      "name": "f1",
+      "mode": "decckm",
+      "sent": "send key \"f1\"",
+      "bytes": "\u001bOP",
+      "hex": "1b4f50",
+      "reads": 1,
+      "want": [
+        "F1"
+      ]
+    },
+    {
+      "name": "f2",
+      "mode": "decckm",
+      "sent": "send key \"f2\"",
+      "bytes": "\u001bOQ",
+      "hex": "1b4f51",
+      "reads": 1,
+      "want": [
+        "F2"
+      ]
+    },
+    {
+      "name": "f3",
+      "mode": "decckm",
+      "sent": "send key \"f3\"",
+      "bytes": "\u001bOR",
+      "hex": "1b4f52",
+      "reads": 1,
+      "want": [
+        "F3"
+      ]
+    },
+    {
+      "name": "f4",
+      "mode": "decckm",
+      "sent": "send key \"f4\"",
+      "bytes": "\u001bOS",
+      "hex": "1b4f53",
+      "reads": 1,
+      "want": [
+        "F4"
+      ]
+    },
+    {
+      "name": "f5",
+      "mode": "decckm",
+      "sent": "send key \"f5\"",
+      "bytes": "\u001b[15~",
+      "hex": "1b5b31357e",
+      "reads": 1,
+      "want": [
+        "F5"
+      ]
+    },
+    {
+      "name": "f12",
+      "mode": "decckm",
+      "sent": "send key \"f12\"",
+      "bytes": "\u001b[24~",
+      "hex": "1b5b32347e",
+      "reads": 1,
+      "want": [
+        "F12"
+      ]
+    },
+    {
+      "name": "type é",
+      "mode": "decckm",
+      "sent": "perform action \"text:é\"",
+      "bytes": "é",
+      "hex": "c3a9",
+      "reads": 1,
+      "want": [
+        "rune:é"
+      ],
+      "edit": "é"
+    },
+    {
+      "name": "type e+U+0301",
+      "mode": "decckm",
+      "sent": "perform action \"text:é\"",
+      "bytes": "é",
+      "hex": "65cc81",
+      "reads": 1,
+      "edit": "é"
+    },
+    {
+      "name": "type 日本語",
+      "mode": "decckm",
+      "sent": "perform action \"text:日本語\"",
+      "bytes": "日本語",
+      "hex": "e697a5e69cace8aa9e",
+      "reads": 1,
+      "edit": "日本語"
+    },
+    {
+      "name": "type ZWJ emoji",
+      "mode": "decckm",
+      "sent": "perform action \"text:👩\\u200d💻\"",
+      "bytes": "👩‍💻",
+      "hex": "f09f91a9e2808df09f92bb",
+      "reads": 1,
+      "edit": "👩‍💻"
+    },
+    {
+      "name": "type flag",
+      "mode": "decckm",
+      "sent": "perform action \"text:🇸🇪\"",
+      "bytes": "🇸🇪",
+      "hex": "f09f87b8f09f87aa",
+      "reads": 1,
+      "edit": "🇸🇪"
+    },
+    {
+      "name": "type José 日本",
+      "mode": "decckm",
+      "sent": "perform action \"text:José 日本\"",
+      "bytes": "José 日本",
+      "hex": "4a6f73c3a920e697a5e69cac",
+      "reads": 1,
+      "edit": "José 日本"
+    },
+    {
+      "name": "paste multi-line",
+      "mode": "decckm",
+      "sent": "input text \"line one\\nline two\"",
+      "bytes": "\u001b[200~line one\nline two\u001b[201~",
+      "hex": "1b5b3230307e6c696e65206f6e650a6c696e652074776f1b5b3230317e",
+      "reads": 3,
+      "want": [
+        "paste"
+      ],
+      "edit": "line one"
+    },
+    {
+      "name": "paste CRLF",
+      "mode": "decckm",
+      "sent": "input text \"alpha\\r\\nbeta\"",
+      "bytes": "\u001b[200~alpha\r\nbeta\u001b[201~",
+      "hex": "1b5b3230307e616c7068610d0a626574611b5b3230317e",
+      "reads": 3,
+      "want": [
+        "paste"
+      ],
+      "edit": "alpha"
+    },
+    {
+      "name": "paste non-ASCII",
+      "mode": "decckm",
+      "sent": "input text \"é 日本語 👩\\u200d💻 🇸🇪\"",
+      "bytes": "\u001b[200~é 日本語 👩‍💻 🇸🇪\u001b[201~",
+      "hex": "1b5b3230307ec3a920e697a5e69cace8aa9e20f09f91a9e2808df09f92bb20f09f87b8f09f87aa1b5b3230317e",
+      "reads": 3,
+      "want": [
+        "paste:é 日本語 👩‍💻 🇸🇪"
+      ],
+      "edit": "é 日本語 👩‍💻 🇸🇪"
+    },
+    {
+      "name": "paste tab",
+      "mode": "decckm",
+      "sent": "input text \"a\\tb\"",
+      "bytes": "\u001b[200~a\tb\u001b[201~",
+      "hex": "1b5b3230307e6109621b5b3230317e",
+      "reads": 3,
+      "want": [
+        "paste:a\tb"
+      ],
+      "edit": "a b"
+    },
+    {
+      "name": "up",
+      "mode": "kitty",
+      "sent": "send key \"arrowUp\"",
+      "bytes": "\u001b[A",
+      "hex": "1b5b41",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "down",
+      "mode": "kitty",
+      "sent": "send key \"arrowDown\"",
+      "bytes": "\u001b[B",
+      "hex": "1b5b42",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "left",
+      "mode": "kitty",
+      "sent": "send key \"arrowLeft\"",
+      "bytes": "\u001b[D",
+      "hex": "1b5b44",
+      "reads": 1,
+      "want": [
+        "Left"
+      ]
+    },
+    {
+      "name": "right",
+      "mode": "kitty",
+      "sent": "send key \"arrowRight\"",
+      "bytes": "\u001b[C",
+      "hex": "1b5b43",
+      "reads": 1,
+      "want": [
+        "Right"
+      ]
+    },
+    {
+      "name": "home",
+      "mode": "kitty",
+      "sent": "send key \"home\"",
+      "bytes": "\u001b[H",
+      "hex": "1b5b48",
+      "reads": 1,
+      "want": [
+        "Home"
+      ]
+    },
+    {
+      "name": "end",
+      "mode": "kitty",
+      "sent": "send key \"end\"",
+      "bytes": "\u001b[F",
+      "hex": "1b5b46",
+      "reads": 1,
+      "want": [
+        "End"
+      ]
+    },
+    {
+      "name": "pageup",
+      "mode": "kitty",
+      "sent": "send key \"pageUp\"",
+      "bytes": "\u001b[5~",
+      "hex": "1b5b357e",
+      "reads": 1,
+      "want": [
+        "PageUp"
+      ]
+    },
+    {
+      "name": "pagedown",
+      "mode": "kitty",
+      "sent": "send key \"pageDown\"",
+      "bytes": "\u001b[6~",
+      "hex": "1b5b367e",
+      "reads": 1,
+      "want": [
+        "PageDown"
+      ]
+    },
+    {
+      "name": "insert",
+      "mode": "kitty",
+      "sent": "send key \"insert\"",
+      "bytes": "\u001b[2~",
+      "hex": "1b5b327e",
+      "reads": 1,
+      "want": [
+        "Insert"
+      ]
+    },
+    {
+      "name": "delete",
+      "mode": "kitty",
+      "sent": "send key \"delete\"",
+      "bytes": "\u001b[3~",
+      "hex": "1b5b337e",
+      "reads": 1,
+      "want": [
+        "Delete"
+      ]
+    },
+    {
+      "name": "backspace",
+      "mode": "kitty",
+      "sent": "send key \"backspace\"",
+      "bytes": "",
+      "hex": "7f",
+      "reads": 1,
+      "want": [
+        "Backspace"
+      ]
+    },
+    {
+      "name": "tab",
+      "mode": "kitty",
+      "sent": "send key \"tab\"",
+      "bytes": "\t",
+      "hex": "09",
+      "reads": 1,
+      "want": [
+        "Tab"
+      ]
+    },
+    {
+      "name": "shift+tab",
+      "mode": "kitty",
+      "sent": "send key \"tab\" modifiers \"shift\"",
+      "bytes": "\u001b[9;2u",
+      "hex": "1b5b393b3275",
+      "reads": 1,
+      "want": [
+        "ShiftTab"
+      ]
+    },
+    {
+      "name": "enter",
+      "mode": "kitty",
+      "sent": "send key \"enter\"",
+      "bytes": "\r",
+      "hex": "0d",
+      "reads": 1,
+      "want": [
+        "Enter"
+      ]
+    },
+    {
+      "name": "escape",
+      "mode": "kitty",
+      "sent": "send key \"escape\"",
+      "bytes": "\u001b[27u",
+      "hex": "1b5b323775",
+      "reads": 1,
+      "want": [
+        "Escape"
+      ]
+    },
+    {
+      "name": "ctrl+a",
+      "mode": "kitty",
+      "sent": "send key \"a\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+e",
+      "mode": "kitty",
+      "sent": "send key \"e\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+b",
+      "mode": "kitty",
+      "sent": "send key \"b\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+f",
+      "mode": "kitty",
+      "sent": "send key \"f\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+k",
+      "mode": "kitty",
+      "sent": "send key \"k\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+u",
+      "mode": "kitty",
+      "sent": "send key \"u\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+w",
+      "mode": "kitty",
+      "sent": "send key \"w\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+n",
+      "mode": "kitty",
+      "sent": "send key \"n\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+p",
+      "mode": "kitty",
+      "sent": "send key \"p\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+c",
+      "mode": "kitty",
+      "sent": "send key \"c\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "ctrl+d",
+      "mode": "kitty",
+      "sent": "send key \"d\" modifiers \"control\"",
+      "bytes": "",
+      "hex": "",
+      "reads": 0,
+      "edit": ""
+    },
+    {
+      "name": "alt+left",
+      "mode": "kitty",
+      "sent": "send key \"arrowLeft\" modifiers \"option\"",
+      "bytes": "\u001bb",
+      "hex": "1b62",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "alt+right",
+      "mode": "kitty",
+      "sent": "send key \"arrowRight\" modifiers \"option\"",
+      "bytes": "\u001bf",
+      "hex": "1b66",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "alt+backspace",
+      "mode": "kitty",
+      "sent": "send key \"backspace\" modifiers \"option\"",
+      "bytes": "\u001b[127;3u",
+      "hex": "1b5b3132373b3375",
+      "reads": 1,
+      "want": [
+        "WordBackspace"
+      ]
+    },
+    {
+      "name": "ctrl+left",
+      "mode": "kitty",
+      "sent": "send key \"arrowLeft\" modifiers \"control\"",
+      "bytes": "\u001b[1;5D",
+      "hex": "1b5b313b3544",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "ctrl+right",
+      "mode": "kitty",
+      "sent": "send key \"arrowRight\" modifiers \"control\"",
+      "bytes": "\u001b[1;5C",
+      "hex": "1b5b313b3543",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "ctrl+shift+left",
+      "mode": "kitty",
+      "sent": "send key \"arrowLeft\" modifiers \"control,shift\"",
+      "bytes": "\u001b[1;6D",
+      "hex": "1b5b313b3644",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "ctrl+shift+right",
+      "mode": "kitty",
+      "sent": "send key \"arrowRight\" modifiers \"control,shift\"",
+      "bytes": "\u001b[1;6C",
+      "hex": "1b5b313b3643",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "alt+shift+left",
+      "mode": "kitty",
+      "sent": "send key \"arrowLeft\" modifiers \"option,shift\"",
+      "bytes": "\u001b[1;4D",
+      "hex": "1b5b313b3444",
+      "reads": 1,
+      "want": [
+        "WordLeft"
+      ]
+    },
+    {
+      "name": "alt+shift+right",
+      "mode": "kitty",
+      "sent": "send key \"arrowRight\" modifiers \"option,shift\"",
+      "bytes": "\u001b[1;4C",
+      "hex": "1b5b313b3443",
+      "reads": 1,
+      "want": [
+        "WordRight"
+      ]
+    },
+    {
+      "name": "shift+left",
+      "mode": "kitty",
+      "sent": "send key \"arrowLeft\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2D",
+      "hex": "1b5b313b3244",
+      "reads": 1,
+      "want": [
+        "Left"
+      ]
+    },
+    {
+      "name": "shift+right",
+      "mode": "kitty",
+      "sent": "send key \"arrowRight\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2C",
+      "hex": "1b5b313b3243",
+      "reads": 1,
+      "want": [
+        "Right"
+      ]
+    },
+    {
+      "name": "shift+up",
+      "mode": "kitty",
+      "sent": "send key \"arrowUp\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2A",
+      "hex": "1b5b313b3241",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "shift+down",
+      "mode": "kitty",
+      "sent": "send key \"arrowDown\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2B",
+      "hex": "1b5b313b3242",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "alt+up",
+      "mode": "kitty",
+      "sent": "send key \"arrowUp\" modifiers \"option\"",
+      "bytes": "\u001b[1;3A",
+      "hex": "1b5b313b3341",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "alt+down",
+      "mode": "kitty",
+      "sent": "send key \"arrowDown\" modifiers \"option\"",
+      "bytes": "\u001b[1;3B",
+      "hex": "1b5b313b3342",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "ctrl+up",
+      "mode": "kitty",
+      "sent": "send key \"arrowUp\" modifiers \"control\"",
+      "bytes": "\u001b[1;5A",
+      "hex": "1b5b313b3541",
+      "reads": 1,
+      "want": [
+        "Up"
+      ]
+    },
+    {
+      "name": "ctrl+down",
+      "mode": "kitty",
+      "sent": "send key \"arrowDown\" modifiers \"control\"",
+      "bytes": "\u001b[1;5B",
+      "hex": "1b5b313b3542",
+      "reads": 1,
+      "want": [
+        "Down"
+      ]
+    },
+    {
+      "name": "shift+home",
+      "mode": "kitty",
+      "sent": "send key \"home\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2H",
+      "hex": "1b5b313b3248",
+      "reads": 1,
+      "want": [
+        "Home"
+      ]
+    },
+    {
+      "name": "shift+end",
+      "mode": "kitty",
+      "sent": "send key \"end\" modifiers \"shift\"",
+      "bytes": "\u001b[1;2F",
+      "hex": "1b5b313b3246",
+      "reads": 1,
+      "want": [
+        "End"
+      ]
+    },
+    {
+      "name": "cmd+left",
+      "mode": "kitty",
+      "sent": "send key \"arrowLeft\" modifiers \"command\"",
+      "bytes": "\u0001",
+      "hex": "01",
+      "reads": 1,
+      "want": [
+        "Ctrl+A"
+      ]
+    },
+    {
+      "name": "cmd+right",
+      "mode": "kitty",
+      "sent": "send key \"arrowRight\" modifiers \"command\"",
+      "bytes": "\u0005",
+      "hex": "05",
+      "reads": 1,
+      "want": [
+        "Ctrl+E"
+      ]
+    },
+    {
+      "name": "cmd+backspace",
+      "mode": "kitty",
+      "sent": "send key \"backspace\" modifiers \"command\"",
+      "bytes": "\u0015",
+      "hex": "15",
+      "reads": 1,
+      "want": [
+        "Ctrl+U"
+      ]
+    },
+    {
+      "name": "f1",
+      "mode": "kitty",
+      "sent": "send key \"f1\"",
+      "bytes": "\u001b[P",
+      "hex": "1b5b50",
+      "reads": 1,
+      "want": [
+        "F1"
+      ]
+    },
+    {
+      "name": "f2",
+      "mode": "kitty",
+      "sent": "send key \"f2\"",
+      "bytes": "\u001b[Q",
+      "hex": "1b5b51",
+      "reads": 1,
+      "want": [
+        "F2"
+      ]
+    },
+    {
+      "name": "f3",
+      "mode": "kitty",
+      "sent": "send key \"f3\"",
+      "bytes": "\u001b[13~",
+      "hex": "1b5b31337e",
+      "reads": 1,
+      "want": [
+        "F3"
+      ]
+    },
+    {
+      "name": "f4",
+      "mode": "kitty",
+      "sent": "send key \"f4\"",
+      "bytes": "\u001b[S",
+      "hex": "1b5b53",
+      "reads": 1,
+      "want": [
+        "F4"
+      ]
+    },
+    {
+      "name": "f5",
+      "mode": "kitty",
+      "sent": "send key \"f5\"",
+      "bytes": "\u001b[15~",
+      "hex": "1b5b31357e",
+      "reads": 1,
+      "want": [
+        "F5"
+      ]
+    },
+    {
+      "name": "f12",
+      "mode": "kitty",
+      "sent": "send key \"f12\"",
+      "bytes": "\u001b[24~",
+      "hex": "1b5b32347e",
+      "reads": 1,
+      "want": [
+        "F12"
+      ]
+    },
+    {
+      "name": "type é",
+      "mode": "kitty",
+      "sent": "perform action \"text:é\"",
+      "bytes": "é",
+      "hex": "c3a9",
+      "reads": 1,
+      "want": [
+        "rune:é"
+      ],
+      "edit": "é"
+    },
+    {
+      "name": "type e+U+0301",
+      "mode": "kitty",
+      "sent": "perform action \"text:é\"",
+      "bytes": "é",
+      "hex": "65cc81",
+      "reads": 1,
+      "edit": "é"
+    },
+    {
+      "name": "type 日本語",
+      "mode": "kitty",
+      "sent": "perform action \"text:日本語\"",
+      "bytes": "日本語",
+      "hex": "e697a5e69cace8aa9e",
+      "reads": 1,
+      "edit": "日本語"
+    },
+    {
+      "name": "type ZWJ emoji",
+      "mode": "kitty",
+      "sent": "perform action \"text:👩\\u200d💻\"",
+      "bytes": "👩‍💻",
+      "hex": "f09f91a9e2808df09f92bb",
+      "reads": 1,
+      "edit": "👩‍💻"
+    },
+    {
+      "name": "type flag",
+      "mode": "kitty",
+      "sent": "perform action \"text:🇸🇪\"",
+      "bytes": "🇸🇪",
+      "hex": "f09f87b8f09f87aa",
+      "reads": 1,
+      "edit": "🇸🇪"
+    },
+    {
+      "name": "type José 日本",
+      "mode": "kitty",
+      "sent": "perform action \"text:José 日本\"",
+      "bytes": "José 日本",
+      "hex": "4a6f73c3a920e697a5e69cac",
+      "reads": 1,
+      "edit": "José 日本"
+    },
+    {
+      "name": "paste multi-line",
+      "mode": "kitty",
+      "sent": "input text \"line one\\nline two\"",
+      "bytes": "\u001b[200~line one\nline two\u001b[201~",
+      "hex": "1b5b3230307e6c696e65206f6e650a6c696e652074776f1b5b3230317e",
+      "reads": 3,
+      "want": [
+        "paste"
+      ],
+      "edit": "line one"
+    },
+    {
+      "name": "paste CRLF",
+      "mode": "kitty",
+      "sent": "input text \"alpha\\r\\nbeta\"",
+      "bytes": "\u001b[200~alpha\r\nbeta\u001b[201~",
+      "hex": "1b5b3230307e616c7068610d0a626574611b5b3230317e",
+      "reads": 2,
+      "want": [
+        "paste"
+      ],
+      "edit": "alpha"
+    },
+    {
+      "name": "paste non-ASCII",
+      "mode": "kitty",
+      "sent": "input text \"é 日本語 👩\\u200d💻 🇸🇪\"",
+      "bytes": "\u001b[200~é 日本語 👩‍💻 🇸🇪\u001b[201~",
+      "hex": "1b5b3230307ec3a920e697a5e69cace8aa9e20f09f91a9e2808df09f92bb20f09f87b8f09f87aa1b5b3230317e",
+      "reads": 3,
+      "want": [
+        "paste:é 日本語 👩‍💻 🇸🇪"
+      ],
+      "edit": "é 日本語 👩‍💻 🇸🇪"
+    },
+    {
+      "name": "paste tab",
+      "mode": "kitty",
+      "sent": "input text \"a\\tb\"",
+      "bytes": "\u001b[200~a\tb\u001b[201~",
+      "hex": "1b5b3230307e6109621b5b3230317e",
+      "reads": 2,
+      "want": [
+        "paste:a\tb"
+      ],
+      "edit": "a b"
+    }
+  ]
+}
