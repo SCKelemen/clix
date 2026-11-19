@@ -263,6 +263,7 @@ one of --file or --url is required
 - **Required-together and one-required groups count every source but the default**: the command line, the environment, the config file and prompts, as `Required` does. They never prompt themselves, since there is no single flag to ask for, and they are checked before `Run` prompts for missing required flags; a required flag about to be prompted for counts as given.
 - **Names resolve like the parser resolves a flag written after the command name**: on the command whose flag set holds the group, then on each command above it, so a group may name a root flag or a flag an extension registered (`MarkMutuallyExclusive("format", "csv")` with `ext/format`). Where the app and an extension both define a name, the group means the flag the parser uses.
 - **Where groups apply**: the groups of every command on the path, like required flags. A command with `IsExtensionCommand` set, and its subcommands, skip the groups of the commands above them, so `myapp version` runs whatever the root's groups say.
+
 Help shows the groups in the usage line, as gcloud's synopsis does, and says what each one means under FLAGS:
 
 ```text
