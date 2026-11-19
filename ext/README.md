@@ -120,6 +120,8 @@ cmd.Run = func(ctx *clix.Context) error {
 // cli <command> --format json
 ```
 
+The flag is `Ambient` (see `clix.FlagOptions.Ambient`): it chooses how the result is printed, not what the command does, so `cli --format json <command>` still prompts for the command's missing required flags when the app is interactive.
+
 Without this extension there is no `--format` flag; `config list` prints YAML and `version` prints text.
 
 ### Prompt Extension (`clix/ext/prompt`)
