@@ -112,6 +112,9 @@ func (p helpPrinter) render(cmd *Command) {
 	p.renderInheritedFlags(cmd)
 	p.renderGlobalFlags(cmd)
 	p.renderChildren(cmd)
+	if isRoot {
+		p.renderTopics()
+	}
 
 	if cmd.Example != "" {
 		example := strings.ReplaceAll(cmd.Example, "\n", "\n  ")

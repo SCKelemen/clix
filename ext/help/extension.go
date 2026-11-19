@@ -28,6 +28,12 @@ import (
 // Help is written to App.Out. Like flag-based help, it is plain text when
 // NO_COLOR is set or App.Out is not a terminal (see clix.HelpRenderer).
 //
+// "cli help <topic>" shows a help topic (see clix.App.AddHelpTopic) when
+// no command has that name: clix ships "environment" (the environment
+// variables it reads) and "exit-codes", and root help lists the topics
+// under ADDITIONAL HELP TOPICS. Completion offers topic names after the
+// command names.
+//
 // An app command named "help" replaces the extension's, and adding the
 // extension twice adds the command once.
 //
@@ -104,7 +110,14 @@ func NewHelpCommand(app *clix.App) *clix.Command {
 	cmd.Flags.SetCompletion("command", completeCommandPath(app))
 
 	cmd.Run = func(ctx *clix.Context) error {
-		target, err := resolveCommand(app.Root, strings.Fields(strings.Join(command, " ")))
+		words := strings.Fields(strings.Join(command, " "))
+		// "help environment": a help topic, unless a command has the name.
+		if len(words) == 1 && app.Root.ResolvePath(words) == nil {
+			if topic, ok := app.LookupHelpTopic(words[0]); ok {
+				return clix.HelpRenderer{App: app}.RenderTopic(app.Out, topic)
+			}
+		}
+		target, err := resolveCommand(app, app.Root, words)
 		if err != nil {
 			return err
 		}
@@ -116,14 +129,21 @@ func NewHelpCommand(app *clix.App) *clix.Command {
 
 // resolveCommand walks path from root, one command name (or alias) per
 // word. It reports the first word that does not name a child, with the
-// visible children whose names are close to it.
-func resolveCommand(root *clix.Command, path []string) (*clix.Command, error) {
+// visible children whose names are close to it, and at the root the help
+// topics too.
+func resolveCommand(app *clix.App, root *clix.Command, path []string) (*clix.Command, error) {
 	cmd := root
-	for _, word := range path {
+	for i, word := range path {
 		next := cmd.ResolvePath([]string{word})
 		if next == nil {
 			msg := fmt.Sprintf("unknown command %q for %q", word, cmd.Path())
-			if s := suggestions(cmd, word); len(s) > 0 {
+			var topics []string
+			if i == 0 && app != nil {
+				for _, t := range app.HelpTopics() {
+					topics = append(topics, t.Name)
+				}
+			}
+			if s := suggestions(cmd, word, topics); len(s) > 0 {
 				msg += "; did you mean " + quoteList(s) + "?"
 			}
 			return nil, errors.New(msg)
@@ -135,16 +155,28 @@ func resolveCommand(root *clix.Command, path []string) (*clix.Command, error) {
 
 // suggestions returns the names of cmd's visible children that word may be
 // a typo of: within two edits (ignoring case), or a prefix of the name.
-func suggestions(cmd *clix.Command, word string) []string {
+func suggestions(cmd *clix.Command, word string, topics []string) []string {
 	word = strings.ToLower(word)
 	type match struct {
 		name string
 		dist int
 	}
-	var matches []match
+	candidates := map[string][]string{}
+	var order []string
 	for _, child := range cmd.VisibleChildren() {
+		candidates[child.Name] = append([]string{child.Name}, child.Aliases...)
+		order = append(order, child.Name)
+	}
+	for _, t := range topics {
+		if _, dup := candidates[t]; !dup {
+			candidates[t] = []string{t}
+			order = append(order, t)
+		}
+	}
+	var matches []match
+	for _, childName := range order {
 		best := -1
-		for _, name := range append([]string{child.Name}, child.Aliases...) {
+		for _, name := range candidates[childName] {
 			n := strings.ToLower(name)
 			d := editDistance(word, n)
 			if strings.HasPrefix(n, word) && d > 2 {
@@ -155,7 +187,7 @@ func suggestions(cmd *clix.Command, word string) []string {
 			}
 		}
 		if best >= 0 {
-			matches = append(matches, match{child.Name, best})
+			matches = append(matches, match{childName, best})
 		}
 	}
 	sort.SliceStable(matches, func(i, j int) bool { return matches[i].dist < matches[j].dist })
@@ -220,7 +252,7 @@ func completeCommandPath(app *clix.App) clix.CompletionFunc {
 			path = append(path, strings.Fields(prefix)...)
 		}
 
-		parent, err := resolveCommand(root, path)
+		parent, err := resolveCommand(nil, root, path)
 		if err != nil {
 			return nil
 		}
@@ -231,6 +263,12 @@ func completeCommandPath(app *clix.App) clix.CompletionFunc {
 				desc, _, _ = strings.Cut(child.Long, "\n")
 			}
 			out = append(out, clix.Completion{Value: prefix + child.Name, Description: desc})
+		}
+		if len(path) == 0 && prefix == "" && req.App != nil {
+			// Help topics come after the commands, at the first word only.
+			for _, t := range req.App.HelpTopics() {
+				out = append(out, clix.Completion{Value: t.Name, Description: t.Short})
+			}
 		}
 		return out
 	}

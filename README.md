@@ -925,10 +925,25 @@ Extensions never override your definitions. Everything registered while an exten
 Adds command-based help similar to man pages:
 - `cli help` - Show help for the root command
 - `cli help <command>...` - Show help for a command, by name or alias; `cli help widgets get`, `cli help "widgets get"` and `cli help --command "widgets get"` are the same, and shell completion offers command names at each level
+- `cli help <topic>` - Show a help topic, such as `cli help environment` or `cli help exit-codes` (see below)
 - Hidden commands are listed nowhere, but `cli help <hidden>` still shows their help
 - An unknown name fails with `unknown command "x" for "cli"; did you mean "y"?` (exit status 1)
 
 Help (from this command and from `-h`/`--help`) shows FLAGS, INHERITED FLAGS (from groups on the path) and GLOBAL FLAGS (from the root), leaving out any flag a closer command shadows, the way the parser resolves names; it shows aliases and variadic arguments as `<name>...`. It goes to `App.Out`. Styles apply only when the output is a terminal and `NO_COLOR` is not set (`CLICOLOR=0` and `TERM=dumb` also turn color off; `CLICOLOR_FORCE=1` turns it on); without color, styles' ANSI escapes are removed and columns stay aligned. An app `help` command replaces the extension's.
+
+**Help topics.** Pages that are not about one command, like gh's `help environment` and gcloud's `topic` pages, are added with `App.AddHelpTopic(name, short, body)` and read with `cli help <topic>`; root help lists them under ADDITIONAL HELP TOPICS (when the root has a `help` command), `cli help` suggests close topic names for a typo, and shell completion offers them after the command names.
+
+```go
+app.AddHelpTopic("formatting", "Formatting output", `Every command takes --format json, yaml or text.
+...`)
+```
+
+clix ships two topics about what it owns, generated for the app when they are shown:
+
+- `environment`: the variables clix reads for the app: `<PREFIX>_<FLAG>` (unless `App.AutoEnv` is off) and each global flag's variables, `<PREFIX>_CONFIGURATION` with named configurations, `<PREFIX>_DISABLE_PROMPTS`, `XDG_CONFIG_HOME` (unless `App.ConfigPath` is set), `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` and `TERM`.
+- `exit-codes`: 0, 1, 2 (usage errors), 130 (cancelled) and 143 (SIGTERM).
+
+A topic of the same name replaces a built-in one, and an empty body removes a topic (`app.AddHelpTopic("exit-codes", "", "")`). The app's topics win over an extension's, and an extension added first wins over a later one, as for flags and commands; a command (even a hidden one) wins over a topic of its name, which `App.Validate` reports. `App.HelpTopics`, `App.LookupHelpTopic` and `HelpRenderer.RenderTopic` read and render them.
 
 **Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
 

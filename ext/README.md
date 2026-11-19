@@ -61,6 +61,7 @@ app.Run(context.Background(), nil)
 Adds command-based help similar to man pages:
 - `cli help` - Show help for the root command
 - `cli help [command]` - Show help for a specific command
+- `cli help <topic>` - Show a help topic added with `app.AddHelpTopic`, or a built-in one: `environment` and `exit-codes`; root help lists them under ADDITIONAL HELP TOPICS
 
 **Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
 
