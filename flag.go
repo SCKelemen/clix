@@ -126,6 +126,13 @@ type Flag struct {
 	restore func() // Internal: puts Value back as it was before the first Run
 
 	yieldsShort bool // Internal: the built-in --help, which gives up -h to a later flag
+	badDefault  bool // Internal: Default does not parse, so the flag has no default
+}
+
+// hasDefault reports whether the flag has a Default that its Value
+// accepts.
+func (f *Flag) hasDefault() bool {
+	return f.Default != "" && !f.badDefault
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.
@@ -399,9 +406,7 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 	value := &StringValue{target: stringOpts.Value}
 	flag := stringOpts.FlagOptions.newFlag(value, stringOpts.Default)
 	fs.addFlag(flag)
-	if stringOpts.Default != "" {
-		_ = value.Set(stringOpts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // stringValueOption is an internal type for string flag values.
@@ -564,9 +569,7 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 	value := &DurationValue{target: durationOpts.Value}
 	flag := durationOpts.FlagOptions.newFlag(value, durationOpts.Default)
 	fs.addFlag(flag)
-	if durationOpts.Default != "" {
-		_ = value.Set(durationOpts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // IntVarOptions describes the configuration for adding an int flag.
@@ -637,9 +640,7 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 	value := &IntValue{target: intOpts.Value}
 	flag := intOpts.FlagOptions.newFlag(value, intOpts.Default)
 	fs.addFlag(flag)
-	if intOpts.Default != "" {
-		_ = value.Set(intOpts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // Int64VarOptions describes the configuration for adding an int64 flag.
@@ -710,9 +711,7 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 	value := &Int64Value{target: int64Opts.Value}
 	flag := int64Opts.FlagOptions.newFlag(value, int64Opts.Default)
 	fs.addFlag(flag)
-	if int64Opts.Default != "" {
-		_ = value.Set(int64Opts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // Float64VarOptions describes the configuration for adding a float64 flag.
@@ -783,9 +782,7 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 	value := &Float64Value{target: float64Opts.Value}
 	flag := float64Opts.FlagOptions.newFlag(value, float64Opts.Default)
 	fs.addFlag(flag)
-	if float64Opts.Default != "" {
-		_ = value.Set(float64Opts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // addFlag registers flag in the set.

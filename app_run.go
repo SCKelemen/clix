@@ -635,7 +635,7 @@ func isNumericValue(v Value) bool {
 
 // trySetFromDefault sets a flag value from its default if available.
 func (a *App) trySetFromDefault(flag *Flag) {
-	if flag.Default != "" {
+	if flag.hasDefault() {
 		flag.Value.Set(flag.Default)
 	}
 }

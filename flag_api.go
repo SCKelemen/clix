@@ -2,6 +2,7 @@ package clix
 
 import (
 	"encoding/csv"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -154,10 +155,19 @@ type varDefaultOption string
 
 func (o varDefaultOption) ApplyFlag(*FlagOptions) {}
 
-// applyDefault sets flag's value from its Default at registration.
+// applyDefault sets flag's value from its Default at registration. A
+// Default the value rejects (such as "eighty" for an int flag) is recorded
+// in Err, and the flag is treated as having no default, so a Required flag
+// is still missing.
 func (fs *FlagSet) applyDefault(flag *Flag) {
-	if flag.Default != "" {
-		_ = flag.Value.Set(flag.Default)
+	if flag.Default == "" {
+		return
+	}
+	if err := flag.Value.Set(flag.Default); err != nil {
+		flag.badDefault = true
+		if fs.lookup(flag.Name) == flag {
+			fs.errs = append(fs.errs, fmt.Errorf("clix: invalid default %q for flag --%s in flag set %q: %w", flag.Default, flag.Name, fs.name, err))
+		}
 	}
 }
 

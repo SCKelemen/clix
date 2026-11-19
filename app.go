@@ -465,7 +465,7 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	// Finally check defaults from flags (only if flag exists but wasn't
 	// set), innermost command first.
 	for _, h := range hits {
-		if !h.flag.set && h.flag.Default != "" {
+		if !h.flag.set && h.flag.hasDefault() {
 			return h.flag.Value.String(), SourceDefault, true
 		}
 	}
