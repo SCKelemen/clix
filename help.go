@@ -109,6 +109,7 @@ func (p helpPrinter) render(cmd *Command) {
 
 	p.renderArguments(cmd)
 	p.renderFlags(cmd)
+	p.renderInheritedFlags(cmd)
 	p.renderGlobalFlags(cmd)
 	p.renderChildren(cmd)
 
@@ -157,43 +158,82 @@ func (p helpPrinter) renderFlags(cmd *Command) {
 	fmt.Fprintln(p.w)
 }
 
-// renderGlobalFlags lists the root (app-level) flags, which the parser also
-// accepts after a subcommand's name. A root flag that the command shadows
-// with its own flag of the same long name is left out, and a root flag's
-// short name is left out when the command's own flags claim it, because the
-// parser resolves both against the command first.
-func (p helpPrinter) renderGlobalFlags(cmd *Command) {
-	root := p.App.Root
-	if root == nil || cmd == root || root.Flags == nil {
-		return
-	}
-
-	type entry struct {
-		flag  *Flag
-		short string
-	}
-	var entries []entry
-	for _, flag := range root.Flags.Flags() {
-		if flag.Positional || cmd.Flags.lookup(flag.Name) != nil {
-			continue
-		}
-		short := flag.Short
-		if short != "" && lookupArg("-"+short, cmd.Flags) != nil {
-			short = ""
-		}
-		entries = append(entries, entry{flag: flag, short: short})
+// renderInheritedFlags lists the flags of the command's ancestors below the
+// root (its groups), and renderGlobalFlags those of the root (the app
+// flags). The parser looks a flag written after the command name up on the
+// command, then on each ancestor up to the root, so both kinds work there.
+// Help shows each flag as the parser resolves it: a flag whose long name a
+// closer command defines is left out, and so is a short name a closer
+// command claims.
+func (p helpPrinter) renderInheritedFlags(cmd *Command) {
+	var entries []flagEntry
+	for a := cmd.parent; a != nil && a != p.App.Root; a = a.parent {
+		entries = append(entries, reachableFlags(cmd, a)...)
 	}
 	if len(entries) == 0 {
 		return
 	}
+	nameStyle, usageStyle := p.flagStylesFor(false)
+	p.heading("INHERITED FLAGS")
+	for _, e := range entries {
+		p.flagRow(e.flag, e.short, nameStyle, usageStyle)
+	}
+	fmt.Fprintln(p.w)
+}
 
+func (p helpPrinter) renderGlobalFlags(cmd *Command) {
+	root := p.App.Root
+	if root == nil || cmd == root || root.Flags == nil || !descendsFrom(cmd, root) {
+		return
+	}
+	entries := reachableFlags(cmd, root)
+	if len(entries) == 0 {
+		return
+	}
 	nameStyle, usageStyle := p.flagStylesFor(true)
-
 	p.heading("GLOBAL FLAGS")
 	for _, e := range entries {
 		p.flagRow(e.flag, e.short, nameStyle, usageStyle)
 	}
 	fmt.Fprintln(p.w)
+}
+
+// flagEntry is a flag as help shows it: short is "" when the short name
+// resolves to another flag.
+type flagEntry struct {
+	flag  *Flag
+	short string
+}
+
+// reachableFlags returns the flags of ancestor that a token written after
+// cmd's name resolves to, skipping positional arguments.
+func reachableFlags(cmd, ancestor *Command) []flagEntry {
+	var closer []*FlagSet
+	for c := cmd; c != nil && c != ancestor; c = c.parent {
+		closer = append(closer, c.Flags)
+	}
+	var entries []flagEntry
+	for _, flag := range ancestor.Flags.Flags() {
+		if flag.Positional || lookupArg("--"+flag.Name, closer...) != nil {
+			continue
+		}
+		short := flag.Short
+		if short != "" && lookupArg("-"+short, closer...) != nil {
+			short = ""
+		}
+		entries = append(entries, flagEntry{flag: flag, short: short})
+	}
+	return entries
+}
+
+// descendsFrom reports whether ancestor is on cmd's path.
+func descendsFrom(cmd, ancestor *Command) bool {
+	for c := cmd.parent; c != nil; c = c.parent {
+		if c == ancestor {
+			return true
+		}
+	}
+	return false
 }
 
 // flagRow prints a flag as "-s, --name" followed by its usage.

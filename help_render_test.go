@@ -237,3 +237,43 @@ func TestHelpColorFollowsEnvironment(t *testing.T) {
 		})
 	}
 }
+
+// The parser looks a flag after the command name up on the command, then
+// each ancestor, so help lists the groups' flags too, the way the parser
+// resolves them.
+func TestHelpListsInheritedFlags(t *testing.T) {
+	app := newHelpTestApp(t)
+	var verbose bool
+	var org, groupRegion, region, output string
+	app.Flags().BoolVar(BoolVarOptions{FlagOptions: FlagOptions{Name: "verbose", Short: "v", Usage: "Verbose output"}, Value: &verbose})
+	deploy := NewCommand("deploy", WithCommandRun(func(*Context) error { return nil }))
+	deploy.Short = "Deploy the app"
+	deploy.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "region", Usage: "Deploy region"}, Value: &region})
+	deploy.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "output", Short: "o", Usage: "Output file"}, Value: &output})
+	apps := NewGroup("apps", "Manage apps", deploy)
+	apps.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "org", Short: "o", Usage: "Organization"}, Value: &org})
+	apps.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "region", Usage: "Default region"}, Value: &groupRegion})
+	app.Root.AddCommand(apps)
+
+	out := renderHelp(t, app, "apps", "deploy")
+	if got := section(out, "INHERITED FLAGS"); len(got) != 1 || !strings.HasPrefix(got[0], "  --org ") {
+		t.Errorf("INHERITED FLAGS = %q, want only --org (without -o, which is --output here):\n%s", got, out)
+	}
+	if got := section(out, "GLOBAL FLAGS"); len(got) != 1 || !strings.HasPrefix(got[0], "  -v, --verbose ") {
+		t.Errorf("GLOBAL FLAGS = %q:\n%s", got, out)
+	}
+	// The group's own help lists its flags under FLAGS and nothing inherited.
+	group := renderHelp(t, app, "apps")
+	if strings.Contains(group, "INHERITED FLAGS") || !strings.Contains(strings.Join(section(group, "FLAGS"), "\n"), "-o, --org") {
+		t.Errorf("group help:\n%s", group)
+	}
+
+	// Help matches the parser.
+	app.Out = &bytes.Buffer{}
+	if err := app.Run(context.Background(), []string{"apps", "deploy", "--org", "acme", "-o", "out.txt", "--region", "eu", "-v"}); err != nil {
+		t.Fatal(err)
+	}
+	if org != "acme" || output != "out.txt" || region != "eu" || groupRegion != "" || !verbose {
+		t.Errorf("parsed org=%q output=%q region=%q group region=%q verbose=%v", org, output, region, groupRegion, verbose)
+	}
+}
