@@ -10,8 +10,8 @@ import (
 	"github.com/SCKelemen/clix/v2/internal/gcloudtest"
 )
 
-// These tests compare the port with the gcloud library itself; see
-// internal/gcloudtest for how to run them.
+// These tests compare the port with the gcloud library itself, or without
+// gcloud, with its results recorded in testdata; see internal/gcloudtest.
 
 // getScript applies resource_property.Get to each case and prints the
 // repr of the result, or the error.
@@ -76,7 +76,7 @@ var getDiffCases = func() []getCase {
 
 func TestGetMatchesGcloud(t *testing.T) {
 	var want []gcloudResult
-	gcloudtest.Run(t, getScript, getDiffCases, &want)
+	gcloudtest.Golden(t, "testdata/get.json", getScript, getDiffCases, &want)
 	compared := 0
 	for i, c := range getDiffCases {
 		w := want[i]
@@ -148,7 +148,7 @@ func TestPythonHelpersMatchGcloud(t *testing.T) {
 		"123456789012345678901234567890", "9007199254740993", "4.35", "0.1", "1e16", "1e15", "123456789.123456789",
 	}
 	var want []map[string]string
-	gcloudtest.Run(t, pythonScript, inputs, &want)
+	gcloudtest.Golden(t, "testdata/python.json", pythonScript, inputs, &want)
 	for i, s := range inputs {
 		w := want[i]
 		if got := Repr(s); got != w["repr"] {
@@ -196,7 +196,7 @@ func TestFloatReprMatchesPython(t *testing.T) {
 		inputs = append(inputs, fmt.Sprint(f))
 	}
 	var want []string
-	gcloudtest.Run(t, floatScript, inputs, &want)
+	gcloudtest.Golden(t, "testdata/float.json", floatScript, inputs, &want)
 	for i, s := range inputs {
 		f, ok, err := ParseFloat(s)
 		if !ok || err != nil {
@@ -264,7 +264,7 @@ func TestSortByMatchesGcloud(t *testing.T) {
 		}
 	}
 	var want [][]int
-	gcloudtest.Run(t, sortScript, cases, &want)
+	gcloudtest.Golden(t, "testdata/sort.json", sortScript, cases, &want)
 	for i, c := range cases {
 		v, err := Decode([]byte(c.JSON))
 		if err != nil {
@@ -308,7 +308,7 @@ func TestKeyMatchesGcloud(t *testing.T) {
 		"\ta", "é.ü", "a.b.c.d.e.f", "1.2", "a.1", "a[0].1", `a."0"`, "a.[0]", "a[0].[1]",
 	}
 	var want []map[string]string
-	gcloudtest.Run(t, keyScript, inputs, &want)
+	gcloudtest.Golden(t, "testdata/key.json", keyScript, inputs, &want)
 	for i, s := range inputs {
 		w := want[i]
 		l := NewLexer(s)

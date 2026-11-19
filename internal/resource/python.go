@@ -222,11 +222,16 @@ func caseIgnorable(r rune) bool {
 // UnsupportedError reports something gcloud would do that clix does not
 // reproduce, so that the result is never different from gcloud's.
 type UnsupportedError struct {
-	What string
+	What string // what is not supported, such as "the ~ operator"
+	In   string // where, such as "--filter"; may be empty
 }
 
 func (e *UnsupportedError) Error() string {
-	return e.What + " is not supported in clix"
+	msg := e.What + " is not supported in clix"
+	if e.In != "" {
+		msg += " " + e.In
+	}
+	return msg
 }
 
 // Unsupportedf returns an *UnsupportedError.
