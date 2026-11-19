@@ -4,6 +4,14 @@ package clix
 // All fields are optional - unset styles produce plain text output.
 // Styles are compatible with lipgloss and can use any TextStyle implementation.
 //
+// Help applies the styles and then removes ANSI escape sequences from the
+// result when its writer should not get color: when NO_COLOR is set
+// (https://no-color.org), when CLICOLOR=0 or TERM=dumb, or when the writer
+// is not a terminal, unless CLICOLOR_FORCE is set
+// (https://bixense.com/clicolors). What a style adds besides escape
+// sequences, such as padding, is kept. Help pads its columns by visible
+// width, so styled names stay aligned.
+//
 // Example:
 //
 //	app.Styles = clix.Styles{

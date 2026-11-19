@@ -26,7 +26,21 @@ import (
 // The key and value may also be passed as --key and --value.
 // Key paths use dot notation (e.g. "project.default", "api.timeout").
 // List/get/set/unset/reset operate purely on persisted config—they do not reflect flags or env vars.
-// The `list` command respects the `--format` flag (json|yaml|text). Default output is YAML/text.
+//
+// `list` prints YAML (for --format yaml, text or no format) with keys
+// sorted and nested by their dots, every value a YAML string that reads
+// back unchanged; a key that is also the prefix of other keys (both "a" and
+// "a.b") is listed with those keys flat beside it ("a.b"). --format json
+// (in any case; the flag comes from the format extension) prints the same
+// tree as JSON, encoded like clix.FormatData.
+//
+// `get` of a missing key is an error (exit code 1). `set` validates the
+// value against a registered schema and then rewrites the whole file (see
+// clix.ConfigManager.Save): a flat, key-sorted mapping of dotted keys to
+// strings, without the comments, nesting or lists of a hand-written file.
+// `unset` writes the file only when it removed something. `reset` deletes
+// the file (the target of a symlinked config path, keeping the link), and
+// it is the only config command that runs when the file is not valid YAML.
 //
 // Example:
 //
