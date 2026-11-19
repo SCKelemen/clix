@@ -41,9 +41,14 @@
 //
 // The hour 24 is accepted as the end of a day (24:00, ISO 8601-1:2019/Amd
 // 1:2022; RFC 3339 Appendix A allows time-hour 00-24) and normalized to
-// 00:00 of the next day. A leap second, 23:59:60 UTC at the end of a month,
+// the first instant of the next day. A leap second, 23:59:60 UTC at the end of a month,
 // is clamped to 23:59:59 with its fraction kept, because [time.Time] has
 // no 60th second; second 60 anywhere else is an error.
+//
+// A value without an offset is read in a caller-supplied location. A date
+// alone is the first instant of that day there, which is not always 00:00,
+// and a local time that a daylight saving change repeats or skips is
+// resolved as RFC 5545 §3.3.5 specifies; see [ParseTime].
 //
 // [FormatTime] writes the RFC 3339 profile, the same as
 // [time.RFC3339Nano]: fractional seconds appear only when non-zero.

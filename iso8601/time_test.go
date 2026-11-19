@@ -149,6 +149,62 @@ func TestParseTimeLocation(t *testing.T) {
 	}
 }
 
+// TestParseTimeTransitions covers local times and dates that a change in
+// the UTC offset repeats or skips. time.Date resolves these one way west
+// of UTC and the other way east of it; ParseTime follows RFC 5545 §3.3.5,
+// and a date alone or 24:00 is the first instant of the day.
+func TestParseTimeTransitions(t *testing.T) {
+	santiago := mustLoad(t, "America/Santiago")
+	havana := mustLoad(t, "America/Havana")
+	amman := mustLoad(t, "Asia/Amman")
+	azores := mustLoad(t, "Atlantic/Azores")
+	apia := mustLoad(t, "Pacific/Apia")
+	newYork := mustLoad(t, "America/New_York")
+	berlin := mustLoad(t, "Europe/Berlin")
+	tests := []struct {
+		in   string
+		loc  *time.Location
+		want string
+	}{
+		// Midnight skipped west of UTC: the day starts as the gap ends.
+		{"2026-09-06", santiago, "2026-09-06T01:00:00-03:00"},
+		{"2026-09-05T24:00", santiago, "2026-09-06T01:00:00-03:00"},
+		{"2026-03-08", havana, "2026-03-08T01:00:00-04:00"},
+		// Midnight repeated east and west of UTC: the first occurrence.
+		{"1995-09-15", amman, "1995-09-15T00:00:00+03:00"},
+		{"1995-09-14T24:00", amman, "1995-09-15T00:00:00+03:00"},
+		{"2026-11-01", havana, "2026-11-01T00:00:00-04:00"},
+		{"1990-09-30", azores, "1990-09-30T00:00:00Z"},
+		// A whole day skipped: the first instant after it.
+		{"2011-12-30", apia, "2011-12-31T00:00:00+14:00"},
+		{"2011-12-29T24:00", apia, "2011-12-31T00:00:00+14:00"},
+		// Times of day repeated or skipped (RFC 5545 §3.3.5's own example
+		// is New York's skipped 02:30).
+		{"2026-03-08T02:30", newYork, "2026-03-08T03:30:00-04:00"},
+		{"2026-11-01T01:30", newYork, "2026-11-01T01:30:00-04:00"},
+		{"2026-03-29T02:30", berlin, "2026-03-29T03:30:00+02:00"},
+		{"2026-10-25T02:30", berlin, "2026-10-25T02:30:00+02:00"},
+		{"2026-09-06T00:30", santiago, "2026-09-06T01:30:00-03:00"},
+	}
+	for _, tt := range tests {
+		got, err := ParseTime(tt.in, tt.loc)
+		if err != nil {
+			t.Errorf("ParseTime(%q, %v): %v", tt.in, tt.loc, err)
+			continue
+		}
+		if s := FormatTime(got); s != tt.want {
+			t.Errorf("ParseTime(%q, %v) = %s, want %s", tt.in, tt.loc, s, tt.want)
+		}
+	}
+
+	// The end of a day comes after every time of that day.
+	before, err1 := ParseTime("2026-09-05T23:30", santiago)
+	end, err2 := ParseTime("2026-09-05T24:00", santiago)
+	if err1 != nil || err2 != nil || !before.Before(end) {
+		t.Errorf("Santiago 23:30 = %v, 24:00 = %v (%v, %v); want 23:30 first", before, end, err1, err2)
+	}
+}
+
 // TestParseTimeRFC3339Examples covers RFC 3339 §5.8.
 // https://datatracker.ietf.org/doc/html/rfc3339#section-5.8
 func TestParseTimeRFC3339Examples(t *testing.T) {

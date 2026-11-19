@@ -14,15 +14,24 @@ import (
 // in [time.UTC] when the offset is zero and in a [time.FixedZone] otherwise;
 // loc is not consulted and may be nil. A value without an offset, which
 // includes every date without a time, is a local time and is interpreted in
-// loc, which must then be non-nil. A local time that is skipped or repeated
-// by a transition in loc (a daylight saving change) resolves as
-// [time.Date] resolves it.
+// loc, which must then be non-nil.
 //
-// A date alone means the start of that day (00:00) in loc.
+// A local time that a transition in loc (such as a daylight saving change)
+// repeats or skips is resolved as RFC 5545 §3.3.5 specifies: a repeated
+// time means its first occurrence, and a skipped time is read with the UTC
+// offset in effect before the gap, so America/New_York's skipped
+// 2026-03-08T02:30 is 03:30 EDT. [time.Date] leaves both choices
+// unspecified.
+//
+// A date alone means the first instant of that day in loc. That is 00:00,
+// unless loc skips midnight (America/Santiago starts daylight saving time
+// by skipping 2026-09-06T00:00 to 01:00), when the day starts as the gap
+// ends; if loc skips the whole date (Pacific/Apia skipped 2011-12-30), it
+// is the first instant after it.
 //
 // The hour 24 is accepted only as 24:00, 24:00:00 or 24:00:00 with an
-// all-zero fraction, and means the end of the day; it is normalized to
-// 00:00 of the next day.
+// all-zero fraction, and means the end of the day: the first instant of
+// the next day, as above.
 //
 // A leap second (second 60) is clamped to second 59 of the same minute,
 // keeping any fraction, because [time.Time] cannot represent it. It is
@@ -47,7 +56,7 @@ func ParseTime(s string, loc *time.Location) (time.Time, error) {
 		if loc == nil {
 			return time.Time{}, p.errorf(p.pos, "a date without a UTC offset needs a location, and loc is nil")
 		}
-		return checkRange(p, time.Date(year, month, day, 0, 0, 0, 0, loc))
+		return checkRange(p, startOfDay(year, month, day, loc))
 	}
 
 	// ISO 8601-1:2019 separates the date and the time with "T" (§5.4).
@@ -80,14 +89,14 @@ func ParseTime(s string, loc *time.Location) (time.Time, error) {
 	}
 
 	if tod.hour == 24 {
-		return checkRange(p, time.Date(year, month, day+1, 0, 0, 0, 0, zone))
+		return checkRange(p, startOfDay(year, month, day+1, zone))
 	}
 
 	sec := tod.sec
 	if sec == 60 {
 		sec = 59
 	}
-	t := time.Date(year, month, day, tod.hour, tod.min, sec, tod.nsec, zone)
+	t, _ := localTime(time.Date(year, month, day, tod.hour, tod.min, sec, tod.nsec, time.UTC), zone)
 	if tod.sec == 60 {
 		// ITU-R TF.460-6 §2.1 places a leap second at the end of a UTC
 		// month, so it is valid only at 23:59:60 UTC on a month's last day.
@@ -97,6 +106,79 @@ func ParseTime(s string, loc *time.Location) (time.Time, error) {
 		}
 	}
 	return checkRange(p, t)
+}
+
+// localTime returns the instant at which the wall clock in loc reads the
+// date and time of day in w's UTC fields. A reading that occurs twice,
+// because the clocks went back, is resolved to its first occurrence, and
+// one that does not occur, because they went forward, is read with the
+// UTC offset in effect before the gap (RFC 5545 §3.3.5,
+// https://datatracker.ietf.org/doc/html/rfc5545#section-3.3.5). For a
+// skipped reading, gapEnd is the transition that ends the gap; otherwise it
+// is the zero Time.
+//
+// time.Date leaves both cases unspecified, and in practice resolves them
+// one way east of UTC and the other way west of it.
+func localTime(w time.Time, loc *time.Location) (t, gapEnd time.Time) {
+	guess := time.Date(w.Year(), w.Month(), w.Day(), w.Hour(), w.Minute(), w.Second(), w.Nanosecond(), loc)
+
+	// Every instant that reads w lies in the zone period of guess or in a
+	// neighboring one. Probe one instant in each.
+	var probes [3]time.Time
+	probes[0] = guess
+	n := 1
+	start, end := guess.ZoneBounds()
+	if !start.IsZero() {
+		probes[n] = start.Add(-time.Nanosecond)
+		n++
+	}
+	if !end.IsZero() {
+		probes[n] = end
+		n++
+	}
+
+	found := false
+	for _, p := range probes[:n] {
+		c, s, e := reading(w, p)
+		if (s.IsZero() || !c.Before(s)) && (e.IsZero() || c.Before(e)) && (!found || c.Before(t)) {
+			t, found = c, true
+		}
+	}
+	if found {
+		return t.In(loc), time.Time{}
+	}
+
+	// No period shows w, so it falls in a gap: it is past the end of one
+	// period, read with that period's offset, and before the start of the
+	// next, read with the next one's.
+	for _, p := range probes[:n] {
+		c, _, e := reading(w, p)
+		if e.IsZero() || c.Before(e) {
+			continue
+		}
+		if next, _, _ := reading(w, e); next.Before(e) {
+			return c.In(loc), e
+		}
+	}
+	return guess, time.Time{} // unreachable with consistent zone data
+}
+
+// reading returns the instant at which a clock showing the UTC offset in
+// effect at p reads w's UTC fields, and the bounds of p's zone period.
+func reading(w, p time.Time) (c, start, end time.Time) {
+	_, off := p.Zone()
+	start, end = p.ZoneBounds()
+	return w.Add(-time.Duration(off) * time.Second), start, end
+}
+
+// startOfDay returns the first instant of the date year-month-day in loc:
+// local midnight, or, if loc skips midnight, the end of that gap.
+func startOfDay(year int, month time.Month, day int, loc *time.Location) time.Time {
+	t, gapEnd := localTime(time.Date(year, month, day, 0, 0, 0, 0, time.UTC), loc)
+	if !gapEnd.IsZero() {
+		return gapEnd
+	}
+	return t
 }
 
 // FormatTime formats t in the RFC 3339 §5.6 internet profile of ISO 8601:
