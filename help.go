@@ -161,6 +161,12 @@ func (p helpPrinter) renderFlags(cmd *Command) {
 		}
 		p.flagRow(flag, shownShort(cmd, flag), nameStyle, usageStyle)
 	}
+	if notes := groupNotes(cmd); len(notes) > 0 {
+		_, _ = fmt.Fprintln(p.w)
+		for _, note := range notes {
+			_, _ = fmt.Fprintf(p.w, "  %s\n", p.style(usageStyle, note))
+		}
+	}
 	_, _ = fmt.Fprintln(p.w)
 }
 
@@ -334,6 +340,10 @@ func (h HelpRenderer) buildUsageLine(cmd *Command) string {
 	var b strings.Builder
 	b.WriteString(cmd.Path())
 	b.WriteString(" [flags]")
+	for _, g := range groupSynopsis(cmd) {
+		b.WriteString(" ")
+		b.WriteString(g)
+	}
 	for _, f := range cmd.Flags.PositionalFlags() {
 		dots := ""
 		if f.IsVariadic() {

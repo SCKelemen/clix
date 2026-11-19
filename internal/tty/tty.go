@@ -41,6 +41,15 @@ func Dumb() bool {
 	return os.Getenv("TERM") == "dumb"
 }
 
+// CursorControl reports whether w is a terminal that interprets cursor
+// control sequences (moving the cursor, erasing a line, hiding the
+// cursor): it is a terminal, TERM is not "dumb", and on Windows the console
+// accepts virtual terminal sequences. Unlike ColorEnabled it ignores
+// NO_COLOR and CLICOLOR_FORCE, which are about color only.
+func CursorControl(w any) bool {
+	return !Dumb() && IsTerminal(w) && supportsVirtualTerminal(w)
+}
+
 // Interactive reports whether a prompt may switch in to raw mode and draw
 // with cursor control: both in and out must be terminals and TERM must not
 // be "dumb". On Windows the console must also accept virtual terminal

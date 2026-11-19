@@ -299,13 +299,15 @@ func (e *engine) hasNamePrefix(name, prefix string) bool {
 // those of the command in effect, its ancestors and the root, the
 // innermost first, as the parser looks them up. A spelling defined on an
 // inner command hides the same spelling further out. Flags already given
-// are left out, except repeatable ones.
+// are left out, except repeatable ones, and so are the other flags of a
+// mutually exclusive group once one of them is given.
 func (e *engine) flagNames(st state, cur string) []clix.Completion {
 	var out []clix.Completion
 	seen := map[string]bool{}
+	excluded := e.excluded(st)
 	for _, fs := range e.chain(st.path) {
 		for _, f := range fs.Flags() {
-			offer := !st.given[f] || repeatable(f)
+			offer := (!st.given[f] || repeatable(f)) && !excluded[f]
 			for _, spelling := range spellings(f) {
 				if seen[spelling] {
 					continue
@@ -313,6 +315,43 @@ func (e *engine) flagNames(st state, cur string) []clix.Completion {
 				seen[spelling] = true
 				if offer && strings.HasPrefix(spelling, cur) {
 					out = append(out, clix.Completion{Value: spelling, Description: f.Usage})
+				}
+			}
+		}
+	}
+	return out
+}
+
+// excluded returns the flags that cannot be given any more: the other
+// flags of each mutually exclusive group (see
+// clix.FlagSet.MarkMutuallyExclusive) on the path that has a flag given.
+// Group names resolve as Run resolves them: on the command that registered
+// the group, then on its ancestors.
+func (e *engine) excluded(st state) map[*clix.Flag]bool {
+	out := map[*clix.Flag]bool{}
+	for i, cmd := range st.path {
+		if cmd.Flags == nil {
+			continue
+		}
+		chain := e.chain(st.path[:i+1])
+		for _, g := range cmd.Flags.FlagGroups() {
+			if g.Kind != clix.FlagsMutuallyExclusive {
+				continue
+			}
+			var members []*clix.Flag
+			given := false
+			for _, name := range g.Flags {
+				if f := e.lookup("--"+name, chain); f != nil {
+					members = append(members, f)
+					given = given || st.given[f]
+				}
+			}
+			if !given {
+				continue
+			}
+			for _, f := range members {
+				if !st.given[f] {
+					out[f] = true
 				}
 			}
 		}
