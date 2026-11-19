@@ -63,3 +63,22 @@ func TestArgsVarOnlyWhenLast(t *testing.T) {
 		t.Fatal("extra arguments must still be an error without ArgsVar")
 	}
 }
+
+// Values given as --name come before the positional words, each in order,
+// as ArgsVarOptions.Value documents.
+func TestArgsVarOrder(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var target string
+	var paths []string
+	app := NewApp("probe", WithAppOut(&bytes.Buffer{}))
+	cmd := NewCommand("add", WithCommandRun(func(*Context) error { return nil }))
+	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "target", Positional: true}, Value: &target})
+	cmd.Flags.ArgsVar(ArgsVarOptions{Name: "path", Value: &paths})
+	app.Root.AddCommand(cmd)
+	if err := app.Run(context.Background(), []string{"add", "t", "a", "--path", "x", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(paths, []string{"x", "a", "b"}) {
+		t.Fatalf("paths = %q", paths)
+	}
+}

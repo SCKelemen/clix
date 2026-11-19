@@ -12,8 +12,10 @@ type ArgsVarOptions struct {
 	// Usage is the help text shown for the argument.
 	Usage string
 
-	// Value receives the arguments in the order they were given. It is
-	// reset at the start of each run.
+	// Value receives the arguments: first the values given as --name, in
+	// their order, then the positional words, in theirs. So "add a --path x
+	// b" gives ["x" "a" "b"] (the parser reads flags before it hands out
+	// positional words). It is reset at the start of each run.
 	Value *[]string
 }
 
