@@ -45,8 +45,13 @@ func FormatData(w io.Writer, data interface{}, format string) error {
 }
 
 // formatJSON formats data as JSON with indentation.
+//
+// &, < and > are written as is rather than as \u0026, \u003c and \u003e:
+// the escapes only matter when JSON is embedded in HTML, and they make URLs
+// in CLI output hard to read. Both spellings decode to the same value.
 func formatJSON(w io.Writer, data interface{}) error {
 	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	return enc.Encode(data)
 }
@@ -54,6 +59,10 @@ func formatJSON(w io.Writer, data interface{}) error {
 // formatYAML formats data as YAML using go.yaml.in/yaml/v3.
 // Close flushes any buffered output, so its error is reported too.
 func formatYAML(w io.Writer, data interface{}) error {
+	data, err := decodeRawJSON(data)
+	if err != nil {
+		return err
+	}
 	encoder := yaml.NewEncoder(w)
 	encoder.SetIndent(2)
 	if err := encoder.Encode(data); err != nil {
@@ -61,6 +70,130 @@ func formatYAML(w io.Writer, data interface{}) error {
 		return err
 	}
 	return encoder.Close()
+}
+
+var rawMessageType = reflect.TypeOf(json.RawMessage(nil))
+
+// decodeRawJSON replaces each json.RawMessage in data with the JSON value it
+// holds, so YAML shows the document instead of a list of byte values. It
+// looks through maps, slices, arrays, pointers and interfaces, rebuilding
+// only the containers that hold a RawMessage (as map[K]interface{} and
+// []interface{}, which YAML encodes the same way). Struct fields are left
+// alone.
+func decodeRawJSON(data interface{}) (interface{}, error) {
+	v, changed, err := replaceRawJSON(reflect.ValueOf(data))
+	if err != nil || !changed {
+		return data, err
+	}
+	return v, nil
+}
+
+func replaceRawJSON(rv reflect.Value) (interface{}, bool, error) {
+	if !rv.IsValid() {
+		return nil, false, nil
+	}
+	if rv.Type() == rawMessageType {
+		return jsonToYAMLValue(rv.Bytes())
+	}
+	switch rv.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		if rv.IsNil() {
+			return nil, false, nil
+		}
+		return replaceRawJSON(rv.Elem())
+	case reflect.Map:
+		type entry struct {
+			key, value reflect.Value
+		}
+		var entries []entry
+		found := false
+		iter := rv.MapRange()
+		for iter.Next() {
+			v, changed, err := replaceRawJSON(iter.Value())
+			if err != nil {
+				return nil, false, err
+			}
+			value := iter.Value()
+			if changed {
+				found = true
+				value = reflect.ValueOf(&v).Elem()
+			}
+			entries = append(entries, entry{iter.Key(), value})
+		}
+		if !found {
+			return nil, false, nil
+		}
+		anyType := reflect.TypeOf((*interface{})(nil)).Elem()
+		out := reflect.MakeMapWithSize(reflect.MapOf(rv.Type().Key(), anyType), len(entries))
+		for _, e := range entries {
+			out.SetMapIndex(e.key, e.value)
+		}
+		return out.Interface(), true, nil
+	case reflect.Slice, reflect.Array:
+		if rv.Kind() == reflect.Slice && rv.IsNil() {
+			return nil, false, nil
+		}
+		items := make([]interface{}, rv.Len())
+		found := false
+		for i := range items {
+			v, changed, err := replaceRawJSON(rv.Index(i))
+			if err != nil {
+				return nil, false, err
+			}
+			if changed {
+				found = true
+			} else {
+				v = rv.Index(i).Interface()
+			}
+			items[i] = v
+		}
+		if !found {
+			return nil, false, nil
+		}
+		return items, true, nil
+	}
+	return nil, false, nil
+}
+
+// jsonToYAMLValue decodes raw JSON for the YAML encoder. Numbers become
+// int64, uint64 or float64, so YAML prints them as numbers.
+func jsonToYAMLValue(raw []byte) (interface{}, bool, error) {
+	if len(raw) == 0 {
+		// A nil RawMessage encodes as JSON null.
+		return nil, true, nil
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v interface{}
+	if err := dec.Decode(&v); err != nil {
+		return nil, false, fmt.Errorf("invalid json.RawMessage: %w", err)
+	}
+	return jsonNumbers(v), true, nil
+}
+
+func jsonNumbers(v interface{}) interface{} {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		for k, e := range x {
+			x[k] = jsonNumbers(e)
+		}
+	case []interface{}:
+		for i, e := range x {
+			x[i] = jsonNumbers(e)
+		}
+	case json.Number:
+		if i, err := strconv.ParseInt(string(x), 10, 64); err == nil {
+			return i
+		}
+		if u, err := strconv.ParseUint(string(x), 10, 64); err == nil {
+			return u
+		}
+		if f, err := x.Float64(); err == nil {
+			return f
+		}
+		return string(x)
+	}
+	return v
 }
 
 // formatText formats data as plain text (default).
