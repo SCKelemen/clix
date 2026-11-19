@@ -123,10 +123,12 @@ func (e *engine) walk(words []string) state {
 			}
 			toks = append(toks, token{text: tok, isFlag: true, scope: len(st.path)})
 			if ok && uses[len(uses)-1].needsNext {
-				if i+1 < len(words) {
+				last := uses[len(uses)-1].flag
+				switch {
+				case i+1 >= len(words):
+					st.pending = last
+				case !optionalValue(last) || !isFlagArg(words[i+1]):
 					i++ // the flag's value
-				} else {
-					st.pending = uses[len(uses)-1].flag
 				}
 			}
 			continue
@@ -446,6 +448,13 @@ func spellings(f *clix.Flag) []string {
 // value, using the same test as the core parser: a Value with a
 // SetBool(bool) error method, or with an IsBoolFlag() bool method that
 // returns true.
+// optionalValue reports whether f's value may be left out, so that a flag
+// after it is not its value (see clix.VarOptions.Value).
+func optionalValue(f *clix.Flag) bool {
+	ov, ok := f.Value.(interface{ OptionalValue() bool })
+	return ok && ov.OptionalValue()
+}
+
 func isSwitch(f *clix.Flag) bool {
 	if _, ok := f.Value.(interface{ SetBool(bool) error }); ok {
 		return true

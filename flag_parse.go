@@ -44,7 +44,7 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 		}
 		for _, u := range uses {
 			err := setFromArg(u.flag, u.name, u.value, u.hasValue, func() (string, bool) {
-				if i+1 >= len(args) {
+				if !u.takesNext(args, i) {
 					return "", false
 				}
 				i++
@@ -66,6 +66,25 @@ type flagUse struct {
 	value     string // the value given in the token itself
 	hasValue  bool   // value was given in the token ("--name=v", "-fv")
 	needsNext bool   // the flag takes the next token as its value
+	optional  bool   // the flag's value may be left out (see optionalValue)
+}
+
+// takesNext reports whether the flag in u, written at args[i], takes
+// args[i+1] as its value: it needs a value and one follows, unless its
+// value is optional and the next token is a flag (or "--").
+func (u flagUse) takesNext(args []string, i int) bool {
+	if !u.needsNext || i+1 >= len(args) {
+		return false
+	}
+	return !u.optional || !isFlagArg(args[i+1])
+}
+
+// optionalValue reports whether flag's value may be left out on the
+// command line: its Value has an OptionalValue() bool method that returns
+// true (see VarOptions.Value).
+func optionalValue(flag *Flag) bool {
+	ov, ok := flag.Value.(interface{ OptionalValue() bool })
+	return ok && ov.OptionalValue()
 }
 
 // resolveFlagToken interprets tok against sets, innermost first. It
@@ -84,7 +103,7 @@ type flagUse struct {
 func resolveFlagToken(tok string, sets, late []*FlagSet) ([]flagUse, bool) {
 	name, value, hasValue := strings.Cut(tok, "=")
 	if f := lookupArg(name, sets...); f != nil {
-		return []flagUse{{flag: f, name: name, value: value, hasValue: hasValue, needsNext: !hasValue && takesValue(f)}}, true
+		return []flagUse{{flag: f, name: name, value: value, hasValue: hasValue, needsNext: !hasValue && takesValue(f), optional: optionalValue(f)}}, true
 	}
 	if f := lookupArg(name, late...); f != nil && (hasValue || !takesValue(f)) {
 		return []flagUse{{flag: f, name: name, value: value, hasValue: hasValue}}, true
@@ -121,7 +140,7 @@ func resolveFlagToken(tok string, sets, late []*FlagSet) ([]flagUse, bool) {
 			return nil, false
 		default:
 			// "-xf a.tar": the next token is the value.
-			return append(uses, flagUse{flag: f, name: short, needsNext: true}), true
+			return append(uses, flagUse{flag: f, name: short, needsNext: true, optional: optionalValue(f)}), true
 		}
 	}
 	return uses, true
@@ -266,10 +285,10 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 			return nil
 		}
 		v, ok := next()
-		if !ok {
+		if !ok && !optionalValue(flag) {
 			return usageErrorf("flag %s requires a value", name)
 		}
-		value = v
+		value = v // "" for a flag whose value is optional
 	}
 
 	if err := flag.setValue(value); err != nil {
