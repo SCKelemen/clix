@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.6.0] - 2026-11-19
+
 ### Added
 
 - `App.Main(ctx)`: the usual program entry point. It runs the app with `os.Args[1:]`, prints any error to `App.Err` and exits with `ExitCode`. The first SIGINT or SIGTERM cancels the context and stops Main from catching signals, so a second one ends the process even if a handler ignores the context; after a signal, Main exits with 130 (SIGINT) or 143 (SIGTERM).
@@ -62,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - With `Version` empty, `version` and `--version` agree, using `App.Version`, then the build info (module version, VCS revision and time, `modified` for dirty builds), then `dev`.
 - The `config` and `help` extension arguments are read only from the command line: before, `MYAPP_KEY=<secret> app config get` looked the secret up and printed it in the not-found error.
 - `autocomplete` scripts are thin, eval-free wrappers around a hidden `__complete` command that completes from the live command tree: commands and aliases where they are valid (never hidden ones), the flags in scope, values from `SetCompletion` hooks, `--flag=value`, `--` and file names. `autocomplete <shell>` prints only the script; installation steps are in its help. bash 3.2 and later, zsh, fish and PowerShell are supported.
+- The config extension's `unset` and `reset` return an error when writing their confirmation fails, instead of ignoring it (#40).
 
 ### Fixed
 
@@ -242,7 +245,8 @@ Prepared as 1.0.0 (commit 464e98b, "Prepare for v1.0.0 release") but tagged as t
 - `ext/survey` – Chained prompts with branching logic
 - `ext/validation` – Common validation functions
 
-[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.5.0...HEAD
+[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.6.0...HEAD
+[2.6.0]: https://github.com/SCKelemen/clix/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/SCKelemen/clix/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/SCKelemen/clix/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/SCKelemen/clix/compare/v0.2.0...v2.4.0
