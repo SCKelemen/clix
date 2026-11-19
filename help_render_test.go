@@ -198,3 +198,42 @@ GLOBAL FLAGS
 		t.Errorf("help output:\n%s\nwant:\n%s", got, want)
 	}
 }
+
+// Styles must not write ANSI escapes to pipes and files, or when NO_COLOR
+// or TERM=dumb asks for plain output; CLICOLOR_FORCE=1 forces them.
+func TestHelpColorFollowsEnvironment(t *testing.T) {
+	bold := StyleFunc(func(s ...string) string { return "\x1b[1m" + strings.Join(s, "") + "\x1b[0m" })
+	marker := StyleFunc(func(s ...string) string { return "APP:" + strings.Join(s, "") })
+	for _, tc := range []struct {
+		name                      string
+		noColor, force, term, cli string
+		wantANSI                  bool
+	}{
+		{name: "non-terminal output", term: "xterm-256color"},
+		{name: "NO_COLOR", noColor: "1", term: "xterm-256color"},
+		{name: "CLICOLOR_FORCE", force: "1", term: "xterm-256color", wantANSI: true},
+		{name: "CLICOLOR_FORCE=0", force: "0", term: "xterm-256color"},
+		{name: "NO_COLOR beats CLICOLOR_FORCE", noColor: "1", force: "1", term: "xterm-256color"},
+		{name: "TERM=dumb", term: "dumb"},
+		{name: "CLICOLOR=0", cli: "0", term: "xterm-256color"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("NO_COLOR", tc.noColor)
+			t.Setenv("CLICOLOR_FORCE", tc.force)
+			t.Setenv("CLICOLOR", tc.cli)
+			t.Setenv("TERM", tc.term)
+			app := globalFlagsApp(t)
+			app.Styles = Styles{SectionHeading: bold, AppTitle: bold, ChildName: bold, AppFlagName: marker}
+			for _, args := range [][]string{nil, {"apps", "deploy"}} {
+				out := renderHelp(t, app, args...)
+				if got := strings.Contains(out, "\x1b["); got != tc.wantANSI {
+					t.Errorf("%q: ANSI written = %v, want %v:\n%q", args, got, tc.wantANSI, out)
+				}
+				// Text a style adds besides escapes is kept either way.
+				if visible := ansiSGR.ReplaceAllString(out, ""); !strings.Contains(visible, "USAGE\n") || !strings.Contains(visible, "APP:") {
+					t.Errorf("%q: styled text lost:\n%q", args, out)
+				}
+			}
+		})
+	}
+}

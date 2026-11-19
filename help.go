@@ -20,12 +20,22 @@ type HelpRenderer struct {
 }
 
 // Render writes the help to the provided writer.
+//
+// Each part of the help is rendered with its style from App.Styles. When w
+// should not receive color, ANSI escape sequences are then removed from the
+// rendered text, so styles that only add color produce plain text while
+// whatever else a style adds (padding, borders, markers) is kept.
+//
+// Color follows https://no-color.org and https://bixense.com/clicolors: it
+// is off when NO_COLOR is set, when CLICOLOR=0 or TERM=dumb, or when w is
+// not a terminal, and CLICOLOR_FORCE (other than "0") turns it on even when
+// w is not a terminal. NO_COLOR wins over CLICOLOR_FORCE.
 func (h HelpRenderer) Render(w io.Writer) error {
 	cmd := h.Command
 	if cmd == nil {
 		return fmt.Errorf("no command provided")
 	}
-	p := helpPrinter{HelpRenderer: h, w: w}
+	p := helpPrinter{HelpRenderer: h, w: w, color: tty.ColorEnabled(w)}
 	p.render(cmd)
 	return nil
 }
@@ -33,12 +43,18 @@ func (h HelpRenderer) Render(w io.Writer) error {
 // helpPrinter renders one help screen to a writer.
 type helpPrinter struct {
 	HelpRenderer
-	w io.Writer
+	w     io.Writer
+	color bool // whether ANSI escape sequences may be written to w
 }
 
-// style renders value with s.
+// style renders value with s, removing escape sequences when color is off
+// for the writer.
 func (p helpPrinter) style(s TextStyle, value string) string {
-	return renderText(s, value)
+	out := renderText(s, value)
+	if !p.color {
+		out = tty.StripANSI(out)
+	}
+	return out
 }
 
 // heading prints a section heading.
