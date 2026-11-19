@@ -205,14 +205,27 @@ func shownShort(cmd *Command, flag *Flag) string {
 	if flag.Short == "" || !flag.yieldsShort {
 		return flag.Short
 	}
+	if lookupArg("-"+flag.Short, parentChain(cmd)...) != flag {
+		return ""
+	}
+	return flag.Short
+}
+
+// shadowedOn reports whether flag, one of cmd's flags, is ignored on cmd's
+// path because a better owner's flag of the same name further out is used
+// (see markShadowed).
+func shadowedOn(cmd *Command, flag *Flag) bool {
+	return lookupArg("--"+flag.Name, parentChain(cmd)...) != flag
+}
+
+// parentChain returns the flag sets of cmd and its parents, innermost
+// first.
+func parentChain(cmd *Command) []*FlagSet {
 	var sets []*FlagSet
 	for c := cmd; c != nil; c = c.parent {
 		sets = append(sets, c.Flags)
 	}
-	if lookupArg("-"+flag.Short, sets...) != flag {
-		return ""
-	}
-	return flag.Short
+	return sets
 }
 
 // setFromArg applies one command-line occurrence of flag. name is the flag as

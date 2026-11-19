@@ -2,6 +2,7 @@ package clix_test
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -43,6 +44,46 @@ func TestExtensionFlagOnAppCommandDoesNotShadowTheApp(t *testing.T) {
 	}
 	assertValidate(t, app,
 		`o deploy: clix: extension #1 (clix_test.extensionFunc): flag --project is also defined by the app on "o"; the app's --project is used here too, and this one is ignored`,
+	)
+}
+
+// An extension's flag that loses its name to the app's root flag (see
+// above) is ignored, as Validate says: it was still required, so "deploy
+// --token x" set the root's --token and then failed with "missing
+// required flags: --token", and it was still filled, and validated, from
+// the environment and the config file, and listed in help.
+func TestShadowedExtensionFlagIsIgnored(t *testing.T) {
+	app, out := newTestApp(t, "lx")
+	writeConfigFile(t, app, "token: from-file\n")
+	var token, extToken string
+	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "token"}, Value: &token})
+	ran := false
+	app.Root.AddCommand(clix.NewCommand("deploy", clix.WithCommandRun(mark(&ran))))
+	app.AddExtension(extensionFunc(func(a *clix.App) error {
+		a.Root.ResolvePath([]string{"deploy"}).Flags.StringVar(clix.StringVarOptions{
+			FlagOptions: clix.FlagOptions{Name: "token", Required: true, Validate: func(string) error { return errors.New("rejected") }},
+			Value:       &extToken,
+		})
+		return nil
+	}))
+	if err := app.Run(bg, []string{"deploy", "--token", "x"}); err != nil || !ran || token != "x" || extToken != "" {
+		t.Fatalf("deploy --token x: %v, ran=%v, root token %q, extension's %q", err, ran, token, extToken)
+	}
+	t.Setenv("LX_TOKEN", "from-env")
+	ran = false
+	if err := app.Run(bg, []string{"deploy"}); err != nil || !ran || token != "from-env" || extToken != "" {
+		t.Fatalf("deploy with LX_TOKEN: %v, ran=%v, root token %q, extension's %q", err, ran, token, extToken)
+	}
+	t.Setenv("LX_TOKEN", "")
+	if err := app.Run(bg, []string{"deploy"}); err != nil || token != "from-file" || extToken != "" {
+		t.Fatalf("deploy with a config file: %v, root token %q, extension's %q", err, token, extToken)
+	}
+	out.Reset()
+	if err := app.Run(bg, []string{"deploy", "--help"}); err != nil || strings.Contains(out.String(), "--token") {
+		t.Fatalf("deploy --help = %v, lists the ignored --token:\n%s", err, out)
+	}
+	assertValidate(t, app,
+		`lx deploy: clix: extension #1 (clix_test.extensionFunc): flag --token is also defined by the app on "lx"; the app's --token is used here too, and this one is ignored`,
 	)
 }
 

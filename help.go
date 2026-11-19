@@ -93,6 +93,9 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 
 	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "FLAGS"))
 	for _, flag := range flags {
+		if shadowedOn(cmd, flag) {
+			continue
+		}
 		var names []string
 		if short := shownShort(cmd, flag); short != "" {
 			names = append(names, "-"+short)

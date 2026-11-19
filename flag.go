@@ -135,6 +135,7 @@ type Flag struct {
 	runChanged bool   // the last Run changed the value
 	tracked    bool   // beforeRun was recorded (false for a flag registered during a Run)
 	leakNoted  bool   // a carried-over value was recorded in the FlagSet's errors
+	shadowed   bool   // the Run ignores the flag: a better owner's flag of that name on its path is used (see markShadowed)
 
 	yieldsShort bool // Internal: the built-in --help, which gives up -h to any other flag
 	badDefault  bool // Internal: Default does not parse, so the flag has no default
