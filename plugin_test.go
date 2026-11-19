@@ -277,3 +277,32 @@ echo done`, 0o755)
 		t.Fatalf("SIGINT: err %v, output %q", err, out.String())
 	}
 }
+
+// User aliases take precedence over plugins of the same name: commands,
+// then aliases, then plugins.
+func TestPluginsComeAfterAliases(t *testing.T) {
+	dir, marks := t.TempDir(), t.TempDir()
+	writePlugin(t, dir, "myapp-co", "echo plugin > "+filepath.Join(marks, "co"), 0o755)
+	writePlugin(t, dir, "myapp-hello", "echo plugin > "+filepath.Join(marks, "hello"), 0o755)
+	app, _, _ := pluginApp(t, dir)
+	app.ExpandAliases = true
+	app.ConfigPath = filepath.Join(t.TempDir(), "config.yaml")
+	if err := app.SetAlias("co", "deploy"); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.SaveConfig(); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.Run(t.Context(), []string{"co"}); err != nil {
+		t.Fatalf("co: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(marks, "co")); !os.IsNotExist(err) {
+		t.Fatalf("the plugin myapp-co ran although the alias co names it (%v)", err)
+	}
+	if err := app.Run(t.Context(), []string{"hello"}); err != nil {
+		t.Fatalf("hello: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(marks, "hello")); err != nil {
+		t.Fatalf("the plugin myapp-hello did not run with aliases on: %v", err)
+	}
+}

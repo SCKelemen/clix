@@ -274,6 +274,20 @@ func (a *App) pluginCandidate(args []string) (string, bool) {
 	return word, true
 }
 
+// tryPlugin runs the plugin that args' first word names, if there is one
+// (see Plugins and pluginCandidate), and reports whether it ran one.
+func (a *App) tryPlugin(ctx context.Context, args []string) (bool, error) {
+	word, ok := a.pluginCandidate(args)
+	if !ok {
+		return false, nil
+	}
+	p, found := a.LookupPlugin(word)
+	if !found || p.Command != "" {
+		return false, nil
+	}
+	return true, a.runPlugin(ctx, p, args[1:])
+}
+
 // runPlugin runs the plugin p with args, with the app's standard streams,
 // and returns nil when it exits with status 0 and a *PluginExitError
 // otherwise.

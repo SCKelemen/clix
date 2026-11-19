@@ -54,12 +54,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		args = os.Args[1:]
 	}
 
-	// A plugin (see Plugins) runs before the config file is read: it is a
-	// program of its own.
+	// A plugin (see Plugins) is a program of its own, so it runs before the
+	// config file is read, unless user aliases are on: they live in the
+	// config file and take precedence over plugins (commands, then aliases,
+	// then plugins), so the plugin lookup waits for alias expansion.
 	a.ranPlugin = false
-	if word, ok := a.pluginCandidate(args); ok {
-		if p, found := a.LookupPlugin(word); found && p.Command == "" {
-			return a.runPlugin(ctx, p, args[1:])
+	if !a.ExpandAliases {
+		if ran, err := a.tryPlugin(ctx, args); ran {
+			return err
 		}
 	}
 
@@ -84,9 +86,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 				return err
 			}
 		}
-		expanded, _, err := a.ExpandAlias(args)
+		expanded, isAlias, err := a.ExpandAlias(args)
 		if err != nil {
 			return err
+		}
+		if !isAlias {
+			if ran, err := a.tryPlugin(ctx, args); ran {
+				return err
+			}
 		}
 		args = expanded
 	}
