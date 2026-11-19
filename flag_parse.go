@@ -93,8 +93,15 @@ func lookupArg(name string, sets ...*FlagSet) *Flag {
 func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (string, bool)) error {
 	if !hasValue {
 		if bf, ok := flag.Value.(boolFlag); ok {
+			// A bare switch means "true"; Validate sees it exactly as if
+			// --name=true had been written.
 			if err := bf.SetBool(true); err != nil {
 				return err
+			}
+			if flag.Validate != nil {
+				if err := flag.Validate("true"); err != nil {
+					return usageErrorf("invalid value for %s: %w", flag.Name, err)
+				}
 			}
 			flag.set = true
 			flag.cliSet = true
