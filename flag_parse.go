@@ -179,7 +179,7 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 			// A bare switch means "true"; Validate sees it exactly as if
 			// --name=true had been written.
 			if err := bf.SetBool(true); err != nil {
-				return err
+				return usageErrorf("invalid value for %s: %w", flag.Name, err)
 			}
 			if flag.Validate != nil {
 				if err := flag.Validate("true"); err != nil {
