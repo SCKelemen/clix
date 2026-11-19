@@ -344,6 +344,8 @@ func WithKeyMap(m PromptKeyMap) PromptOption {
 }
 
 // WithNoDefaultPlaceholder sets the placeholder text shown when no default exists.
+// It is shown as " [text]" in line mode and as dim ghost text in raw mode,
+// only while there is no Default, and it is never returned as an answer.
 // This is typically used by higher-level workflows (like surveys) to prompt the
 // user that pressing enter will keep their existing value.
 //
@@ -620,6 +622,12 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 		if cfg.Default != "" && !cfg.Secret {
 			def := st.render(cfg.Theme.DefaultStyle, cfg.Default)
 			fmt.Fprintf(p.Out, " [%s]", def)
+		} else if cfg.Default == "" && cfg.NoDefaultPlaceholder != "" {
+			style := cfg.Theme.PlaceholderStyle
+			if style == nil {
+				style = cfg.Theme.DefaultStyle
+			}
+			fmt.Fprintf(p.Out, " [%s]", st.render(style, cfg.NoDefaultPlaceholder))
 		}
 
 		if cfg.Theme.Hint != "" {

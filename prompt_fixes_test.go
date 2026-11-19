@@ -254,3 +254,18 @@ func TestTextPrompterStripsANSIWithoutColor(t *testing.T) {
 		t.Fatalf("CLICOLOR_FORCE=1 output %q", out.String())
 	}
 }
+
+func TestTextPrompterShowsPlaceholderOnlyWithoutDefault(t *testing.T) {
+	out := &bytes.Buffer{}
+	tp := clix.TextPrompter{In: strings.NewReader("\n"), Out: out}
+	got, err := tp.Prompt(context.Background(), clix.WithLabel("Name"), clix.WithNoDefaultPlaceholder("optional"))
+	if err != nil || got != "" || out.String() != "? Name [optional]: " {
+		t.Fatalf("got %q, %v, output %q", got, err, out.String())
+	}
+	out.Reset()
+	tp = clix.TextPrompter{In: strings.NewReader("\n"), Out: out}
+	got, _ = tp.Prompt(context.Background(), clix.WithLabel("Name"), clix.WithNoDefaultPlaceholder("optional"), clix.WithDefault("bob"))
+	if got != "bob" || out.String() != "? Name [bob]: " {
+		t.Fatalf("got %q, output %q", got, out.String())
+	}
+}
