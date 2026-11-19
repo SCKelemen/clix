@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -116,6 +117,12 @@ type App struct {
 	// non-ASCII letters always match exactly.
 	CaseSensitive bool
 
+	// ProgressMode controls how Context.Progress reports long-running
+	// work. The default, ProgressAuto, animates a spinner when Err is a
+	// terminal and prints one plain line otherwise; ProgressPlain always
+	// prints the plain line and ProgressQuiet prints nothing.
+	ProgressMode ProgressMode
+
 	configLoaded  bool
 	configLoadErr error
 
@@ -134,6 +141,9 @@ type App struct {
 	extErr     error // the first error an extension returned
 	extending  bool  // an extension's Extend is running
 	running    bool  // Run is running
+
+	progress progressBoard // the progress indicators writing to Err (see Context.Progress)
+	inMain   atomic.Bool   // Main is running the app, so it handles SIGINT and SIGTERM
 }
 
 // AppOption configures an App using the functional options pattern.
