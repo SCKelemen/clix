@@ -790,6 +790,43 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 	}
 }
 
+// adoptFlags moves every flag except --help from old, the flag set of a
+// root command that was replaced, into fs. A flag whose long name fs
+// already defines stays in old, and the conflict is recorded in fs.Err.
+// Registration problems recorded on old carry over, and so does an
+// explicit SetStrict when fs has none.
+func (fs *FlagSet) adoptFlags(old *FlagSet, rootName string) {
+	if fs.index == nil {
+		fs.index = make(map[string]*Flag)
+	}
+	fs.errs = append(fs.errs, old.errs...)
+	old.errs = nil
+	var kept []*Flag
+	for _, f := range old.flags {
+		if f.Name == "help" {
+			kept = append(kept, f)
+			continue
+		}
+		if fs.lookup(f.Name) != nil {
+			fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s was registered on the previous root command, and the new root %q defines it too; keeping the new root's definition", f.Name, rootName))
+			kept = append(kept, f)
+			continue
+		}
+		fs.addFlag(f)
+	}
+	old.flags = kept
+	old.index = make(map[string]*Flag, 2*len(kept))
+	for _, f := range kept {
+		old.index["--"+f.Name] = f
+		if f.Short != "" {
+			old.index["-"+f.Short] = f
+		}
+	}
+	if old.strictSet && !fs.strictSet {
+		fs.strict, fs.strictSet = old.strict, true
+	}
+}
+
 // lookup returns the flag registered under the long name, or nil.
 // It consults the same index the parser uses, so reads and writes always
 // refer to the same flag.

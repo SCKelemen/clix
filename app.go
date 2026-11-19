@@ -239,6 +239,11 @@ func (a *App) Flags() *FlagSet {
 // adopted its flag set is made non-strict, unless SetStrict was called on
 // it. Run calls bindRoot so that a Root replaced after NewApp is adopted
 // too.
+//
+// Flags registered with Flags() on the previously adopted root move to the
+// new one, so registering global flags before assigning app.Root works. A
+// flag whose long name the new root already defines stays behind, and the
+// conflict is recorded in the new root's FlagSet.Err.
 func (a *App) bindRoot() {
 	root := a.Root
 	if root == nil {
@@ -249,6 +254,9 @@ func (a *App) bindRoot() {
 	}
 	if root == a.boundRoot && root.Flags == a.boundFlags {
 		return
+	}
+	if old := a.boundFlags; old != nil && old != root.Flags {
+		root.Flags.adoptFlags(old, root.Name)
 	}
 	if !root.Flags.strictSet {
 		root.Flags.strict = false
