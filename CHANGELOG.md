@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Require Go 1.27: the `go` directive is 1.27.0, with `toolchain go1.27.4` for development and CI. `golang.org/x/term` 0.48.0 needs Go 1.26, and Go 1.27 provides `encoding/json/v2`.
+- Bump `golang.org/x/term` from 0.41.0 to 0.48.0, `golang.org/x/sys` from 0.42.0 to 0.50.0, and `go.yaml.in/yaml/v3` from 3.0.4 to 3.0.6 (#33, #35).
+
 ## [2.5.0] - 2026-11-19
 
 ### Added
