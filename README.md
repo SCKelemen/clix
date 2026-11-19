@@ -308,13 +308,51 @@ app.Flags().StringVar(clix.StringVarOptions{
 
 Any flag that is not Ambient still marks a scripted call: `myapp --target staging widgets create --dry-run` returns a `*clix.MissingFlagsError` (see [Non-interactive use](#non-interactive-use) for the full rule). `Ambient` changes nothing else: the flag is parsed, read from the environment and the config file, checked when `Required` (and prompted for when missing), and shown in help like any other flag. The format extension's `--format`, `--json`, `--jq` and `--template` are Ambient.
 
+#### Flag groups
+
+Some flags only make sense in combination, like cobra's flag groups. Declare the rule on a flag set, naming flags by their long names:
+
+```go
+cmd.Flags.MarkMutuallyExclusive("clear-labels", "remove-labels") // at most one
+cmd.Flags.MarkRequiredTogether("user", "password")              // all or none
+cmd.Flags.MarkOneRequired("file", "url")                        // at least one
+```
+
+Mark a group both mutually exclusive and one required for "exactly one". `Run` checks the groups after parsing, and a broken rule is a `*clix.FlagGroupError`, a usage error (exit status 2) that names the flags:
+
+```text
+--clear-labels and --remove-labels cannot be used together
+--user and --password must be used together: missing --password (or $MYAPP_PASSWORD)
+one of --file or --url is required
+```
+
+- **Mutually exclusive groups count the command line.** Two members given on the command line, by name or by position, are an error, Ambient members included. One member on the command line overrides the environment and the config file for the whole group: the other members are not read from either and keep their defaults, so a handler never sees two members set, just as a flag on the command line beats its own environment variable. With no member on the command line, the group is read like one setting: from the environment if any member has a variable set, otherwise from the config file. Two members set by the same source, such as `MYAPP_JSON=1` and `MYAPP_YAML=1`, are an error that names the variables or keys; a command marked `AllowConfigErrors` ignores both with a warning instead.
+- **Required-together and one-required groups count every source but the default**: the command line, the environment, the config file and prompts, as `Required` does. They never prompt themselves, since there is no single flag to ask for, and they are checked before `Run` prompts for missing required flags; a required flag about to be prompted for counts as given.
+- **Names resolve like the parser resolves a flag written after the command name**: on the command whose flag set holds the group, then on each command above it, so a group may name a root flag or a flag an extension registered (`MarkMutuallyExclusive("format", "csv")` with `ext/format`). Where the app and an extension both define a name, the group means the flag the parser uses.
+- **Where groups apply**: the groups of every command on the path, like required flags. A command with `IsExtensionCommand` set, and its subcommands, skip the groups of the commands above them, so `myapp version` runs whatever the root's groups say.
+Help shows the groups in the usage line, as gcloud's synopsis does, and says what each one means under FLAGS:
+
+```text
+USAGE
+  myapp labels update [flags] [--clear-labels | --remove-labels=REMOVE_LABELS] [--user=USER --password=PASSWORD] (--file=FILE | --url=URL)
+
+FLAGS
+  ...
+
+  At most one of these can be given: --clear-labels, --remove-labels
+  All or none of these must be given: --user, --password
+  At least one of these must be given: --file, --url
+```
+
+An exactly-one group is written `(--file=FILE | --url=URL)` with "Exactly one of these must be given". Shell completion stops offering the other members of a mutually exclusive group once one is given. `App.Validate` reports a group that names a flag that is not defined on the command or above it, a group with fewer than two flags, and a mutually exclusive group with a required flag (which leaves the others unusable). `FlagSet.FlagGroups` lists a set's groups.
+
 #### Config file values
 
 Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode: 0755` is `"0755"` and `date: 2024-01-02` is `"2024-01-02"`. Only int and float flags (and `Config.Int` and friends) read YAML's number, so `mode: 0755` sets an int flag to 493 and `0x1F` to 31. Nested maps flatten to dotted keys (`ports: {80: http}` is `ports.80`); a list of scalars is joined with commas (a slice flag gets its items one by one, so an item may contain a comma), and other lists flatten with indexes (`hosts.0.name`). A key written twice, for example nested and dotted, is an error that names the file. `Save` (which `config set` and `config unset` call) never changes what a key reads: a key it did not change is written back as the file had it, so `mask: 0x1F` stays a number and `tags: [a, "b,c"]` a list of two items, and a new value is quoted when YAML would read it differently (`mode: "0755"`). It replaces the file atomically with mode 0600, and writes through a symbolic link instead of replacing it.
 
 #### Checking definitions in a test
 
-`clix` tolerates definition mistakes at run time: a duplicate flag name keeps the first definition, a short name that is already taken is left off the later flag, a child name that collides with another child's alias is never reached. `App.Validate` reports all of them, along with defaults that do not parse and flags that shadow an ancestor's flag of the same name. Call it in a test:
+`clix` tolerates definition mistakes at run time: a duplicate flag name keeps the first definition, a short name that is already taken is left off the later flag, a child name that collides with another child's alias is never reached. `App.Validate` reports all of them, along with defaults that do not parse, flags that shadow an ancestor's flag of the same name, and flag groups that name unknown flags. Call it in a test:
 
 ```go
 import "testing"
@@ -463,9 +501,9 @@ myapp [--project/-p] [--verbose/-v]
 
 **Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `myapp --help deploy`, `myapp project --help ls` and `myapp deploy -fh` all show help, even when required flags are missing or there are extra arguments. A flag that uses `-h` (such as `--host`) on the command or on any command above it keeps `-h` after the command name, and the built-in help there has only `--help`: with a root `--host -h`, `myapp deploy -h example.com` sets the host.
 
-**Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `myapp version` never asks for `--project`. When one is missing, `Run` prompts for it only if the app is interactive and no flag other than an `Ambient` one was given on the command line, wherever and however it was written; otherwise it returns a `*MissingFlagsError` (see [Non-interactive use](#non-interactive-use)).
+**Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `myapp version` never asks for `--project`. When one is missing, `Run` prompts for it only if the app is interactive and no flag other than an `Ambient` one was given on the command line, wherever and however it was written; otherwise it returns a `*MissingFlagsError` (see [Non-interactive use](#non-interactive-use)). [Flag groups](#flag-groups) are checked on the same commands: mutually exclusive flags right after parsing, the other groups before any prompt.
 
-**Errors.** Every failure above is a usage error, as is a bad value from an environment variable or the config file: `clix.ExitCode` returns 2 for it and for a `*MissingFlagsError`.
+**Errors.** Every failure above is a usage error, as is a bad value from an environment variable or the config file: `clix.ExitCode` returns 2 for it, for a `*MissingFlagsError` and for a `*FlagGroupError`.
 
 Some of these rules are kept only for compatibility with earlier v2 releases and may change in a future major version: the non-strict root, the root-name exception, ASCII case-insensitive matching, flags written before the command that defines them, and same-name flags on a command and its ancestor.
 
@@ -634,7 +672,7 @@ Other guarantees:
 - **Cancellation**: every prompt returns `ctx.Err()` as soon as the context is done, in raw and line mode, even while waiting on an idle pipe. In raw mode Ctrl-C returns `clix.ErrCancelled` (Esc does too in select prompts), and SIGINT or SIGTERM restores the terminal and returns `clix.ErrCancelled` instead of exiting the process. In line mode Ctrl-C is the terminal's interrupt signal; with `signal.NotifyContext` as below it cancels the context. The extension only replaces the default `TextPrompter`; a `Prompter` you set yourself is kept.
 - **Prompts from command code** follow the same rules: with `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` they fail with `clix.ErrPromptsDisabled` instead of reading stdin.
 - **Piped answers**: each prompt reads exactly one line, so `printf 'a\nb\n' | myapp mk` (with `InteractiveAlways`) answers two prompts in turn.
-- **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors and missing flags, 130 for cancellation, and 1 otherwise:
+- **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors, missing flags and broken flag groups, 130 for cancellation, and 1 otherwise:
 
 ```go
 package main
@@ -803,6 +841,38 @@ Besides `text/template`'s own functions (`and`, `or`, `not`, `len`, `index`, `sl
 | `timefmt LAYOUT TIME` | `{{timefmt "2006-01-02" .createdAt}}` | an RFC 3339 time in a Go time layout |
 | `hyperlink URL TEXT` | `{{hyperlink .url .name}}` | an OSC 8 terminal hyperlink when color is on, `TEXT` otherwise |
 
+### Progress for long waits
+
+`ctx.Progress(label)` shows that a long-running operation is under way, like gcloud's `Waiting for operation...`. It writes to `App.Err` only, so `App.Out` stays clean for data:
+
+```go
+cmd.Run = func(ctx *clix.Context) error {
+        p := ctx.Progress("Deploying")
+        for i, step := range steps {
+                p.Update(float64(i)/float64(len(steps)), step.Name) // fraction (0 to 1, or -1 for unknown) and status
+                if err := step.Run(ctx); err != nil {
+                        p.Fail(err.Error())
+                        return err
+                }
+        }
+        p.Done("deployed") // "✓ Deploying: deployed"
+        return nil
+}
+```
+
+How it shows depends on `App.Err` and `App.ProgressMode`:
+
+- **On a terminal** (`clix.ProgressAuto`, the default): a spinner, the label, the latest message and percentage (`⠹ Deploying: uploading (42%)`), redrawn on one line about ten times a second, cut to the terminal width so it never wraps, with the cursor hidden. `Done` and `Fail` replace it with a final line: `✓ Deploying: deployed` or `✗ Deploying: failed`. The spinner and symbols are colored unless `NO_COLOR` is set or `CLICOLOR=0`. With `TERM=dumb` the spinner is ASCII and redrawn with carriage returns and spaces only, with no escape sequences at all. Outside a UTF-8 locale (`LC_ALL`, `LC_CTYPE` or `LANG`), frames and symbols are ASCII (`|/-\`, `+`, `!`).
+- **Not a terminal** (a pipe, a file, CI), or `clix.ProgressPlain`: one plain line, `Deploying...` when it starts and the final message when it ends, as in `Deploying...done`. `Update` prints nothing.
+- **`clix.ProgressQuiet`**: nothing. Map your own `--quiet` flag to it with `ctx.App.ProgressMode = clix.ProgressQuiet`.
+
+An indicator ends once, at the first of `Done`, `Fail` (messages default to `done` and `failed`), the end of its context (`cancelled`, or `timed out` for a deadline), or its command's handler returning: `Run` ends an indicator that `PreRun`, `Run` or `PostRun` left running, with `Done` when they succeeded and `Fail` otherwise. Later calls do nothing, and every method is a no-op on a nil `*Progress`.
+
+- **Prompts**: when a prompt starts (any prompter built on `clix.NewPromptConfig`, which includes `TextPrompter` and `clix/ext/prompt`), the indicator clears its line, shows the cursor and stops drawing until its next `Update`, `Done` or `Fail`. In plain mode it ends its partial line first and prints its end as a full line (`Deploying: done`).
+- **One at a time**: one indicator draws on an App at a time. One started while another is running prints only its final line.
+- **Ctrl-C**: the terminal is always put back. Under `App.Main`, the first signal cancels the context, which ends the indicator (`✗ Deploying: cancelled`) and shows the cursor. Without `Main`, on Unix, a running spinner also catches SIGINT and SIGTERM: it clears its line and shows the cursor, then delivers the signal again, so the signal has the effect it would have had without the indicator (the default action ends the process; a handler such as `signal.NotifyContext` receives it). On Windows it relies on the context.
+- Labels and messages are shown without escape sequences or control characters, so text from a server cannot move the cursor or break the line.
+
 ### Styling
 
 Optional styling hooks allow integration with packages like [`lipgloss`](https://github.com/charmbracelet/lipgloss):
@@ -936,7 +1006,7 @@ app.Root = clix.NewCommand("myapp")
 
 // Add extensions for optional features
 app.AddExtension(help.Extension{})         // Adds: myapp help [command...]
-app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset
+app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset (Configurations: true adds named configurations)
 app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [bash|zsh|fish|powershell]
 app.AddExtension(format.Extension{})       // Adds: --format / -f (json|yaml|text, default text), --json, --jq / -q, --template / -t
 app.AddExtension(version.Extension{        // Adds: myapp version, --version / -v (-v unless your app uses it)
@@ -1003,6 +1073,41 @@ app.Config.RegisterSchema(clix.ConfigSchema{
 
 With a schema, `config set project.retries 5` succeeds while `config set project.retries nope` fails with a helpful error.
 
+##### Named configurations
+
+`config.Extension{Configurations: true}` adds named configurations, like gcloud's configurations and kubectl's contexts: one set of config values per account, project or environment, and a way to switch between them.
+
+```text
+myapp config configurations create work      # creates it and activates it (--no-activate to not)
+myapp config set project acme-prod           # goes into "work"
+myapp config configurations activate default # switch back
+myapp --configuration work deploy            # one command with "work"
+MYAPP_CONFIGURATION=work myapp deploy        # the same, for a shell or a CI job
+myapp config configurations list             # NAME and IS_ACTIVE (JSON or YAML with --format)
+myapp config configurations describe [name]  # name, is_active and the values, secrets [redacted]
+myapp config configurations rename work prod # or: rename work --new-name prod
+myapp config configurations delete prod...   # asks first on a terminal; --yes to not ask
+```
+
+The configuration a command uses is the one given with the Ambient `--configuration` flag, else the one named by `<PREFIX>_CONFIGURATION`, else the one last activated, else `default`. `config list`, `get`, `set`, `unset` and `reset` work on it, and so do flags that read the config file; `reset` empties a named configuration rather than deleting it. The layout follows gcloud's, inside the config directory (`App.ConfigPath`'s directory when it is set):
+
+```text
+~/.config/myapp/
+  config.yaml                     the "default" configuration
+  configurations/config_work.yaml one file per other configuration
+  active_config                   the name of the activated configuration
+```
+
+- **The existing `config.yaml` is the `default` configuration**, read in place: turning the option on moves no file and loses no value, and apps without the option are unchanged.
+- **Activation is atomic**: `active_config` is written to a temporary file and renamed over the old one. New files have mode 0600 in directories created with mode 0700.
+- **Names** are a lowercase letter followed by lowercase letters, digits and hyphens (as in gcloud), at most 64 characters, so a name can never reach outside the `configurations` directory. A name in `--configuration`, the environment variable or `active_config` is checked the same way.
+- **Symbolic links** are followed for reading and writing (`active_config` and configuration files may point into a dotfiles repository); `rename` renames a link itself, and `delete` removes only the link, never the file it points to.
+- **A missing configuration** named by `--configuration` or `<PREFIX>_CONFIGURATION` is a usage error (exit status 2), and one named by `active_config` an error (1). The config commands, help, version and completion still run (see `AllowConfigErrors`), so the selection can be repaired.
+- `default`, the activated configuration and the one the command uses cannot be deleted or renamed; activate another one first, or use `config reset` to clear `default`.
+- `--configuration` values and the names after `activate`, `describe`, `delete` and `rename` complete to the existing configurations. An app flag named `--configuration` wins over the extension's, as app flags always do; then only the environment variable and `active_config` select.
+
+The same operations are methods on `App` for programs and tests: `EnableConfigurations`, `Configuration` (the name in effect and its `Source`), `Configurations`, `ConfigurationFile`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` and `ConfigurationEnvVar`. `ConfigFile` and `SaveConfig` use the configuration in effect; `ConfigDir` is still the config directory.
+
 #### Autocomplete Extension (`clix/ext/autocomplete`)
 
 Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion script on stdout (and nothing else, so it can be redirected to a file); without a shell it shows help, including installation steps. To load it:
@@ -1015,7 +1120,7 @@ Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion 
 The scripts are thin wrappers that ask the program itself through a hidden `__complete` command, so completion always matches the installed version and no command name or description ever becomes shell code. Completion follows the parser:
 
 - commands and aliases where they are valid, never hidden or shadowed ones;
-- the flags in scope (the command's, its ancestors' and the root's; long and short), leaving out flags already given, except repeatable ones;
+- the flags in scope (the command's, its ancestors' and the root's; long and short), leaving out flags already given, except repeatable ones, and the other flags of a mutually exclusive group once one is given;
 - values for flags and positional arguments registered with `cmd.Flags.SetCompletion(name, fn)`, for example `clix.CompleteValues("eu", "us")` or `clix.CompleteOptions(options...)` (the same `SelectOption` list a select prompt uses); `true`/`false` for `--switch=`;
 - `--flag=value` forms (including file names after `--file=`), nothing but arguments after `--`, and file names when nothing else is known, quoted so that names containing `$(...)` or backquotes are inserted literally, also inside `"` and `'`.
 
@@ -1114,8 +1219,9 @@ type App struct {
         In        io.Reader
         EnvPrefix string
 
-        Interactive InteractiveMode // InteractiveAuto, InteractiveAlways or InteractiveNever
-        ConfigPath  string          // overrides the config file location
+        Interactive  InteractiveMode // InteractiveAuto, InteractiveAlways or InteractiveNever
+        ProgressMode ProgressMode    // ProgressAuto, ProgressPlain or ProgressQuiet (see Progress for long waits)
+        ConfigPath   string          // overrides the config file location
 
         DefaultTheme PromptTheme
         Styles       Styles
@@ -1128,7 +1234,8 @@ Key methods:
 - `Flags() *FlagSet` - App-level (root command) flags, visible to every command
 - `AddExtension(ext Extension)` - Register an extension
 - `ApplyExtensions() error` - Apply all registered extensions
-- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does)
+- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does). With named configurations, `ConfigFile` is the file of the configuration in effect
+- `EnableConfigurations()`, `Configuration()`, `Configurations()`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` - Named configurations (see [Named configurations](#named-configurations))
 - `IsInteractive() bool` - Whether a missing required flag will be prompted for (see Non-interactive use)
 - `SaveConfig() error` - Persist `Config` values to the configuration file
 

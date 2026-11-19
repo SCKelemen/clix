@@ -73,6 +73,7 @@ Adds configuration management commands using dot-separated key paths (e.g. `proj
 - `cli config set <key_path> <value>` - Persist a new value (schema-aware if registered)
 - `cli config unset <key_path>` - Remove a persisted value (no-op if missing)
 - `cli config reset` - Remove all persisted configuration from disk
+- `cli config configurations list|create|activate|describe|delete|rename` - Named configurations, with a global `--configuration` flag and `<PREFIX>_CONFIGURATION`, when the extension is added as `config.Extension{Configurations: true}` (see "Named configurations" in the main README)
 
 Optional schemas let you enforce types:
 

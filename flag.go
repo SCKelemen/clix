@@ -45,6 +45,8 @@ type FlagSet struct {
 	strictSet bool    // SetStrict was called, so the App must not change strict
 	errs      []error // Registration problems, such as an unparsable default
 	conflicts []error // Name conflicts found by reindex
+
+	groups []FlagGroup // rules over several flags (see MarkMutuallyExclusive)
 }
 
 // NewFlagSet initialises an empty flag set.
@@ -144,6 +146,8 @@ type Flag struct {
 	tracked    bool   // beforeRun was recorded (false for a flag registered during a Run)
 	leakNoted  bool   // a carried-over value was recorded in the FlagSet's errors
 	shadowed   bool   // the Run ignores the flag: a better owner's flag of that name on its path is used (see markShadowed)
+
+	groupSkip fillSkip // Internal: sources a mutually exclusive group rules out for this Run (see planGroupFill)
 
 	yieldsShort   bool   // Internal: the built-in --help, which gives up -h to any other flag
 	badDefault    string // Internal: a Default the Value rejected at registration; while Default is still that, the flag has no default
@@ -1028,6 +1032,8 @@ func extPrefix(o owner) string {
 func (fs *FlagSet) adoptFlags(old *FlagSet) {
 	fs.errs = append(fs.errs, old.errs...)
 	old.errs = nil
+	fs.groups = append(fs.groups, old.groups...)
+	old.groups = nil
 	var kept []*Flag
 	for _, f := range old.all {
 		if f.Name == "help" {

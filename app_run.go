@@ -55,8 +55,13 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	// Load configuration up front, but report a broken config file only after
-	// --help and --version have had a chance to run.
-	configErr := a.ensureConfigLoaded(ctx)
+	// --help and --version have had a chance to run. With named
+	// configurations the file depends on --configuration, so it is loaded
+	// after parsing instead.
+	var configErr error
+	if !a.configurations {
+		configErr = a.ensureConfigLoaded(ctx)
+	}
 
 	rootFlags := a.Root.Flags
 
@@ -73,6 +78,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 	cmd := path[len(path)-1]
+	if a.configurations {
+		configErr = a.ensureConfigLoaded(ctx)
+	}
 	if cmd != a.Root {
 		// Root flags given while another command runs are app flags.
 		for _, f := range rootFlags.flags {
@@ -136,13 +144,24 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.printCommandHelp(cmd)
 	}
 
+	// Flag groups (see FlagSet.MarkMutuallyExclusive): two flags of a
+	// mutually exclusive group on the command line are a usage error.
+	groups := pathGroups(path)
+	if err := checkExclusiveCommandLine(groups); err != nil {
+		return err
+	}
+
 	if configErr != nil && !a.configErrorAllowed(cmd) {
 		return configErr
 	}
 
 	// Fill in flags the command line did not set, in precedence order:
 	// environment, then config file, then defaults. Every command on the
-	// path takes part: the root, each group, and the command itself.
+	// path takes part: the root, each group, and the command itself. A
+	// mutually exclusive group is filled like one setting.
+	if err := a.planGroupFill(groups, configErrorsAllowed(cmd)); err != nil {
+		return err
+	}
 	for _, c := range path {
 		if err := a.applyConfigToFlags(c.Flags, configErrorsAllowed(cmd)); err != nil {
 			return err
@@ -168,6 +187,13 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			// Mode 3 (or nobody to ask): report what is missing.
 			return a.missingFlagsError(missing)
 		}
+	}
+	// A broken group requirement is reported before any prompt; the flags
+	// about to be prompted for count as given.
+	if err := a.checkGroupRequirements(groups, missing); err != nil {
+		return err
+	}
+	if len(missing) > 0 {
 		// Mode 1: no CLI flags → interactive prompting
 		if err := a.promptForRequiredFlags(ctx, cmd, missing); err != nil {
 			return err
@@ -182,6 +208,16 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		path:    path,
 	}
 
+	err = runHandlers(runCtx, cmd)
+	// A progress indicator the handlers left running ends with them, so
+	// it never keeps drawing after Run returns.
+	a.endProgress(runCtx, err)
+	return err
+}
+
+// runHandlers runs cmd's PreRun, Run and PostRun handlers in order,
+// stopping at the first error.
+func runHandlers(runCtx *Context, cmd *Command) error {
 	if cmd.PreRun != nil {
 		if err := cmd.PreRun(runCtx); err != nil {
 			return err
@@ -437,13 +473,7 @@ func (a *App) namesMatch(word, name string) bool {
 // from that command down, so "app version" never asks for a required
 // --project on the root.
 func missingRequired(path []*Command) []*Flag {
-	from := 0
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i].IsExtensionCommand {
-			from = i
-			break
-		}
-	}
+	from := extensionFrom(path)
 	var missing []*Flag
 	for _, c := range path[from:] {
 		for _, f := range c.Flags.MissingRequired() {
@@ -530,20 +560,37 @@ func (a *App) prompter() Prompter {
 	return TextPrompter{In: in, Out: a.stderr()}
 }
 
+// ensureConfigLoaded loads the config file once. With named
+// configurations it loads again when another configuration is selected,
+// dropping the values of the previous one first.
 func (a *App) ensureConfigLoaded(ctx context.Context) error {
-	if a.configLoaded {
-		return a.configLoadErr
-	}
-	a.configLoaded = true
-
 	path, err := a.configFilePath()
-	if err != nil {
-		// Without a home directory there is no config file to read; that is
-		// not an error for commands that do not save configuration.
-		return nil
+	var selection *configurationError
+	if errors.As(err, &selection) {
+		// No configuration's values apply, not even the last one loaded.
+		if a.configLoaded && a.Config != nil {
+			a.Config.Reset()
+		}
+		a.configLoaded, a.configLoadedPath, a.configLoadErr = false, "", nil
+		return selection.err
+	}
+	if a.configLoaded && (path == a.configLoadedPath || !a.configurations) {
+		// Without named configurations the file is loaded once per App,
+		// as it always was.
+		return a.configLoadErr
 	}
 	if a.Config == nil {
 		a.Config = NewConfigManager(a.Name)
+	} else if a.configLoaded {
+		a.Config.Reset()
+	}
+	a.configLoaded, a.configLoadedPath = true, path
+
+	if err != nil {
+		// Without a home directory there is no config file to read; that is
+		// not an error for commands that do not save configuration.
+		a.configLoadErr = nil
+		return nil
 	}
 	a.configLoadErr = a.Config.Load(path)
 	return a.configLoadErr
@@ -574,10 +621,19 @@ func (a *App) applyConfigToFlags(flags *FlagSet, tolerate bool) error {
 			continue
 		}
 
-		// Try each source in order of precedence
+		// Try each source in order of precedence, except those a mutually
+		// exclusive group rules out (see planGroupFill).
 		undo := valueUndo(flag, tolerate)
-		if ok, err := a.trySetFromEnv(flag); ok || err != nil {
-			if err := a.valueError(flag, err, tolerate, undo); err != nil {
+		if flag.groupSkip&skipEnv == 0 {
+			if ok, err := a.trySetFromEnv(flag); ok || err != nil {
+				if err := a.valueError(flag, err, tolerate, undo); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+		if flag.groupSkip&skipConfig != 0 {
+			if err := a.trySetFromDefault(flag); err != nil {
 				return err
 			}
 			continue

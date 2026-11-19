@@ -163,6 +163,28 @@ func TestInteractive(t *testing.T) {
 	}
 }
 
+// CursorControl is about the terminal only: color settings do not change
+// it, TERM=dumb and non-terminals turn it off.
+func TestCursorControl(t *testing.T) {
+	pt := ptytest.New(t)
+	var buf bytes.Buffer
+	t.Setenv("TERM", "xterm")
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("CLICOLOR_FORCE", "")
+	if !tty.CursorControl(pt.TTY) {
+		t.Error("a pty with NO_COLOR should accept cursor control")
+	}
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	if tty.CursorControl(&buf) {
+		t.Error("CLICOLOR_FORCE must not make a buffer a terminal")
+	}
+	t.Setenv("TERM", "dumb")
+	if tty.CursorControl(pt.TTY) {
+		t.Error("TERM=dumb has no cursor control")
+	}
+}
+
 func TestDisableEcho(t *testing.T) {
 	pt := ptytest.New(t)
 	restore, err := tty.DisableEcho(pt.TTY)
