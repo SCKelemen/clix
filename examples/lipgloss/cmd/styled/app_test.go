@@ -12,3 +12,10 @@ func TestNewAppStyles(t *testing.T) {
 		t.Fatal("expected app title style to be configured")
 	}
 }
+
+// The example passes App.Validate, as the README recommends checking.
+func TestAppValidates(t *testing.T) {
+	if err := newApp().Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

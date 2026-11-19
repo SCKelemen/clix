@@ -25,9 +25,13 @@ import (
 //     root when Root was replaced;
 //   - two children of one command that share a name or alias (matched the
 //     way Run matches them), and which one Run picks;
-//   - every override between the app and an extension, or between two
-//     extensions, naming both owners: the app's flags and commands always
-//     win, and between extensions the one added first wins;
+//   - every override that costs a flag its long name or a command its
+//     name, between the app and an extension or between two extensions,
+//     naming both owners: the app's flags and commands always win, and
+//     between extensions the one added first wins. An extension's flag
+//     that only loses its short name, or an extension's command that only
+//     loses an alias, is still reachable by its name, and the app is meant
+//     to win, so that is not reported;
 //   - a flag whose long name is also defined on an ancestor command (other
 //     than --help): written before the command name it sets the ancestor's
 //     flag, after it the command's, so the bound variables and Context
@@ -107,14 +111,20 @@ func (a *App) validateCommand(cmd *Command, path string, inherited map[string]an
 			}
 		}
 		if f.Short != "" {
+			shortLoses := false
 			if af, ok := inherited["-"+f.Short]; ok && af.flag.Name != f.Name && !extNative {
 				if intruder && af.flag.rank < f.rank {
-					report("clix: %s: -%s is used by %s --%s on %q; %s is available as --%s only", f.describe(), f.Short, af.flag.possessive(), af.flag.Name, af.path, f.Name, f.Name)
+					// Only a flag registered during Run is reported: an
+					// extension's flag keeps its long name (see above).
+					shortLoses = true
+					if f.rank == runtimeRank {
+						report("clix: %s: -%s is used by %s --%s on %q; %s is available as --%s only", f.describe(), f.Short, af.flag.possessive(), af.flag.Name, af.path, f.Name, f.Name)
+					}
 				} else {
 					report("flag --%s: -%s is also the short name of --%s on %q; before the command name -%s means --%s, after it --%s", f.Name, f.Short, af.flag.Name, af.path, f.Short, af.flag.Name, f.Name)
 				}
 			}
-			if !loses {
+			if !loses && !shortLoses {
 				own["-"+f.Short] = ancestorFlag{f, path}
 			}
 		}
@@ -138,10 +148,10 @@ func (a *App) validateCommand(cmd *Command, path string, inherited map[string]an
 			if winner == nil || winner == child {
 				continue
 			}
+			// An extension's command that loses an alias to a better
+			// owner keeps its name: not reported (see Validate).
 			if winner.rank == child.rank {
 				*errs = append(*errs, fmt.Errorf("%s: %s%q names both %q and %q; Run always picks %q", path, extPrefix(child.owner), name, winner.Name, child.Name, winner.Name))
-			} else {
-				*errs = append(*errs, fmt.Errorf("%s: %s: alias %q of %q is used by %s %q; %q is available by its other names only", path, child.describe(), name, child.Name, winner.possessive(), winner.Name, child.Name))
 			}
 		}
 		if winner := cmd.findChildMatch(child.Name, a.CaseSensitive); winner != nil && winner != child {

@@ -763,7 +763,7 @@ Extensions never override your definitions. Everything registered while an exten
 - A flag registered while the app is running (in a handler or hook) on a flag set no extension owns never takes a name from an existing flag.
 - The built-in `--help` gives `-h` up to any flag that wants it, on the same command or on one above it, so a root `--host -h` is also `-h` after a command name.
 
-`FlagSet.Err` and `App.Validate` report every override and name both owners, numbering extensions in the order they were added, for example `extension #1 (version.Extension): -v is used by the app's --verbose; version is available as --version only`. Commands and flags that extensions added to the root move along if you replace `app.Root` after `ApplyExtensions`.
+`FlagSet.Err` and `App.Validate` report every override that costs a flag its long name or a command its name, and name both owners, numbering extensions in the order they were added, for example `extension #1 (format.Extension): flag --format in flag set "myapp" is also defined by the app; the app's --format is used and this one is ignored`. An extension's flag that only loses its short name, or an extension's command that only loses an alias, still works by its name, and the app is meant to win, so that is not reported: your own `-v` next to `ext/version` passes `Validate`. Commands and flags that extensions added to the root move along if you replace `app.Root` after `ApplyExtensions`.
 
 ### Available Extensions
 

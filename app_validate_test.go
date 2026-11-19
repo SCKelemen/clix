@@ -32,6 +32,74 @@ func TestValidateAcceptsACleanApp(t *testing.T) {
 	}
 }
 
+// The README's Quick Start, and the usual app that has its own -v, -f
+// and -h next to ext/version, ext/format and the built-in help, failed
+// Validate: an extension's flag that only loses its short name to the app
+// was reported, although the app is meant to win and the flag keeps its
+// long name. Only a lost long name (or a shadowed command) is reported.
+func TestValidateAcceptsExtensionsLosingShortNames(t *testing.T) {
+	// The Quick Start.
+	quick := clix.NewApp("demo")
+	var project, name string
+	root := clix.NewCommand("demo")
+	root.Short = "Root of the demo application"
+	root.Run = func(ctx *clix.Context) error {
+		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
+	}
+	greet := clix.NewCommand("greet", clix.WithCommandRun(noop))
+	greet.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "name", Required: true, Prompt: "Name", Positional: true}, Value: &name})
+	root.AddCommand(greet)
+	quick.Root = root
+	quick.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "project", Usage: "Project to operate on", EnvVar: "DEMO_PROJECT"}, Value: &project, Default: "sample-project"})
+	quick.AddExtension(help.Extension{})
+	if err := quick.Validate(); err != nil {
+		t.Errorf("Quick Start: Validate() = %v", err)
+	}
+
+	// The app's own short names next to every shipped extension.
+	app, _ := newTestApp(t, "t")
+	var verbose, force bool
+	var host string
+	app.Flags().BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "verbose", Short: "v"}, Value: &verbose})
+	app.Flags().BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "force", Short: "f"}, Value: &force})
+	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "host", Short: "h"}, Value: &host})
+	app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(noop)))
+	app.AddExtension(help.Extension{})
+	app.AddExtension(version.Extension{Version: "1"})
+	app.AddExtension(config.Extension{})
+	app.AddExtension(autocomplete.Extension{})
+	app.AddExtension(format.Extension{})
+	if err := app.Validate(); err != nil {
+		t.Errorf("own -v, -f and -h: Validate() = %v", err)
+	}
+	if err := app.Run(bg, []string{"--version"}); err != nil {
+		t.Errorf("--version: %v", err)
+	}
+
+	// An extension command that only loses an alias keeps its name.
+	app, _ = newTestApp(t, "t")
+	app.Root.AddCommand(clix.NewCommand("stats", clix.WithCommandAliases("st"), clix.WithCommandRun(noop)))
+	app.AddExtension(extensionFunc(func(a *clix.App) error {
+		a.Root.AddCommand(clix.NewCommand("status", clix.WithCommandAliases("st"), clix.WithCommandRun(noop)))
+		return nil
+	}))
+	if err := app.Validate(); err != nil {
+		t.Errorf("an extension command losing an alias: Validate() = %v", err)
+	}
+
+	// Losing a long name, and the app's own short-name clashes, are still
+	// reported.
+	app, _ = newTestApp(t, "t")
+	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "format", Short: "o"}})
+	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "output", Short: "o"}})
+	app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(noop)))
+	app.AddExtension(format.Extension{})
+	assertValidate(t, app,
+		`t: clix: extension #1 (format.Extension): flag --format in flag set "t" is also defined by the app; the app's --format is used and this one is ignored`,
+		`t: clix: flag --output cannot use -o in flag set "t" because --format already has it; it is available only as --output`,
+	)
+}
+
 func TestValidateReportsDefinitionMistakes(t *testing.T) {
 	app, _ := newTestApp(t, "moln")
 	var rootP, cmdP string

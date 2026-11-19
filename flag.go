@@ -889,7 +889,11 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 // applied before or after the app registers its flags.
 //
 //   - Long names: the losing flag is dropped from parsing and help.
-//   - Short names: the losing flag keeps only its long name.
+//   - Short names: the losing flag keeps only its long name. That is
+//     recorded as a conflict only between flags of the same owner, or for
+//     a flag registered during Run: an extension's flag that yields a
+//     short name to a better owner is still reachable by its long name,
+//     and the app is meant to win, so there is nothing to fix.
 //   - The built-in --help always gives -h up to any other flag (such as
 //     --host), without a conflict.
 func (fs *FlagSet) reindex() {
@@ -938,8 +942,9 @@ func (fs *FlagSet) reindex() {
 			continue
 		}
 		switch {
-		case f.yieldsShort:
-			// The built-in --help gives -h up silently.
+		case f.yieldsShort, f.rank != w.rank && f.rank != runtimeRank:
+			// The built-in --help gives -h up silently, and so does an
+			// extension's flag to a better owner (see above).
 		case w.rank == f.rank:
 			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %sflag --%s cannot use -%s in flag set %q because --%s already has it; it is available only as --%s", extPrefix(f.owner), f.Name, f.wantShort, fs.name, w.Name, f.Name))
 		default:
@@ -1003,10 +1008,11 @@ func (fs *FlagSet) lookup(name string) *Flag {
 }
 
 // Err reports problems found while registering flags, such as a long flag
-// name that was defined more than once, a short name that another flag
-// has, or a default that does not parse. Conflicts between the app's flags
-// and an extension's name both owners. It returns nil when registration
-// succeeded. Duplicate definitions are ignored rather than causing a panic,
+// name that was defined more than once, a short name that another flag of
+// the same owner has, or a default that does not parse. Conflicts between
+// the app's flags and an extension's name both owners; an extension's
+// flag that only loses a short name keeps its long name and is not
+// reported. It returns nil when registration succeeded. Duplicate definitions are ignored rather than causing a panic,
 // so call Err (for example, in a test) to detect them.
 func (fs *FlagSet) Err() error {
 	if fs == nil {

@@ -2,6 +2,7 @@ package clix_test
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -85,14 +86,12 @@ func TestAppShortNamesBeatExtensions(t *testing.T) {
 				}
 			}
 
-			wantErrs := []string{
-				"moln: clix: extension #1 (version.Extension): -v is used by the app's --verbose; version is available as --version only",
-				"moln: clix: extension #2 (format.Extension): -f is used by the app's --force; format is available as --format only",
-			}
-			assertValidate(t, app, wantErrs...)
-			before := app.Validate().Error()
+			// The extensions keep their long names, and the app is meant to
+			// win: nothing to report.
+			assertValidate(t, app)
+			before := fmt.Sprint(app.Validate())
 			_ = app.Run(bg, []string{"ls"})
-			if after := app.Validate().Error(); after != before {
+			if after := fmt.Sprint(app.Validate()); after != before {
 				t.Fatalf("Validate changed between Runs:\n%s\n---\n%s", before, after)
 			}
 		})
@@ -211,8 +210,9 @@ func TestFirstAddedExtensionWins(t *testing.T) {
 
 				typeName := map[string]string{"alpha": "clix_test.alphaExtension", "beta": "clix_test.betaExtension"}
 				loserExt := map[string]string{first: "#1 (" + typeName[first] + ")", second: "#2 (" + typeName[second] + ")"}
+				// The second extension's -x is not reported: its --second
+				// still works.
 				assertValidate(t, app,
-					"moln: clix: extension "+loserExt[second]+": -x is used by extension "+loserExt[first]+"'s --"+first+"; "+second+" is available as --"+second+" only",
 					"moln: clix: extension "+loserExt[second]+": flag --mode in flag set \"moln\" is also defined by extension "+loserExt[first]+"; extension "+loserExt[first]+"'s --mode is used and this one is ignored",
 					"moln: extension "+loserExt[second]+": command \"sync\" is shadowed by extension "+loserExt[first]+"'s \"sync\"; it is not reachable and is left out of help",
 				)
@@ -303,9 +303,9 @@ func TestAppCommandsBeatExtensionCommands(t *testing.T) {
 			}
 			app.Out = out
 
+			// The extension's status only lost its alias st: not reported.
 			assertValidate(t, app,
 				`moln: extension #1 (clix_test.ghostExtension): command "deploy" is shadowed by the app's "deploy"; it is not reachable and is left out of help`,
-				`moln: extension #1 (clix_test.ghostExtension): alias "st" of "status" is used by the app's "stats"; "status" is available by its other names only`,
 			)
 		})
 	}

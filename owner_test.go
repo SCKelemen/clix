@@ -228,8 +228,9 @@ func TestFlagsOnExtensionCommandsBelongToTheExtension(t *testing.T) {
 	if err := app.Run(bg, []string{"tools", "-m", "x"}); err != nil || mode != "x" || mute != "" {
 		t.Fatalf("err = %v, mode %q, mute %q", err, mode, mute)
 	}
+	// Extension #2's --mute keeps its long name, which is not reported;
+	// --mine belongs to extension #1, like --mode, so it is.
 	assertValidate(t, app,
-		`o tools: clix: extension #2 (clix_test.extensionFunc): -m is used by extension #1 (clix_test.extensionFunc)'s --mode; mute is available as --mute only`,
 		`o tools: clix: extension #1 (clix_test.extensionFunc): flag --mine cannot use -m in flag set "tools" because --mode already has it; it is available only as --mine`,
 	)
 }

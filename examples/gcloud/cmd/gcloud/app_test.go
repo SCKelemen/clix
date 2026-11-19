@@ -41,3 +41,10 @@ func TestGcloudProjectFlag(t *testing.T) {
 		t.Fatalf("app.Run returned error: %v", err)
 	}
 }
+
+// The example passes App.Validate, as the README recommends checking.
+func TestAppValidates(t *testing.T) {
+	if err := newApp().Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

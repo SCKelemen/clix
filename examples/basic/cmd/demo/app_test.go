@@ -59,3 +59,10 @@ func TestDemoProjectFlag(t *testing.T) {
 		}
 	}
 }
+
+// The example passes App.Validate, as the README recommends checking.
+func TestDemoValidates(t *testing.T) {
+	if err := demoapp.New().Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

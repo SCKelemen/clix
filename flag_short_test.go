@@ -101,7 +101,9 @@ func TestHelpGivesShortHToAncestors(t *testing.T) {
 }
 
 // Extensions applied at Run used to take short names from the app's own
-// flags: version's -v from --verbose and format's -f from --force.
+// flags: version's -v from --verbose and format's -f from --force. The
+// app is meant to win, and the extensions keep their long names, so Err
+// does not report it.
 func TestExtensionsDoNotTakeShortNames(t *testing.T) {
 	app, _ := newTestApp(t, "moln")
 	app.AddExtension(version.Extension{Version: "1.2.3"})
@@ -122,9 +124,11 @@ func TestExtensionsDoNotTakeShortNames(t *testing.T) {
 	if got := format.OutputFormat(app); got != "json" {
 		t.Fatalf("format = %q", got)
 	}
-	err := app.Flags().Err()
-	if err == nil || !strings.Contains(err.Error(), "extension #1 (version.Extension): -v is used by the app's --verbose; version is available as --version only") || !strings.Contains(err.Error(), "extension #2 (format.Extension): -f is used by the app's --force") {
-		t.Fatalf("Err() = %v, want both short-name conflicts", err)
+	if f := app.Flags().Lookup("version"); f == nil || f.Short != "" {
+		t.Fatalf("--version kept -%s", f.Short)
+	}
+	if err := app.Flags().Err(); err != nil {
+		t.Fatalf("Err() = %v", err)
 	}
 }
 

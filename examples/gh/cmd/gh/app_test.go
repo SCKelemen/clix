@@ -28,3 +28,10 @@ func TestGitHubAuthLogin(t *testing.T) {
 		t.Fatalf("expected login message in output, got %q", output)
 	}
 }
+
+// The example passes App.Validate, as the README recommends checking.
+func TestAppValidates(t *testing.T) {
+	if err := newApp().Validate(); err != nil {
+		t.Fatal(err)
+	}
+}
