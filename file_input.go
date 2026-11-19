@@ -173,17 +173,19 @@ func (r *fileReader) atValue(flag *Flag, name, value, dir string) (text, from st
 
 // fileReadingValue is implemented by values whose text names a file that
 // Run reads for them, through the Run's fileReader, so the size limit
-// and the single read of standard input apply (see DecodeVar).
+// and the single read of standard input apply (see DecodeVar). A
+// relative name is relative to dir when dir is not empty.
 type fileReadingValue interface {
-	setFromFile(r *fileReader, name string) error
+	setFromFile(r *fileReader, text, dir string) error
 }
 
 // setValueWith sets the flag's value from text, as setValue does, except
-// that a value whose text names a file reads it through r.
-func (f *Flag) setValueWith(r *fileReader, text string) error {
+// that a value whose text names a file reads it through r, relative to
+// dir when dir is not empty.
+func (f *Flag) setValueWith(r *fileReader, text, dir string) error {
 	if fv, ok := f.Value.(fileReadingValue); ok && r != nil {
 		f.touched = true
-		return fv.setFromFile(r, text)
+		return fv.setFromFile(r, text, dir)
 	}
 	return f.setValue(text)
 }

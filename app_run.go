@@ -762,7 +762,7 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 // function, mirroring what the command-line parser does. A value whose
 // text names a file (DecodeVar) reads it through r.
 func setAndValidate(r *fileReader, flag *Flag, raw string) error {
-	if err := flag.setValueWith(r, raw); err != nil {
+	if err := flag.setValueWith(r, raw, ""); err != nil {
 		return err
 	}
 	if flag.Validate != nil {

@@ -54,7 +54,9 @@ func isFlagsFileFlag(f *Flag) bool {
 }
 
 // EnableFlagsFile registers the global --flags-file flag, as gcloud has
-// (see "gcloud topic flags-file"). --flags-file=FILE reads flags from a
+// ("gcloud topic flags-file",
+// https://cloud.google.com/sdk/gcloud/reference/topic/flags-file).
+// --flags-file=FILE reads flags from a
 // YAML or JSON file, where values need no shell quoting, and inserts them
 // on the command line where --flags-file is written:
 //

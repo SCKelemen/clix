@@ -468,6 +468,34 @@ app.Config.RegisterSchema(
 
 With a schema in place, `cli config set project.retries 10` is accepted, while non-integer input is rejected with a clear error. Schemas are optional—keys without entries continue to behave like raw strings.
 
+#### Strict decoding
+
+`app.Config.Decode(prefix, &v)` decodes a section of the config file into a struct, and `clix.UnmarshalStrict(data, &v)` decodes any YAML or JSON document, both strictly, in the spirit of Kubernetes' `sigs.k8s.io/json` `UnmarshalStrict`.
+
+```go
+type Server struct {
+        Host    string        `json:"host"`
+        Port    int           `json:"port"`
+        Timeout time.Duration `json:"timeout"`
+        TLS     struct {
+                CertFile string `json:"cert_file"`
+        } `json:"tls"`
+}
+server := Server{Port: 8080} // defaults survive for keys the file leaves out
+if err := app.Config.Decode("server", &server); err != nil {
+        return err // config file /home/me/.config/myapp/config.yaml: strict decoding error: unknown field "server.tsl"
+}
+```
+
+The rules:
+
+- **Unknown fields are errors** (`clix.ErrUnknownField`), and so are **duplicate keys** in one mapping (`clix.ErrDuplicateField`), even where the target would ignore them, and **values of the wrong type**, such as a quoted `"80"` for an int field.
+- **Names are case-sensitive**: a struct field matches its `json` tag name, or its Go name when untagged, exactly. The YAML is turned into JSON and decoded with `encoding/json/v2` (`RejectUnknownMembers`, `MatchCaseInsensitiveNames(false)`, no duplicate names), so its rules apply: embedded structs are inlined, nested structs and maps are merged into what the target holds, and lists are replaced.
+- **Every problem is reported**, not just the first: the error is a `*clix.StrictError` whose `Fields` are `*clix.FieldError`s with a `Path` such as `spec.containers[0].image` (for `Config.Decode`, the full config key), ordered by path. When it is returned, the target is unchanged.
+- **Scalars keep the text written in the file** where the field is text, as the config file's values do: `version: 1.10` decodes into a string field as `"1.10"` and `mode: 0755` as `"0755"`, and so does a field whose type implements `encoding.TextUnmarshaler`. A number field gets YAML's number (`0755` is 493, `0x1F` is 31), as int flags do. `time.Duration` fields read Go's duration text (`90s`).
+- `Config.Decode` reads the file's values (and `Config.Set` values) as `Config.Get` sees them: `a.b: 1` and `a: {b: 1}` are the same key, lists of maps decode into slices, and an empty prefix decodes the whole file. It does not read environment variables or flags. With nothing under the prefix it returns nil and leaves the target alone.
+- YAML anchors, aliases and merge keys work; a document whose aliases expand past a million values is an error. One document per input.
+
 ### Positional Arguments
 
 Flags marked `Positional: true` accept values by position in addition to by name.

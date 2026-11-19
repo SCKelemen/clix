@@ -348,7 +348,7 @@ func (r *fileReader) setText(flag *Flag, name, value, file, what string) error {
 	if from != "" {
 		what += " (read from " + from + ")"
 	}
-	if err := flag.setValueWith(r, text); err != nil {
+	if err := flag.setValueWith(r, text, dir); err != nil {
 		if secret {
 			err = secretSetErr(flag, err)
 		}
