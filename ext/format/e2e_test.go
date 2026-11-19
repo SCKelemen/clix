@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/autocomplete"
 	"github.com/SCKelemen/clix/v2/ext/format"
 	"go.yaml.in/yaml/v3"
 )
@@ -245,4 +246,32 @@ func countFlags(fs *clix.FlagSet, name string) int {
 		}
 	}
 	return n
+}
+
+// Shell completion offers the formats for -f and --format (through the
+// autocomplete extension's __complete command), not file names.
+func TestFormatE2E_CompletesFormats(t *testing.T) {
+	for _, words := range [][]string{{"probe", "-f"}, {"probe", "get", "--format"}} {
+		app, out := e2eApp(t)
+		app.AddExtension(autocomplete.Extension{})
+		got, err := run(t, app, out, append([]string{"__complete", "--cur=", "--"}, words...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != "json\nyaml\ntext\n:nofiles\n" {
+			t.Errorf("completing %q <TAB>:\n%s", words, got)
+		}
+	}
+	// The app's own --format keeps its completion (none here).
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	app := clix.NewApp("probe", clix.WithAppOut(&bytes.Buffer{}))
+	var mine string
+	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "format"}, Value: &mine})
+	app.AddExtension(format.Extension{})
+	if err := app.ApplyExtensions(); err != nil {
+		t.Fatal(err)
+	}
+	if app.Flags().Lookup("format").Completer() != nil {
+		t.Error("the extension set a completion on the app's own --format")
+	}
 }

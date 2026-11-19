@@ -49,6 +49,13 @@ func (Extension) Extend(app *clix.App) error {
 		Default: clix.FormatText,
 		Value:   &formatValue{},
 	})
+	// Shell completion offers the formats, not file names. When the app has
+	// its own --format, that flag keeps its own completion.
+	if f := app.Flags().Lookup("format"); f != nil {
+		if _, ours := f.Value.(*formatValue); ours {
+			app.Flags().SetCompletion("format", clix.CompleteValues(formats...))
+		}
+	}
 	return nil
 }
 
