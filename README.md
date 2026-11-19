@@ -1130,7 +1130,7 @@ We welcome issues and pull requests. To keep the review cycle short:
 2. Format Go sources with `gofmt -w .`; CI fails if `gofmt -l .` lists any file.
 3. At the repository root, run `go build ./...`, `go vet ./...`, and `go test -race ./...`. This also covers `examples/basic`, `examples/gh`, and `examples/gcloud`, which are packages of the root module.
 4. `examples/bubbles`, `examples/lipgloss`, `examples/multicli`, and `examples/survey` are separate modules: run `go build ./...`, `go vet ./...`, and `go test ./...` inside each one, and keep its `go.mod` tidy with `go mod tidy`.
-5. Optionally run `golangci-lint run`. CI pins golangci-lint v2.15.0 and fails only on findings your change introduces; [`.golangci.yml`](.golangci.yml) records the existing baseline.
+5. Run `golangci-lint run ./...`. CI pins golangci-lint v2.15.0 and lints the whole root module, which has no findings, so any finding fails the job; fix it in code rather than adding an exclusion to [`.golangci.yml`](.golangci.yml).
 6. Include tests and docs for new behavior, and add an entry under `Unreleased` in [`CHANGELOG.md`](CHANGELOG.md).
 
 If you plan a larger change, feel free to open an issue first so we can discuss the approach.
@@ -1143,8 +1143,8 @@ If you plan a larger change, feel free to open an issue first so we can discuss 
 2. Move the `Unreleased` entries in [`CHANGELOG.md`](CHANGELOG.md) under the new version and date, and update any docs or examples that mention the version.
 3. Tag the release with a `v2.x.y` tag and push the tag:
    ```bash
-   git tag -a v2.5.0 -m "clix v2.5.0"
-   git push origin v2.5.0
+   git tag -a v2.6.0 -m "clix v2.6.0"
+   git push origin v2.6.0
    ```
 4. The `Release` workflow (`.github/workflows/release.yml`) builds, vets, and tests the tagged commit, then publishes a GitHub Release with generated notes.
 
