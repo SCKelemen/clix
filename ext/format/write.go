@@ -12,7 +12,10 @@ import (
 )
 
 // Write prints data, a command's result, to ctx.App.Out as the output
-// flags ask:
+// flags ask. When the running command has list flags (see ListFlags),
+// Write first keeps the elements --filter selects, sorts them by
+// --sort-by and keeps the first --limit of them; the output flags then
+// print what is left:
 //
 //   - With none of --json, --jq and --template, it is
 //     clix.FormatData(out, data, OutputFormat(app)): text by default
@@ -65,6 +68,15 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 	s := readSettings(app)
 	if err := s.check(); err != nil {
 		return err
+	}
+	ls, err := readListSettings(ctx)
+	if err != nil {
+		return err
+	}
+	if ls.active() {
+		if data, err = applyList(data, ls); err != nil {
+			return err
+		}
 	}
 	if !s.json && s.jq == "" && s.template == "" {
 		opts.Format = OutputFormat(app)

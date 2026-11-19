@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -33,6 +34,10 @@ func ParseSortBy(value string) ([]SortKey, error) {
 		name = strings.ReplaceAll(name, "[]", "[0]")
 		key, err := ParseKey(name)
 		if err != nil {
+			var u *UnsupportedError
+			if errors.As(err, &u) && u.In == "" {
+				u.In = "--sort-by"
+			}
 			return nil, fmt.Errorf("field %q: %w", text, err)
 		}
 		if len(key) == 0 {
