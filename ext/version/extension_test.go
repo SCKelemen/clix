@@ -3,6 +3,7 @@ package version
 import (
 	"bytes"
 	"context"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -68,8 +69,12 @@ func TestVersionExtension(t *testing.T) {
 		if !strings.Contains(outputStr, "name = test") || !strings.Contains(outputStr, "version = 1.2.3") {
 			t.Errorf("version output should contain name and version, got: %s", outputStr)
 		}
-		if !strings.Contains(outputStr, "go =") {
+		if !strings.Contains(outputStr, "go.version = "+runtime.Version()+"\n") || !strings.Contains(outputStr, "go.os = "+runtime.GOOS+"\n") {
 			t.Errorf("version output should contain go info, got: %s", outputStr)
+		}
+		// The nested go map once printed as Go syntax.
+		if strings.Contains(outputStr, "map[") {
+			t.Errorf("version text output prints a Go map: %s", outputStr)
 		}
 	})
 
