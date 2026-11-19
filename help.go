@@ -4,7 +4,14 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/SCKelemen/clix/v2/internal/tty"
 )
+
+// helpNameWidth is the minimum width, in terminal columns, of the name
+// column in the ARGUMENTS, FLAGS, GLOBAL FLAGS, GROUPS and COMMANDS
+// sections. A longer name pushes its description one space to the right.
+const helpNameWidth = 20
 
 // HelpRenderer prints help text for commands.
 type HelpRenderer struct {
@@ -18,88 +25,120 @@ func (h HelpRenderer) Render(w io.Writer) error {
 	if cmd == nil {
 		return fmt.Errorf("no command provided")
 	}
+	p := helpPrinter{HelpRenderer: h, w: w}
+	p.render(cmd)
+	return nil
+}
 
-	styles := h.App.Styles
+// helpPrinter renders one help screen to a writer.
+type helpPrinter struct {
+	HelpRenderer
+	w io.Writer
+}
 
-	if cmd == h.App.Root {
-		title := strings.ToUpper(h.App.Name)
-		fmt.Fprintf(w, "%s\n", renderText(styles.AppTitle, title))
-		if h.App.Description != "" {
-			desc := renderText(styles.AppDescription, h.App.Description)
-			fmt.Fprintf(w, "%s\n\n", desc)
+// style renders value with s.
+func (p helpPrinter) style(s TextStyle, value string) string {
+	return renderText(s, value)
+}
+
+// heading prints a section heading.
+func (p helpPrinter) heading(title string) {
+	fmt.Fprintln(p.w, p.style(p.App.Styles.SectionHeading, title))
+}
+
+// row prints one entry of a two-column section. The name is padded by its
+// visible width, so escape sequences added by styles do not count toward
+// the column width (as they do with fmt's %-20s).
+func (p helpPrinter) row(name, desc string) {
+	fmt.Fprintf(p.w, "  %s %s\n", tty.PadRight(name, helpNameWidth), desc)
+}
+
+func (p helpPrinter) render(cmd *Command) {
+	w := p.w
+	styles := p.App.Styles
+	isRoot := cmd == p.App.Root
+
+	if isRoot {
+		title := strings.ToUpper(p.App.Name)
+		fmt.Fprintf(w, "%s\n", p.style(styles.AppTitle, title))
+		if p.App.Description != "" {
+			fmt.Fprintf(w, "%s\n\n", p.style(styles.AppDescription, p.App.Description))
 		} else {
 			fmt.Fprintln(w)
 		}
 	} else {
-		short := cmd.Short
-		if short == "" {
-			short = cmd.Long
+		title := cmd.Short
+		if title == "" {
+			title = cmd.Long
 		}
-		fmt.Fprintf(w, "%s\n\n", renderText(styles.CommandTitle, short))
+		fmt.Fprintf(w, "%s\n\n", p.style(styles.CommandTitle, title))
 	}
 
 	usage := cmd.Usage
 	if usage == "" {
-		usage = h.buildUsageLine(cmd)
+		usage = p.buildUsageLine(cmd)
 	}
-	fmt.Fprintf(w, "%s\n  %s\n\n", renderText(styles.SectionHeading, "USAGE"), renderText(styles.Usage, usage))
+	p.heading("USAGE")
+	fmt.Fprintf(w, "  %s\n\n", p.style(styles.Usage, usage))
 
-	if cmd.Long != "" {
-		long := renderText(styles.CommandTitle, cmd.Long)
-		fmt.Fprintf(w, "%s\n\n", long)
+	if !isRoot && len(cmd.Aliases) > 0 {
+		p.heading("ALIASES")
+		fmt.Fprintf(w, "  %s\n\n", p.style(styles.ChildName, commandNames(cmd)))
 	}
 
-	h.renderArguments(w, cmd)
-	h.renderFlags(w, cmd)
-	h.renderGlobalFlags(w, cmd)
-	h.renderChildren(w, cmd)
+	// When Short is empty, Long was already printed as the title.
+	if cmd.Long != "" && (isRoot || cmd.Short != "") {
+		fmt.Fprintf(w, "%s\n\n", p.style(styles.CommandTitle, cmd.Long))
+	}
+
+	p.renderArguments(cmd)
+	p.renderFlags(cmd)
+	p.renderGlobalFlags(cmd)
+	p.renderChildren(cmd)
 
 	if cmd.Example != "" {
 		example := strings.ReplaceAll(cmd.Example, "\n", "\n  ")
-		fmt.Fprintf(w, "%s\n  %s\n", renderText(styles.SectionHeading, "EXAMPLES"), renderText(styles.Example, example))
+		p.heading("EXAMPLES")
+		fmt.Fprintf(w, "  %s\n", p.style(styles.Example, example))
 	}
-
-	return nil
 }
 
-func (h HelpRenderer) renderArguments(w io.Writer, cmd *Command) {
+func (p helpPrinter) renderArguments(cmd *Command) {
 	positionals := cmd.Flags.PositionalFlags()
 	if len(positionals) == 0 {
 		return
 	}
 
-	nameStyle, usageStyle := h.flagStylesFor(cmd == h.App.Root)
+	nameStyle, usageStyle := p.flagStylesFor(cmd == p.App.Root)
 
-	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "ARGUMENTS"))
+	p.heading("ARGUMENTS")
 	for _, flag := range positionals {
 		label := "<" + flag.Name + ">"
 		if flag.IsVariadic() {
 			label += "..."
 		}
-		renderedName := renderText(nameStyle, label)
 		usage := flag.Usage
 		if flag.Required {
 			usage += " (required)"
 		}
-		usage = renderText(usageStyle, usage)
-		fmt.Fprintf(w, "  %-20s %s\n", renderedName, usage)
+		p.row(p.style(nameStyle, label), p.style(usageStyle, usage))
 	}
-	fmt.Fprintln(w)
+	fmt.Fprintln(p.w)
 }
 
-func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
+func (p helpPrinter) renderFlags(cmd *Command) {
 	flags := cmd.Flags.Flags()
 	if len(flags) == 0 {
 		return
 	}
 
-	nameStyle, usageStyle := h.flagStylesFor(cmd == h.App.Root)
+	nameStyle, usageStyle := p.flagStylesFor(cmd == p.App.Root)
 
-	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "FLAGS"))
+	p.heading("FLAGS")
 	for _, flag := range flags {
-		h.renderFlag(w, flag, flag.Short, nameStyle, usageStyle)
+		p.flagRow(flag, flag.Short, nameStyle, usageStyle)
 	}
-	fmt.Fprintln(w)
+	fmt.Fprintln(p.w)
 }
 
 // renderGlobalFlags lists the root (app-level) flags, which the parser also
@@ -107,8 +146,8 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 // with its own flag of the same long name is left out, and a root flag's
 // short name is left out when the command's own flags claim it, because the
 // parser resolves both against the command first.
-func (h HelpRenderer) renderGlobalFlags(w io.Writer, cmd *Command) {
-	root := h.App.Root
+func (p helpPrinter) renderGlobalFlags(cmd *Command) {
+	root := p.App.Root
 	if root == nil || cmd == root || root.Flags == nil {
 		return
 	}
@@ -132,29 +171,75 @@ func (h HelpRenderer) renderGlobalFlags(w io.Writer, cmd *Command) {
 		return
 	}
 
-	nameStyle, usageStyle := h.flagStylesFor(true)
+	nameStyle, usageStyle := p.flagStylesFor(true)
 
-	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "GLOBAL FLAGS"))
+	p.heading("GLOBAL FLAGS")
 	for _, e := range entries {
-		h.renderFlag(w, e.flag, e.short, nameStyle, usageStyle)
+		p.flagRow(e.flag, e.short, nameStyle, usageStyle)
 	}
-	fmt.Fprintln(w)
+	fmt.Fprintln(p.w)
 }
 
-// renderFlag prints a flag as "-s, --name" followed by its usage.
-func (h HelpRenderer) renderFlag(w io.Writer, flag *Flag, short string, nameStyle, usageStyle TextStyle) {
+// flagRow prints a flag as "-s, --name" followed by its usage.
+func (p helpPrinter) flagRow(flag *Flag, short string, nameStyle, usageStyle TextStyle) {
 	var names []string
 	if short != "" {
 		names = append(names, "-"+short)
 	}
 	names = append(names, "--"+flag.Name)
-	renderedNames := renderText(nameStyle, strings.Join(names, ", "))
 	usage := flag.Usage
 	if flag.Required {
 		usage += " (required)"
 	}
-	usage = renderText(usageStyle, usage)
-	fmt.Fprintf(w, "  %-20s %s\n", renderedNames, usage)
+	p.row(p.style(nameStyle, strings.Join(names, ", ")), p.style(usageStyle, usage))
+}
+
+// renderChildren renders both groups and commands, showing them in separate sections.
+func (p helpPrinter) renderChildren(cmd *Command) {
+	visible := cmd.VisibleChildren()
+	if len(visible) == 0 {
+		return
+	}
+
+	// Separate into groups and commands
+	var groups, commands []*Command
+	for _, child := range visible {
+		if child.IsGroup() {
+			groups = append(groups, child)
+		} else {
+			// Include all non-groups (both leaf commands and commands without Run handlers)
+			commands = append(commands, child)
+		}
+	}
+
+	p.renderChildSection("GROUPS", groups)
+	p.renderChildSection("COMMANDS", commands)
+}
+
+// renderChildSection lists child commands by name and aliases, with their
+// descriptions.
+func (p helpPrinter) renderChildSection(title string, children []*Command) {
+	if len(children) == 0 {
+		return
+	}
+	p.heading(title)
+	for _, child := range children {
+		desc := child.Short
+		if desc == "" {
+			desc = child.Long
+		}
+		p.row(p.style(p.App.Styles.ChildName, commandNames(child)), p.style(p.App.Styles.ChildDesc, desc))
+	}
+	fmt.Fprintln(p.w)
+}
+
+// commandNames returns the command's name followed by its aliases, as in
+// "get, show".
+func commandNames(cmd *Command) string {
+	if len(cmd.Aliases) == 0 {
+		return cmd.Name
+	}
+	return cmd.Name + ", " + strings.Join(cmd.Aliases, ", ")
 }
 
 func (h HelpRenderer) buildUsageLine(cmd *Command) string {
@@ -203,53 +288,4 @@ func (h HelpRenderer) flagStylesFor(isGlobal bool) (name TextStyle, usage TextSt
 	}
 
 	return
-}
-
-// renderChildren renders both groups and commands, showing them in separate sections.
-func (h HelpRenderer) renderChildren(w io.Writer, cmd *Command) {
-	visible := cmd.VisibleChildren()
-	if len(visible) == 0 {
-		return
-	}
-
-	// Separate into groups and commands
-	var groups, commands []*Command
-	for _, child := range visible {
-		if child.IsGroup() {
-			groups = append(groups, child)
-		} else {
-			// Include all non-groups (both leaf commands and commands without Run handlers)
-			commands = append(commands, child)
-		}
-	}
-
-	// Render groups first
-	if len(groups) > 0 {
-		fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "GROUPS"))
-		for _, group := range groups {
-			desc := group.Short
-			if desc == "" {
-				desc = group.Long
-			}
-			name := renderText(h.App.Styles.ChildName, group.Name)
-			desc = renderText(h.App.Styles.ChildDesc, desc)
-			fmt.Fprintf(w, "  %-20s %s\n", name, desc)
-		}
-		fmt.Fprintln(w)
-	}
-
-	// Render commands
-	if len(commands) > 0 {
-		fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "COMMANDS"))
-		for _, child := range commands {
-			desc := child.Short
-			if desc == "" {
-				desc = child.Long
-			}
-			name := renderText(h.App.Styles.ChildName, child.Name)
-			desc = renderText(h.App.Styles.ChildDesc, desc)
-			fmt.Fprintf(w, "  %-20s %s\n", name, desc)
-		}
-		fmt.Fprintln(w)
-	}
 }

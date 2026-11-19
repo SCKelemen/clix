@@ -3,6 +3,7 @@ package clix
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -116,5 +117,84 @@ func TestHelpGlobalFlagsUseAppFlagStyles(t *testing.T) {
 	}
 	if local := strings.Join(section(out, "FLAGS"), "\n"); !strings.Contains(local, "CMD:-f, --force") {
 		t.Errorf("FLAGS should use the command flag styles:\n%s", out)
+	}
+}
+
+var ansiSGR = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// Padding with %-20s counted escape bytes as width, so the description
+// column moved when styles were set.
+func TestHelpColumnsAlignWithStyles(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	red := StyleFunc(func(s ...string) string { return "\x1b[31m" + strings.Join(s, "") + "\x1b[0m" })
+	for _, args := range [][]string{nil, {"apps"}, {"apps", "deploy"}} {
+		plain := renderHelp(t, globalFlagsApp(t), args...)
+		app := globalFlagsApp(t)
+		app.Styles = Styles{FlagName: red, ChildName: red, ChildDesc: red, FlagUsage: red, SectionHeading: red}
+		styled := renderHelp(t, app, args...)
+		if !strings.Contains(styled, "\x1b[31m") {
+			t.Fatalf("%q: styles were not applied:\n%s", args, styled)
+		}
+		if got := ansiSGR.ReplaceAllString(styled, ""); got != plain {
+			t.Errorf("%q: visible help changes when styles are applied.\nplain:\n%s\nstyled, escapes removed:\n%s", args, plain, got)
+		}
+	}
+}
+
+func TestHelpPrintsLongOnceWithoutShort(t *testing.T) {
+	app := newHelpTestApp(t)
+	cmd := NewCommand("sync", WithCommandRun(func(*Context) error { return nil }))
+	cmd.Long = "Synchronize the local cache with the server."
+	app.Root.AddCommand(cmd)
+	out := renderHelp(t, app, "sync")
+	if n := strings.Count(out, cmd.Long); n != 1 {
+		t.Errorf("Long appears %d times:\n%s", n, out)
+	}
+
+	cmd.Short = "Sync the cache"
+	out = renderHelp(t, app, "sync")
+	if !strings.HasPrefix(out, "Sync the cache\n") || strings.Count(out, cmd.Long) != 1 {
+		t.Errorf("with Short set, help should show Short as the title and Long once:\n%s", out)
+	}
+}
+
+func TestHelpShowsAliases(t *testing.T) {
+	app := newHelpTestApp(t)
+	get := NewCommand("get", WithCommandRun(func(*Context) error { return nil }), WithCommandAliases("show", "g"))
+	get.Short = "Get a widget"
+	app.Root.AddCommand(NewGroup("widgets", "Manage widgets", get))
+
+	out := renderHelp(t, app, "widgets")
+	if !strings.Contains(out, "  get, show, g         Get a widget\n") {
+		t.Errorf("COMMANDS should list the aliases:\n%s", out)
+	}
+	out = renderHelp(t, app, "widgets", "get")
+	if got := section(out, "ALIASES"); len(got) != 1 || got[0] != "  get, show, g" {
+		t.Errorf("command help should have an ALIASES section, got %q:\n%s", got, out)
+	}
+}
+
+// Help without styles keeps its layout byte for byte.
+func TestHelpPlainLayout(t *testing.T) {
+	app := globalFlagsApp(t)
+	got := renderHelp(t, app, "apps", "deploy")
+	want := `Deploy the app
+
+USAGE
+  probe apps deploy [flags]
+
+FLAGS
+  -h, --help           Show help information
+  -f, --force          Skip checks
+  --region             Deploy region
+
+GLOBAL FLAGS
+  --format             Output format
+  -v, --verbose        Verbose output
+
+`
+	if got != want {
+		t.Errorf("help output:\n%s\nwant:\n%s", got, want)
 	}
 }
