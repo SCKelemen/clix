@@ -38,7 +38,7 @@ jobs:
       tapes: ${{ steps.tapes.outputs.tapes }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           persist-credentials: false
       
@@ -74,7 +74,7 @@ jobs:
       # This job only builds examples and renders GIFs; it never pushes, so
       # it checks out with the default read-only token.
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0
@@ -271,7 +271,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           token: ${{ secrets.PERSONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           ref: ${{ github.ref }}
