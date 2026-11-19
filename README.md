@@ -94,21 +94,14 @@ demo/
 // cmd/demo/main.go
 package main
 
-import (
-        "context"
-        "fmt"
-        "os"
-)
+import "context"
 
 func main() {
-        app := newApp()
-
-        if err := app.Run(context.Background(), nil); err != nil {
-                fmt.Fprintln(app.Err, err)
-                os.Exit(1)
-        }
+        newApp().Main(context.Background())
 }
 ```
+
+`Main` runs the app with `os.Args[1:]`, cancels the context on SIGINT or SIGTERM, prints any error to `App.Err` and exits with `clix.ExitCode(err)`. In tests, call `app.Run(ctx, args)` with explicit arguments instead: `Run(ctx, nil)` reads `os.Args`, which under `go test` holds the test binary's own flags.
 
 `cmd/demo/app.go` owns the `clix.App` and root command definition while delegating child commands to the `internal/` tree:
 
@@ -252,12 +245,14 @@ app.Root.AddCommand(auth)
 Global and command-level flags support:
 - **Environment variable defaults**: Automatically read from environment
 - **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml` (or `$XDG_CONFIG_HOME/<app>/config.yaml`); set `App.ConfigPath` to use another file
-- **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`)
-- **Type support**: `StringVar`, `BoolVar`, `IntVar`, `Int64Var`, `Float64Var`, and `DurationVar` (`time.Duration`, parsed with `time.ParseDuration`)
+- **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`), attached short values (`-fvalue`) and short clusters (`-xvf`); see [Routing](#routing)
+- **Type support**: `StringVar`, `BoolVar`, `IntVar`, `Int64Var`, `Float64Var`, `DurationVar` (`time.Duration`, parsed with `time.ParseDuration`), `StringSliceVar` (repeatable, comma-separated), and `Var` for your own `clix.Value` types
 - **Custom validation**: Optional `Validate` function runs after parsing to reject invalid values
 - **Precedence**: Command flags > App flags > Environment variables > Config file > Defaults
 
-App-level flags live on the root command: `app.Flags()` returns the flag set of the current `app.Root`, so register them after assigning a custom root.
+App-level flags live on the root command: `app.Flags()` returns the flag set of `app.Root`. Flags registered before you assign a custom root move to it when the app runs.
+
+Every command on the path takes part in a run: the root, each group, and the command itself. Environment variables and the config file fill all their flags, `Required` is enforced on all of them, and `Context` getters (`String`, `Bool`, `Int`, `Int64`, `Float64`, `Duration` and the `Effective...` variants, which also report the `Source`) see all of them, returning the parsed value whatever its source. `FlagSet.Lookup`, `FlagSet.Changed` (set on the command line) and `Flag.Source` answer the same questions for one flag.
 
 ```go
 var project string
@@ -272,6 +267,57 @@ app.Flags().StringVar(clix.StringVarOptions{
         Default: "default-project",
 })
 ```
+
+#### Choosing where a flag may come from
+
+By default every flag also reads the environment variable `<PREFIX>_<NAME>` and the config file key named after it. That is convenient for `--project` or `--region`, but dangerous for a flag that confirms something destructive: with defaults, `MYAPP_FORCE=1` in a shell profile, or `force: true` in the config file, turns on `delete --force` for every run, and one bare `force` key feeds every command's `--force`. Mark such flags `CommandLineOnly`:
+
+```go
+var force bool
+cmd.Flags.BoolVar(clix.BoolVarOptions{
+        FlagOptions: clix.FlagOptions{
+                Name:            "force",
+                Usage:           "Delete without asking",
+                CommandLineOnly: true, // never from MYAPP_FORCE or the config file
+        },
+        Value: &force,
+})
+```
+
+The other controls, all off by default:
+
+- `NoEnv` and `NoConfig` turn off one source for one flag.
+- `ConfigKey` gives a flag its own config key, such as `delete.force` for `delete:` / `  force: true`, instead of the flag's name.
+- `App.AutoEnv` and `App.AutoConfig` (`*bool`; nil means on) stop flags from reading the variable or key named after them, so only an explicit `EnvVar`, `EnvVars` or `ConfigKey` is read.
+
+#### Config file values
+
+Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode: 0755` is `"0755"` and `date: 2024-01-02` is `"2024-01-02"`. Only int and float flags (and `Config.Int` and friends) read YAML's number, so `mode: 0755` sets an int flag to 493 and `0x1F` to 31. Nested maps flatten to dotted keys (`ports: {80: http}` is `ports.80`); a list of scalars is joined with commas (a slice flag gets its items one by one, so an item may contain a comma), and other lists flatten with indexes (`hosts.0.name`). A key written twice, for example nested and dotted, is an error that names the file. `Save` (which `config set` and `config unset` call) never changes what a key reads: a key it did not change is written back as the file had it, so `mask: 0x1F` stays a number and `tags: [a, "b,c"]` a list of two items, and a new value is quoted when YAML would read it differently (`mode: "0755"`). It replaces the file atomically with mode 0600, and writes through a symbolic link instead of replacing it.
+
+#### Checking definitions in a test
+
+`clix` tolerates definition mistakes at run time: a duplicate flag name keeps the first definition, a short name that is already taken is left off the later flag, a child name that collides with another child's alias is never reached. `App.Validate` reports all of them, along with defaults that do not parse and flags that shadow an ancestor's flag of the same name. Call it in a test:
+
+```go
+import "testing"
+
+func TestCLIDefinition(t *testing.T) {
+        app := clix.NewApp("myapp") // or the constructor your main uses
+        if err := app.Validate(); err != nil {
+                t.Fatal(err)
+        }
+}
+```
+
+#### Running more than once
+
+`Run` can be called repeatedly on one `App`, as tests and REPLs do. Each run first undoes what the previous run did: a flag that run set, from any source, goes back with its bound variable to the value it had when that run started, so `rm --force` followed by `rm` does not keep `--force`. A value your program assigned to a bound variable between two runs is kept instead. `Run` can tell an assignment from what the previous run left only by its value, so assigning exactly that value (`region = "eu"` after a run with `--region eu`) is undone like the rest; pass such a value on the command line, or make it the flag's `Default`.
+
+Built-in values are put back exactly. A custom `Value` (see `FlagSet.Var`) is put back by its `Reset` method, which `Run` calls whenever the previous run called `Set` on it, whatever its `String` returns, so a secret that prints as `<redacted>` is reset too. `Run` never passes `String`'s text back to `Set`, so a custom value that should not start from its zero state needs a `Default`, which every run applies again. A custom `Value` without `Reset` keeps what a run set, and `Validate` reports that.
+
+A handler may call `Run` itself, for an alias command or an interactive shell. The nested run starts from the outer run's values, with no flag set yet, and when it returns it puts back everything it changed, so the handler continues with its own values, `Changed` and `Source`, and nothing leaks into later runs. A custom value that the nested run set is reset rather than restored.
+
+`Run` is not safe for concurrent use on one `App`; build one `App` per goroutine.
 
 #### Typed configuration access (optional schema)
 
@@ -347,6 +393,63 @@ cmd.Flags.StringVar(clix.StringVarOptions{
 // gh repo clone sckelemen/clix
 // gh repo clone --repository sckelemen/clix
 ```
+
+### Routing
+
+These rules describe exactly how `Run` turns arguments into a command, flag values and positional arguments. `routing_test.go` checks each of them. The examples use this tree:
+
+```text
+moln [--project/-p] [--verbose/-v]
+├── deploy (alias ship) [--force/-f] [--region/-r] [--tag/-t]... [--count/-n] [target]
+├── project [--org]
+│   └── ls (alias list) [--all/-a]
+└── db [name]                 (has a Run handler and children)
+    └── migrate
+```
+
+**The command path.** Words are matched left to right against the children of the current command, by name or alias. Matching ignores ASCII case (`DEPLOY` runs `deploy`), but non-ASCII letters must match exactly; set `App.CaseSensitive` for exact matching. Hidden commands match like any other. The first word that is not a child ends the path: it and every later word are positional arguments, even if they name a command somewhere. One exception: a first word equal to the root's name (`moln moln deploy`) is skipped when no child has that name and the root has no `Run` handler or no positional flags.
+
+**Tokens.** From left to right:
+
+- `--` ends flag parsing. Everything after it is a positional argument, including `-x` and `--help`.
+- A token that starts with `-` is a flag, except a lone `-` (the conventional "stdin" argument) and a negative number such as `-5`, `-1.5` or `-1e3` (even one too large for a float64) that no command in the tree registers as a flag, such as `-1` for `--one`. Those are words, like any other.
+- A flag that takes a value and has no `=value` consumes the next token as its value, whatever it looks like: `--count -5` is -5 and `--name --force` sets the name to `--force`.
+- Every other token is a word: a command name while the path is being matched, a positional argument after that.
+
+**Flag syntax.**
+
+- Values: `--name value`, `--name=value`, `-n value`, `-n=value` and `-nvalue`. `--name=` sets the empty string.
+- Boolean flags never consume the next token: `--force` is true, `--force=false` is false, and in `deploy --force false` the word `false` is a positional argument.
+- One-letter short flags can be clustered: `-fv` is `-f -v`. The first letter that takes a value takes the rest of the token as its value (`-frus` sets `--region` to `us`), or the next token if it is the last letter (`-fr us`). A cluster with a letter that is not a flag fails with `unknown flag: -z (in -fz)`.
+- Repeating a flag replaces its value, so the last one wins, except slice flags (`StringSliceVar`), which append: `-t a -t b,c` is `[a b c]`. A slice value is split on commas with the spaces around each item trimmed, and an item in double quotes may contain commas: `--tag '"a,b", c'` is `[a,b c]`. Environment variables follow the same rule.
+
+**Where a flag may appear, and which flag a name means.** A flag may be written before the path, between path segments or after it. Its name is looked up on the command in effect at that point (the deepest command matched so far), then on each ancestor up to the root. A cluster's letters are looked up the same way, so `deploy -fv` sets `deploy --force` and the root's `--verbose`.
+
+- `moln -p p1 deploy` and `moln deploy -p p1` both set the root's `--project`.
+- `moln project --org acme ls` and `moln project ls --org acme` both set the group's `--org`.
+- When a command and one of its ancestors define the same name, a token after the command sets the command's flag and a token before it sets the ancestor's; `Context` getters prefer whichever was set on the command line. `App.Validate` reports this shadowing.
+- A flag written before the command that defines it (`moln --force deploy`) is accepted only if it needs no separate value: a switch, or `--name=value`. While matching the path, the parser cannot know that the next token is that flag's value, so `moln --org acme project ls` reads `acme` as a word and fails with `unknown command: moln acme`.
+- For the same reason, a cluster written before the command that mixes that command's switches with a flag that takes a value cannot take its value from the next token: `moln -fp deploy` (deploy's `-f`, the root's `-p`) fails with `-p needs a value: write -fp=VALUE, or put the flags after the command`. `moln -fp=p1 deploy` and `moln deploy -fp p1` work.
+
+**Unknown flags and extra arguments.**
+
+- Whether a flag is unknown is decided by the command that runs (the leaf), wherever the flag is written. Commands are strict by default, so `moln deploy --bogus` and `moln --bogus deploy` fail with `unknown flag: --bogus`.
+- The root flag set is not strict unless you call `app.Flags().SetStrict(true)`. When the root itself runs, an unknown flag fills one of its positional arguments if it takes any, and otherwise fails with `unknown flag: --bogus`.
+- Positional arguments fill the command's `Positional` flags in registration order, skipping flags already given by name. Any left over fail with `unexpected arguments: ...`.
+
+**Groups, and commands with both Run and children.**
+
+- A group (children, no `Run`) followed by no word shows its help and exits 0, without checking required flags.
+- A group followed by a word that is not a child fails with `unknown command: moln project nope`. The word `help` is not special there: `moln project help ls` is an unknown command, because the `help` command from `ext/help` only exists at the root.
+- A command with a `Run` handler and children runs its handler when the next word is not a child. `moln db users` runs `db` with `name` set to `users`; a command that takes no positional arguments fails with `unexpected arguments`.
+
+**Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `moln --help deploy`, `moln project --help ls` and `moln deploy -fh` all show help, even when required flags are missing or there are extra arguments. A flag that uses `-h` (such as `--host`) on the command or on any command above it keeps `-h` after the command name, and the built-in help there has only `--help`: with a root `--host -h`, `moln deploy -h example.com` sets the host.
+
+**Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `moln version` never asks for `--project`.
+
+**Errors.** Every failure above is a usage error, as is a bad value from an environment variable or the config file: `clix.ExitCode` returns 2 for it and for a `*MissingFlagsError`.
+
+Some of these rules are kept only for compatibility with earlier v2 releases and may change in a future major version: the non-strict root, the root-name exception, ASCII case-insensitive matching, flags written before the command that defines them, and same-name flags on a command and its ancestor.
 
 ### Interactive Prompting
 
@@ -649,6 +752,18 @@ if err := app.Run(context.Background(), nil); err != nil {
         os.Exit(1)
 }
 ```
+
+#### Precedence
+
+Extensions never override your definitions. Everything registered while an extension's `Extend` runs belongs to that extension, and so does a flag added to an extension's command at any later time; everything else belongs to your app. When a flag's long name, a short name, or a command name or alias collides, your definition wins, and between two extensions the one added first with `AddExtension` wins. The order in which you register your own flags, add extensions or call `ApplyExtensions` does not matter.
+
+- A flag that loses its short name keeps its long name (your `-v` for `--verbose` leaves `ext/version` with `--version` only); a flag that loses its long name is dropped from parsing and help; a command that loses its name is unreachable and left out of help and completion.
+- This holds along the whole command path: if an extension adds `--project` to your `deploy` while your root defines `--project`, `deploy --project x` sets your root flag, and the extension's flag is ignored: it is never required, filled from the environment or the config file, or listed in `deploy`'s help.
+- An extension's own commands keep their own flags: `config get --key k` uses ext/config's `--key` even if your root has a `--key`, and that is not reported, since there is nothing to fix.
+- A flag registered while the app is running (in a handler or hook) on a flag set no extension owns never takes a name from an existing flag.
+- The built-in `--help` gives `-h` up to any flag that wants it, on the same command or on one above it, so a root `--host -h` is also `-h` after a command name.
+
+`FlagSet.Err` and `App.Validate` report every override that costs a flag its long name or a command its name, and name both owners, numbering extensions in the order they were added, for example `extension #1 (format.Extension): flag --format in flag set "myapp" is also defined by the app; the app's --format is used and this one is ignored`. An extension's flag that only loses its short name, or an extension's command that only loses an alias, still works by its name, and the app is meant to win, so that is not reported: your own `-v` next to `ext/version` passes `Validate`. Commands and flags that extensions added to the root move along if you replace `app.Root` after `ApplyExtensions`.
 
 ### Available Extensions
 

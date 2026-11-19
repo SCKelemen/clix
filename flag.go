@@ -3,6 +3,7 @@ package clix
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -34,11 +35,16 @@ import (
 //		Value: &verbose,
 //	})
 type FlagSet struct {
-	name   string
-	flags  []*Flag
-	index  map[string]*Flag
-	strict bool    // If true, unknown flags cause errors instead of being treated as positionals
-	errs   []error // Registration problems, such as duplicate flag names
+	owner          // the owner of the command the set belongs to (see App.claimDefinitions)
+	app       *App // the App whose tree holds the set, once it has run or applied extensions
+	name      string
+	all       []*Flag // every registered flag, in order, including ones that lost a name conflict
+	flags     []*Flag // the flags in effect: the winners in all
+	index     map[string]*Flag
+	strict    bool    // If true, unknown flags cause errors instead of being treated as positionals
+	strictSet bool    // SetStrict was called, so the App must not change strict
+	errs      []error // Registration problems, such as an unparsable default
+	conflicts []error // Name conflicts found by reindex
 }
 
 // NewFlagSet initialises an empty flag set.
@@ -50,8 +56,13 @@ func NewFlagSet(name string) *FlagSet {
 // SetStrict enables or disables strict mode. When strict mode is enabled (the default),
 // unknown flags cause Parse to return an error instead of being treated as positional arguments.
 // Set to false to allow unknown flags to be treated as positional arguments.
+//
+// The root flag set (App.Flags) is made non-strict once, when the App
+// adopts the root command. An explicit SetStrict call on it is honored and
+// never undone by Run or Flags.
 func (fs *FlagSet) SetStrict(strict bool) {
 	fs.strict = strict
+	fs.strictSet = true
 }
 
 // Strict returns whether strict mode is enabled.
@@ -95,12 +106,91 @@ type Flag struct {
 	// after it has been successfully parsed by Value.Set.
 	Validate func(string) error
 
+	// CommandLineOnly means the flag is read only from the command line,
+	// never from the environment or the config file.
+	CommandLineOnly bool
+
+	// NoEnv means the flag is never read from an environment variable.
+	NoEnv bool
+
+	// NoConfig means the flag is never read from the config file.
+	NoConfig bool
+
+	// ConfigKey is the config file key for this flag. If empty, the flag's
+	// Name is used (unless App.AutoConfig is false).
+	ConfigKey string
+
 	// Value is the flag value implementation.
 	Value Value
 
 	set    bool   // Internal: tracks if flag was explicitly set (any source)
 	cliSet bool   // Internal: tracks if flag was set via CLI argument (not env/config/default)
 	source Source // Internal: where a non-CLI value came from (env, config, or prompt) when set
+
+	// Internal: what the last Run did to the value (see App.startRun).
+	undoRun    func() // puts Value back as it was before the last Run; nil when it cannot
+	beforeRun  string // Value.String() when the last Run started
+	afterRun   string // Value.String() when the last Run ended
+	touched    bool   // the Run called Set on the value, from any source (see Flag.setValue)
+	runChanged bool   // the last Run changed the value
+	tracked    bool   // beforeRun was recorded (false for a flag registered during a Run)
+	leakNoted  bool   // a carried-over value was recorded in the FlagSet's errors
+	shadowed   bool   // the Run ignores the flag: a better owner's flag of that name on its path is used (see markShadowed)
+
+	yieldsShort   bool   // Internal: the built-in --help, which gives up -h to any other flag
+	badDefault    string // Internal: a Default the Value rejected at registration; while Default is still that, the flag has no default
+	badDefaultErr error  // Internal: why the Value rejected badDefault
+
+	wantShort  string // Internal: the short name requested at registration
+	registered bool   // Internal: wantShort has been recorded
+	owner             // Internal: the app or the extension that registered the flag
+}
+
+// owner records who defined a flag or command: the app, or the extension
+// whose Extend was running (see App.ApplyExtensions). The zero value is
+// the app.
+type owner struct {
+	rank      int    // 0 for the app, 1+i for the extension added i-th, runtimeRank for a flag registered during Run
+	ownerName string // "#2 (config.Extension)" for an extension, "" otherwise
+	claimed   bool   // the owner has been recorded
+}
+
+// runtimeRank is the rank of a flag registered while the App was running
+// (in a handler or hook) on a flag set no extension owns. It loses every
+// name conflict, so registering it cannot change what an existing flag
+// means.
+const runtimeRank = 1 << 30
+
+// claim records o as the owner, unless one was recorded already.
+func (w *owner) claim(rank int, name string) {
+	if !w.claimed {
+		w.rank, w.ownerName, w.claimed = rank, name, true
+	}
+}
+
+// describe names the owner for error messages: "the app",
+// "extension #2 (config.Extension)", or "a flag registered during Run".
+func (w owner) describe() string {
+	switch w.rank {
+	case 0:
+		return "the app"
+	case runtimeRank:
+		return "a flag registered during Run"
+	}
+	return "extension " + w.ownerName
+}
+
+// possessive is describe in the possessive: "the app's" or
+// "extension version.Extension's".
+func (w owner) possessive() string {
+	return w.describe() + "'s"
+}
+
+// hasDefault reports whether the flag has a Default, other than one its
+// Value rejected at registration. A Default changed since (through
+// Lookup) counts again.
+func (f *Flag) hasDefault() bool {
+	return f.Default != "" && f.Default != f.badDefault
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.
@@ -113,6 +203,25 @@ type boolFlag interface {
 	Value
 	SetBool(bool) error
 }
+
+// switchOf returns v as a boolean switch, or nil when v takes a value. A
+// Value is a switch when it has a SetBool(bool) error method (as BoolValue
+// does), or, following the standard library's flag package, an
+// IsBoolFlag() bool method that returns true.
+func switchOf(v Value) boolFlag {
+	if bf, ok := v.(boolFlag); ok {
+		return bf
+	}
+	if bf, ok := v.(interface{ IsBoolFlag() bool }); ok && bf.IsBoolFlag() {
+		return isBoolFlagValue{v}
+	}
+	return nil
+}
+
+// isBoolFlagValue adapts a Value with IsBoolFlag to boolFlag.
+type isBoolFlagValue struct{ Value }
+
+func (v isBoolFlagValue) SetBool(b bool) error { return v.Set(strconv.FormatBool(b)) }
 
 // FlagOptions contains common configuration for all flag types.
 // This struct is embedded in all *VarOptions types to provide a unified API.
@@ -156,6 +265,50 @@ type FlagOptions struct {
 	// after it has been successfully parsed by Value.Set. If non-nil, it is
 	// called with the raw input string; returning a non-nil error rejects the value.
 	Validate func(string) error
+
+	// CommandLineOnly means the flag is read only from the command line
+	// (by name or position), never from an environment variable or the
+	// config file. Use it for destructive or confirming switches such as
+	// --force or --yes, so that MYAPP_FORCE=1 or "force: true" in a config
+	// file cannot turn them on for every run. It implies NoEnv and
+	// NoConfig.
+	CommandLineOnly bool
+
+	// NoEnv means the flag is never read from an environment variable,
+	// not even EnvVar or EnvVars.
+	NoEnv bool
+
+	// NoConfig means the flag is never read from the config file.
+	NoConfig bool
+
+	// ConfigKey is the config file key that supplies this flag, in dot
+	// notation, such as "delete.force" for "delete:\n  force: true". If
+	// empty, the key is the flag's Name, so the same bare key feeds every
+	// command's flag of that name; a per-command ConfigKey avoids that.
+	// When App.AutoConfig is false, only flags with a ConfigKey read the
+	// config file.
+	ConfigKey string
+}
+
+// newFlag builds a Flag from o with the given value and default text.
+func (o FlagOptions) newFlag(value Value, def string) *Flag {
+	return &Flag{
+		Name:            o.Name,
+		Short:           o.Short,
+		Usage:           o.Usage,
+		EnvVar:          o.EnvVar,
+		EnvVars:         append([]string(nil), o.EnvVars...),
+		Default:         def,
+		Required:        o.Required,
+		Prompt:          o.Prompt,
+		Positional:      o.Positional,
+		Validate:        o.Validate,
+		CommandLineOnly: o.CommandLineOnly,
+		NoEnv:           o.NoEnv,
+		NoConfig:        o.NoConfig,
+		ConfigKey:       o.ConfigKey,
+		Value:           value,
+	}
 }
 
 // ApplyFlag implements FlagOption, so a FlagOptions value (and every
@@ -188,6 +341,18 @@ func (o FlagOptions) ApplyFlag(fo *FlagOptions) {
 	}
 	if o.Validate != nil {
 		fo.Validate = o.Validate
+	}
+	if o.CommandLineOnly {
+		fo.CommandLineOnly = true
+	}
+	if o.NoEnv {
+		fo.NoEnv = true
+	}
+	if o.NoConfig {
+		fo.NoConfig = true
+	}
+	if o.ConfigKey != "" {
+		fo.ConfigKey = o.ConfigKey
 	}
 }
 
@@ -251,7 +416,7 @@ func (o *StringVarOptions) merge(v StringVarOptions) {
 // Options can be used to build flags:
 //
 //	// Using functional options
-//	app.Flags().StringVar(WithFlagName("project"), WithFlagShort("p"), WithFlagUsage("Project name"), WithFlagValue(&project))
+//	app.Flags().StringVar(clix.WithFlagName("project"), clix.WithFlagShort("p"), clix.WithFlagUsage("Project name"), clix.WithStringValue(&project))
 //
 //	// Using struct (primary API)
 //	app.Flags().StringVar(clix.StringVarOptions{...})
@@ -297,23 +462,9 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 		}
 	}
 	value := &StringValue{target: stringOpts.Value}
-	flag := &Flag{
-		Name:       stringOpts.Name,
-		Short:      stringOpts.Short,
-		Usage:      stringOpts.Usage,
-		EnvVar:     stringOpts.EnvVar,
-		EnvVars:    append([]string(nil), stringOpts.EnvVars...),
-		Default:    stringOpts.Default,
-		Required:   stringOpts.Required,
-		Prompt:     stringOpts.Prompt,
-		Positional: stringOpts.Positional,
-		Validate:   stringOpts.Validate,
-		Value:      value,
-	}
+	flag := stringOpts.newFlag(value, stringOpts.Default)
 	fs.addFlag(flag)
-	if stringOpts.Default != "" {
-		_ = value.Set(stringOpts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // stringValueOption is an internal type for string flag values.
@@ -398,6 +549,9 @@ func (o *DurationVarOptions) merge(v DurationVarOptions) {
 //	)
 type BoolVarOptions struct {
 	FlagOptions
+	// Default is the value when the flag is not provided. A switch that
+	// defaults to true is turned off with --name=false.
+	Default bool
 	// Value is a pointer to the variable that will store the flag value.
 	Value *bool
 }
@@ -406,6 +560,9 @@ type BoolVarOptions struct {
 // after functional options refines them instead of discarding them.
 func (o *BoolVarOptions) merge(v BoolVarOptions) {
 	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default {
+		o.Default = true
+	}
 	if v.Value != nil {
 		o.Value = v.Value
 	}
@@ -427,24 +584,22 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 			}
 		case boolValueOption:
 			boolOpts.Value = v.value
+		case boolDefaultOption:
+			boolOpts.Default = bool(v)
 		default:
 			opt.ApplyFlag(&boolOpts.FlagOptions)
 		}
 	}
 	value := &BoolValue{target: boolOpts.Value}
-	flag := &Flag{
-		Name:       boolOpts.Name,
-		Short:      boolOpts.Short,
-		Usage:      boolOpts.Usage,
-		EnvVar:     boolOpts.EnvVar,
-		EnvVars:    append([]string(nil), boolOpts.EnvVars...),
-		Required:   boolOpts.Required,
-		Prompt:     boolOpts.Prompt,
-		Positional: boolOpts.Positional,
-		Validate:   boolOpts.Validate,
-		Value:      value,
+	def := ""
+	if boolOpts.Default {
+		def = "true"
 	}
+	flag := boolOpts.newFlag(value, def)
 	fs.addFlag(flag)
+	if boolOpts.Default {
+		_ = value.SetBool(true)
+	}
 }
 
 // DurationVar registers a duration flag. Accepts either a DurationVarOptions struct
@@ -470,23 +625,9 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 		}
 	}
 	value := &DurationValue{target: durationOpts.Value}
-	flag := &Flag{
-		Name:       durationOpts.Name,
-		Short:      durationOpts.Short,
-		Usage:      durationOpts.Usage,
-		EnvVar:     durationOpts.EnvVar,
-		EnvVars:    append([]string(nil), durationOpts.EnvVars...),
-		Default:    durationOpts.Default,
-		Required:   durationOpts.Required,
-		Prompt:     durationOpts.Prompt,
-		Positional: durationOpts.Positional,
-		Validate:   durationOpts.Validate,
-		Value:      value,
-	}
+	flag := durationOpts.newFlag(value, durationOpts.Default)
 	fs.addFlag(flag)
-	if durationOpts.Default != "" {
-		_ = value.Set(durationOpts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // IntVarOptions describes the configuration for adding an int flag.
@@ -555,23 +696,9 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 		}
 	}
 	value := &IntValue{target: intOpts.Value}
-	flag := &Flag{
-		Name:       intOpts.Name,
-		Short:      intOpts.Short,
-		Usage:      intOpts.Usage,
-		EnvVar:     intOpts.EnvVar,
-		EnvVars:    append([]string(nil), intOpts.EnvVars...),
-		Default:    intOpts.Default,
-		Required:   intOpts.Required,
-		Prompt:     intOpts.Prompt,
-		Positional: intOpts.Positional,
-		Validate:   intOpts.Validate,
-		Value:      value,
-	}
+	flag := intOpts.newFlag(value, intOpts.Default)
 	fs.addFlag(flag)
-	if intOpts.Default != "" {
-		_ = value.Set(intOpts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // Int64VarOptions describes the configuration for adding an int64 flag.
@@ -640,23 +767,9 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 		}
 	}
 	value := &Int64Value{target: int64Opts.Value}
-	flag := &Flag{
-		Name:       int64Opts.Name,
-		Short:      int64Opts.Short,
-		Usage:      int64Opts.Usage,
-		EnvVar:     int64Opts.EnvVar,
-		EnvVars:    append([]string(nil), int64Opts.EnvVars...),
-		Default:    int64Opts.Default,
-		Required:   int64Opts.Required,
-		Prompt:     int64Opts.Prompt,
-		Positional: int64Opts.Positional,
-		Validate:   int64Opts.Validate,
-		Value:      value,
-	}
+	flag := int64Opts.newFlag(value, int64Opts.Default)
 	fs.addFlag(flag)
-	if int64Opts.Default != "" {
-		_ = value.Set(int64Opts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // Float64VarOptions describes the configuration for adding a float64 flag.
@@ -725,36 +838,17 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 		}
 	}
 	value := &Float64Value{target: float64Opts.Value}
-	flag := &Flag{
-		Name:       float64Opts.Name,
-		Short:      float64Opts.Short,
-		Usage:      float64Opts.Usage,
-		EnvVar:     float64Opts.EnvVar,
-		EnvVars:    append([]string(nil), float64Opts.EnvVars...),
-		Default:    float64Opts.Default,
-		Required:   float64Opts.Required,
-		Prompt:     float64Opts.Prompt,
-		Positional: float64Opts.Positional,
-		Validate:   float64Opts.Validate,
-		Value:      value,
-	}
+	flag := float64Opts.newFlag(value, float64Opts.Default)
 	fs.addFlag(flag)
-	if float64Opts.Default != "" {
-		_ = value.Set(float64Opts.Default)
-	}
+	fs.applyDefault(flag)
 }
 
 // addFlag registers flag in the set.
 //
-// A flag whose long name is already registered is not added: the first
-// registration wins, and the conflict is recorded so it can be reported by
-// Err. Registration does not panic on duplicates because existing programs
-// that happen to register a name twice must keep working.
-//
-// A short name that is already taken moves to the new flag, and the previous
-// owner loses its short name. This keeps the historical "newest wins" parsing
-// behavior (for example, a command may claim -h for --host) while making help
-// output and lookups agree on which flag owns the short name.
+// Registration never panics on a name conflict, because existing programs
+// that happen to register a name twice must keep working. Conflicts are
+// resolved by who defined the flags, not by when (see reindex), and are
+// recorded so Err and App.Validate can report them.
 func (fs *FlagSet) addFlag(flag *Flag) {
 	if flag.Name == "" {
 		panic("flag requires a name")
@@ -763,24 +857,143 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 		panic("flag requires a value")
 	}
 	if flag.Positional {
-		if _, ok := flag.Value.(boolFlag); ok {
+		if switchOf(flag.Value) != nil {
 			panic("boolean flag cannot be positional: " + flag.Name)
 		}
 	}
-	if fs.index == nil {
-		fs.index = make(map[string]*Flag)
+	if !flag.registered {
+		flag.wantShort, flag.registered = flag.Short, true
 	}
-	if _, exists := fs.index["--"+flag.Name]; exists {
-		fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s redefined in flag set %q; keeping the first definition", flag.Name, fs.name))
-		return
-	}
-	fs.flags = append(fs.flags, flag)
-	fs.index["--"+flag.Name] = flag
-	if flag.Short != "" {
-		if previous, taken := fs.index["-"+flag.Short]; taken && previous != flag {
-			previous.Short = ""
+	if !flag.claimed && (fs.app == nil || !fs.app.extending) {
+		switch {
+		case fs.rank != 0:
+			// A flag added to an extension's command belongs to that
+			// extension, whenever it is registered.
+			flag.claim(fs.rank, fs.ownerName)
+		case fs.app != nil && fs.app.running:
+			flag.claim(runtimeRank, "")
 		}
-		fs.index["-"+flag.Short] = flag
+	}
+	fs.all = append(fs.all, flag)
+	fs.reindex()
+}
+
+// reindex decides which flags are in effect and which flag owns each short
+// name, and records the conflicts.
+//
+// Conflicts are resolved by owner, not by registration order: the app's
+// flags beat flags added by extensions, and between extensions the one
+// added first (with the lower AddExtension index) wins. Between flags of
+// the same owner the first registration wins. So an extension such as
+// ext/version can never take -v from an app's --verbose, whether it is
+// applied before or after the app registers its flags.
+//
+//   - Long names: the losing flag is dropped from parsing and help.
+//   - Short names: the losing flag keeps only its long name. That is
+//     recorded as a conflict only between flags of the same owner, or for
+//     a flag registered during Run: an extension's flag that yields a
+//     short name to a better owner is still reachable by its long name,
+//     and the app is meant to win, so there is nothing to fix.
+//   - The built-in --help always gives -h up to any other flag (such as
+//     --host), without a conflict.
+func (fs *FlagSet) reindex() {
+	fs.conflicts = nil
+	byName := make(map[string]*Flag, len(fs.all))
+	for _, f := range fs.all {
+		if w, ok := byName[f.Name]; !ok || f.rank < w.rank {
+			byName[f.Name] = f
+		}
+	}
+	flags := make([]*Flag, 0, len(fs.all))
+	for _, f := range fs.all {
+		w := byName[f.Name]
+		if w == f {
+			flags = append(flags, f)
+			continue
+		}
+		f.Short = ""
+		if w.rank == f.rank {
+			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %sflag --%s redefined in flag set %q; keeping the first definition", extPrefix(f.owner), f.Name, fs.name))
+		} else {
+			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %s: flag --%s in flag set %q is also defined by %s; %s --%s is used and this one is ignored", f.describe(), f.Name, fs.name, w.describe(), w.possessive(), w.Name))
+		}
+	}
+
+	byShort := make(map[string]*Flag)
+	for _, f := range flags {
+		if f.wantShort == "" {
+			continue
+		}
+		if w, ok := byShort[f.wantShort]; !ok || shortBeats(f, w) {
+			byShort[f.wantShort] = f
+		}
+	}
+	index := make(map[string]*Flag, 2*len(flags))
+	for _, f := range flags {
+		index["--"+f.Name] = f
+		f.Short = ""
+		if f.wantShort == "" {
+			continue
+		}
+		w := byShort[f.wantShort]
+		if w == f {
+			f.Short = f.wantShort
+			index["-"+f.Short] = f
+			continue
+		}
+		switch {
+		case f.yieldsShort, f.rank != w.rank && f.rank != runtimeRank:
+			// The built-in --help gives -h up silently, and so does an
+			// extension's flag to a better owner (see above).
+		case w.rank == f.rank:
+			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %sflag --%s cannot use -%s in flag set %q because --%s already has it; it is available only as --%s", extPrefix(f.owner), f.Name, f.wantShort, fs.name, w.Name, f.Name))
+		default:
+			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %s: -%s is used by %s --%s; %s is available as --%s only", f.describe(), f.wantShort, w.possessive(), w.Name, f.Name, f.Name))
+		}
+	}
+	fs.flags, fs.index = flags, index
+}
+
+// shortBeats reports whether f, rather than w, gets a short name both
+// want: any flag beats the built-in --help, then the better owner wins,
+// then the earlier registration (w, which was seen first).
+func shortBeats(f, w *Flag) bool {
+	if f.yieldsShort != w.yieldsShort {
+		return w.yieldsShort
+	}
+	return f.rank < w.rank
+}
+
+// extPrefix returns "extension X: " for a flag added by an extension, so
+// same-owner conflicts still say whose they are.
+func extPrefix(o owner) string {
+	if o.rank == 0 {
+		return ""
+	}
+	return o.describe() + ": "
+}
+
+// adoptFlags moves every flag except --help from old, the flag set of a
+// root command that was replaced, into fs. Conflicts with flags fs already
+// has are resolved as for any registration (see reindex): between flags
+// of the same owner, the new root's own definition wins. Registration
+// problems recorded on old carry over, and so does an explicit SetStrict
+// when fs has none.
+func (fs *FlagSet) adoptFlags(old *FlagSet) {
+	fs.errs = append(fs.errs, old.errs...)
+	old.errs = nil
+	var kept []*Flag
+	for _, f := range old.all {
+		if f.Name == "help" {
+			kept = append(kept, f)
+			continue
+		}
+		fs.addFlag(f)
+	}
+	old.all = kept
+	old.reindex()
+	if old.strictSet && !fs.strictSet {
+		fs.strict, fs.strictSet = old.strict, true
 	}
 }
 
@@ -795,17 +1008,35 @@ func (fs *FlagSet) lookup(name string) *Flag {
 }
 
 // Err reports problems found while registering flags, such as a long flag
-// name that was defined more than once. It returns nil when registration
-// succeeded. Duplicate definitions are ignored rather than causing a panic,
+// name that was defined more than once, a short name that another flag of
+// the same owner has, or a default that does not parse. Conflicts between
+// the app's flags and an extension's name both owners; an extension's
+// flag that only loses a short name keeps its long name and is not
+// reported. It returns nil when registration succeeded. Duplicate definitions are ignored rather than causing a panic,
 // so call Err (for example, in a test) to detect them.
 func (fs *FlagSet) Err() error {
 	if fs == nil {
 		return nil
 	}
-	return errors.Join(fs.errs...)
+	return errors.Join(fs.problems()...)
 }
 
-// Flags returns all registered flags.
+// problems returns what Err and App.Validate report: the problems
+// recorded while registering and running, defaults the flags rejected at
+// registration (unless changed since), and name conflicts.
+func (fs *FlagSet) problems() []error {
+	errs := append([]error(nil), fs.errs...)
+	for _, f := range fs.all {
+		if f.badDefault != "" && f.Default == f.badDefault {
+			errs = append(errs, fmt.Errorf("clix: invalid default %q for flag --%s in flag set %q: %w", f.Default, f.Name, fs.name, f.badDefaultErr))
+		}
+	}
+	return append(errs, fs.conflicts...)
+}
+
+// Flags returns the registered flags that are in effect, in registration
+// order. A flag that lost its long name to another flag (see Err) is left
+// out.
 func (fs *FlagSet) Flags() []*Flag {
 	return append([]*Flag(nil), fs.flags...)
 }
@@ -857,6 +1088,29 @@ func WithFlagValidate(fn func(string) error) FlagOption {
 	return flagValidateOption{fn: fn}
 }
 
+// WithFlagCommandLineOnly makes the flag readable only from the command
+// line, never from the environment or the config file. See
+// FlagOptions.CommandLineOnly.
+func WithFlagCommandLineOnly() FlagOption {
+	return flagSourcesOption{commandLineOnly: true}
+}
+
+// WithFlagNoEnv stops the flag from being read from environment variables.
+func WithFlagNoEnv() FlagOption {
+	return flagSourcesOption{noEnv: true}
+}
+
+// WithFlagNoConfig stops the flag from being read from the config file.
+func WithFlagNoConfig() FlagOption {
+	return flagSourcesOption{noConfig: true}
+}
+
+// WithFlagConfigKey sets the config file key that supplies the flag, such
+// as "delete.force". See FlagOptions.ConfigKey.
+func WithFlagConfigKey(key string) FlagOption {
+	return flagConfigKeyOption(key)
+}
+
 // WithStringValue sets the string flag value pointer.
 func WithStringValue(value *string) FlagOption {
 	return stringValueOption{value: value}
@@ -870,6 +1124,11 @@ func WithStringDefault(defaultValue string) FlagOption {
 // WithBoolValue sets the bool flag value pointer.
 func WithBoolValue(value *bool) FlagOption {
 	return boolValueOption{value: value}
+}
+
+// WithBoolDefault sets the bool flag default value.
+func WithBoolDefault(defaultValue bool) FlagOption {
+	return boolDefaultOption(defaultValue)
 }
 
 // WithIntegerValue sets the integer flag value pointer.
@@ -970,11 +1229,31 @@ func (o flagValidateOption) ApplyFlag(fo *FlagOptions) {
 	fo.Validate = o.fn
 }
 
+type flagSourcesOption struct {
+	commandLineOnly, noEnv, noConfig bool
+}
+
+func (o flagSourcesOption) ApplyFlag(fo *FlagOptions) {
+	fo.CommandLineOnly = fo.CommandLineOnly || o.commandLineOnly
+	fo.NoEnv = fo.NoEnv || o.noEnv
+	fo.NoConfig = fo.NoConfig || o.noConfig
+}
+
+type flagConfigKeyOption string
+
+func (o flagConfigKeyOption) ApplyFlag(fo *FlagOptions) {
+	fo.ConfigKey = string(o)
+}
+
 type boolValueOption struct {
 	value *bool
 }
 
 func (o boolValueOption) ApplyFlag(*FlagOptions) {}
+
+type boolDefaultOption bool
+
+func (o boolDefaultOption) ApplyFlag(*FlagOptions) {}
 
 type integerValueOption struct {
 	value *int

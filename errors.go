@@ -75,7 +75,9 @@ func usageErrorf(format string, args ...any) error {
 //   - 130 when the user cancelled (ErrCancelled, or context.Canceled as
 //     produced by signal.NotifyContext on Ctrl-C)
 //   - 2 for command-line usage errors, such as an unknown flag or command,
-//     a malformed flag value, unexpected arguments, or a *MissingFlagsError
+//     a malformed flag value (whether it came from the command line, an
+//     environment variable or the config file), unexpected arguments, or a
+//     *MissingFlagsError
 //   - 1 for anything else
 //
 // Typical use:

@@ -3,7 +3,6 @@ package clix
 import (
 	"fmt"
 	"sort"
-	"strings"
 )
 
 // Handler is the function signature for executing a command.
@@ -26,8 +25,8 @@ type Hook func(ctx *Context) error
 //
 //	// Create a group (organizes child commands)
 //	projectGroup := clix.NewGroup("project", "Manage projects",
-//		clix.NewCommand("list", "List projects", listProjects),
-//		clix.NewCommand("get", "Get a project", getProject),
+//		clix.NewCommand("list", clix.WithCommandShort("List projects"), clix.WithCommandRun(listProjects)),
+//		clix.NewCommand("get", clix.WithCommandShort("Get a project"), clix.WithCommandRun(getProject)),
 //	)
 //
 //	// Create a command (executable)
@@ -84,7 +83,9 @@ type Command struct {
 	// PostRun is executed after Run. Useful for cleanup or finalization.
 	PostRun Hook
 
-	parent *Command
+	parent        *Command
+	owner              // the app, or the extension whose Extend added the command
+	caseSensitive bool // App.CaseSensitive, copied by the App so name matching agrees everywhere
 }
 
 // CommandOption configures a command using the functional options pattern.
@@ -138,20 +139,11 @@ type CommandOption interface {
 //	)
 //	cmd.Run = func(ctx *clix.Context) error { ... }
 func NewCommand(name string, opts ...CommandOption) *Command {
-	var help bool
 	cmd := &Command{
 		Name:  name,
 		Flags: NewFlagSet(name),
 	}
-
-	cmd.Flags.BoolVar(BoolVarOptions{
-		FlagOptions: FlagOptions{
-			Name:  "help",
-			Short: "h",
-			Usage: "Show help information",
-		},
-		Value: &help,
-	})
+	addHelpFlag(cmd.Flags)
 
 	for _, opt := range opts {
 		opt.ApplyCommand(cmd)
@@ -163,38 +155,25 @@ func NewCommand(name string, opts ...CommandOption) *Command {
 // NewGroup constructs a Command that acts as a group (interior node).
 // Groups organize child commands but do not execute (no Run handler).
 // Groups are used to create hierarchical command structures.
-// Accepts optional CommandOption arguments for additional configuration.
+// NewGroup takes the group's children, not CommandOption values; set other
+// fields on the returned Command, or apply options to it yourself.
 //
-//	// Struct-based (primary API)
 //	group := clix.NewGroup("project", "Manage projects",
-//		clix.NewCommand("list", ...),
-//		clix.NewCommand("get", ...),
+//		clix.NewCommand("list", clix.WithCommandRun(listProjects)),
+//		clix.NewCommand("get", clix.WithCommandRun(getProject)),
 //	)
 //	group.Long = "Detailed description..."
 //
-//	// Functional options
-//	group := clix.NewGroup("project", "Manage projects",
-//		clix.NewCommand("list", ...),
-//		clix.NewCommand("get", ...),
-//		WithCommandLong("Detailed description..."),
-//	)
+//	// Options can still be applied after construction:
+//	clix.WithCommandAliases("projects").ApplyCommand(group)
 func NewGroup(name, short string, children ...*Command) *Command {
-	var help bool
 	cmd := &Command{
 		Name:     name,
 		Short:    short,
 		Children: children,
 		Flags:    NewFlagSet(name),
 	}
-
-	cmd.Flags.BoolVar(BoolVarOptions{
-		FlagOptions: FlagOptions{
-			Name:  "help",
-			Short: "h",
-			Usage: "Show help information",
-		},
-		Value: &help,
-	})
+	addHelpFlag(cmd.Flags)
 
 	return cmd
 }
@@ -220,26 +199,36 @@ func (c *Command) IsLeaf() bool {
 
 func (c *Command) prepare(parent *Command) {
 	c.parent = parent
-
-	if c.Flags == nil {
-		c.Flags = NewFlagSet(c.Name)
-	}
-
-	if c.Flags.lookup("help") == nil {
-		c.Flags.BoolVar(BoolVarOptions{
-			FlagOptions: FlagOptions{
-				Name:  "help",
-				Short: "h",
-				Usage: "Show help information",
-			},
-		})
-	}
+	c.prepareFlags()
 
 	for _, child := range c.Children {
 		if child != nil {
 			child.prepare(c)
 		}
 	}
+}
+
+// prepareFlags gives c a flag set and a --help flag if it lacks them.
+func (c *Command) prepareFlags() {
+	if c.Flags == nil {
+		c.Flags = NewFlagSet(c.Name)
+	}
+	if c.Flags.lookup("help") == nil {
+		addHelpFlag(c.Flags)
+	}
+}
+
+// addHelpFlag registers the built-in --help switch on fs. It asks for -h,
+// but gives it up to any other flag that wants it (such as --host), so
+// help never takes a short name from a user's flag.
+func addHelpFlag(fs *FlagSet) {
+	flag := FlagOptions{
+		Name:  "help",
+		Short: "h",
+		Usage: "Show help information",
+	}.newFlag(&BoolValue{}, "")
+	flag.yieldsShort = true
+	fs.addFlag(flag)
 }
 
 // Path returns the command path from the root.
@@ -250,20 +239,102 @@ func (c *Command) Path() string {
 	return fmt.Sprintf("%s %s", c.parent.Path(), c.Name)
 }
 
-// findChild returns the first matching child command or group by name or alias.
+// findChild returns the matching child command or group by name or
+// alias, ignoring ASCII case unless the App is CaseSensitive.
 func (c *Command) findChild(name string) *Command {
-	name = strings.ToLower(name)
+	return c.findChildMatch(name, c.caseSensitive)
+}
+
+// findChildMatch returns the child whose name or alias matches name.
+// Names match exactly when caseSensitive is set, and otherwise ignoring
+// ASCII case only: "DELETE" matches "delete", but non-ASCII letters must
+// match exactly, so "ſtatus" (U+017F) does not match "status" and a Kelvin
+// sign does not match "k".
+//
+// When several children match, the app's command beats one added by an
+// extension, and between extensions the one added first wins; between
+// commands of the same owner the first in Children wins. A command added
+// by an extension whose Name is also a name or alias of a better-owned
+// sibling is shadowed: it is not reachable at all, and it is left out of
+// VisibleChildren (help and completion).
+func (c *Command) findChildMatch(name string, caseSensitive bool) *Command {
+	match := nameMatcher(caseSensitive)
+	var best *Command
 	for _, child := range c.Children {
-		if strings.EqualFold(child.Name, name) {
-			return child
+		if child == nil || !answersTo(child, name, match) {
+			continue
 		}
-		for _, alias := range child.Aliases {
-			if strings.EqualFold(alias, name) {
-				return child
-			}
+		if best != nil && best.rank <= child.rank {
+			continue
+		}
+		if c.shadowedBy(child, match) != nil {
+			continue
+		}
+		best = child
+	}
+	return best
+}
+
+// nameMatcher returns the comparison command routing uses.
+func nameMatcher(caseSensitive bool) func(a, b string) bool {
+	if caseSensitive {
+		return func(a, b string) bool { return a == b }
+	}
+	return equalFoldASCII
+}
+
+// answersTo reports whether cmd has name as its Name or one of its Aliases.
+func answersTo(cmd *Command, name string, match func(a, b string) bool) bool {
+	if match(cmd.Name, name) {
+		return true
+	}
+	for _, alias := range cmd.Aliases {
+		if match(alias, name) {
+			return true
 		}
 	}
-	return nil
+	return false
+}
+
+// shadowedBy returns the sibling of child, owned by the app or by an
+// extension added earlier than child's, that answers to child's Name, or
+// nil. Such a child is unreachable.
+func (c *Command) shadowedBy(child *Command, match func(a, b string) bool) *Command {
+	var best *Command
+	for _, other := range c.Children {
+		if other == nil || other == child || other.rank >= child.rank {
+			continue
+		}
+		if answersTo(other, child.Name, match) && (best == nil || other.rank < best.rank) {
+			best = other
+		}
+	}
+	return best
+}
+
+// equalFoldASCII reports whether a and b are equal when ASCII letters are
+// compared without regard to case. Unlike strings.EqualFold it does not
+// apply Unicode case folding, so every non-ASCII byte must match exactly.
+func equalFoldASCII(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		x, y := a[i], b[i]
+		if x == y {
+			continue
+		}
+		if 'A' <= x && x <= 'Z' {
+			x += 'a' - 'A'
+		}
+		if 'A' <= y && y <= 'Z' {
+			y += 'a' - 'A'
+		}
+		if x != y {
+			return false
+		}
+	}
+	return true
 }
 
 // match walks the command tree and returns the deepest command that matches the
@@ -285,11 +356,13 @@ func (c *Command) match(args []string) (*Command, []string) {
 	return current, rest
 }
 
-// VisibleChildren returns a sorted slice of child commands and groups that are not hidden.
+// VisibleChildren returns a sorted slice of child commands and groups that
+// are not hidden and not shadowed by a command of a better owner (see
+// findChildMatch).
 func (c *Command) VisibleChildren() []*Command {
 	var cmds []*Command
 	for _, child := range c.Children {
-		if child.Hidden {
+		if child == nil || child.Hidden || c.shadowedBy(child, nameMatcher(c.caseSensitive)) != nil {
 			continue
 		}
 		cmds = append(cmds, child)
@@ -328,7 +401,9 @@ func (c *Command) Commands() []*Command {
 	return cmds
 }
 
-// ResolvePath resolves a path like ["config", "set"] into a command.
+// ResolvePath resolves a path like ["config", "set"] into a command. A
+// command shared by several groups is linked to the group it was resolved
+// through, as Run does, so its Path (and help) names the path asked for.
 func (c *Command) ResolvePath(path []string) *Command {
 	cmd := c
 	for _, part := range path {
@@ -336,6 +411,7 @@ func (c *Command) ResolvePath(path []string) *Command {
 		if next == nil {
 			return nil
 		}
+		next.parent = cmd
 		cmd = next
 	}
 	return cmd

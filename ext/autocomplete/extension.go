@@ -134,7 +134,7 @@ func collectCompletionEntries(cmd *clix.Command) []completionEntry {
 				}
 			}
 		}
-		for _, child := range c.Children {
+		for _, child := range c.VisibleChildren() {
 			if child == nil || child.Hidden {
 				continue
 			}

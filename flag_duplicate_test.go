@@ -69,7 +69,7 @@ func TestDuplicateFlagIsRejectedAndRecorded(t *testing.T) {
 	}
 }
 
-func TestShortNameMovesToNewestFlag(t *testing.T) {
+func TestHelpGivesShortHToLaterFlag(t *testing.T) {
 	cmd := NewCommand("ssh")
 	var host string
 	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "host", Short: "h"}, Value: &host})

@@ -257,7 +257,7 @@ func (fs *FlagSet) AnyCLISet() bool {
 func (fs *FlagSet) MissingRequired() []*Flag {
 	var missing []*Flag
 	for _, flag := range fs.flags {
-		if !flag.Required || flag.set || flag.Default != "" {
+		if !flag.Required || flag.set || flag.hasDefault() {
 			continue
 		}
 		if sv, ok := flag.Value.(*StringValue); ok && sv.String() != "" {

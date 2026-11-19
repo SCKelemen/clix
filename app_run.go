@@ -12,19 +12,43 @@ import (
 )
 
 // Run executes the application with the given context and arguments.
-// If args is nil, os.Args[1:] is used.
+// If args is nil, os.Args[1:] is used. Under go test those are the test
+// binary's own flags (-test.v and so on), so tests should always pass an
+// explicit slice, such as []string{} for no arguments. Main is the usual
+// entry point of a program: it calls Run with os.Args[1:], handles
+// signals, prints the error and exits.
 // The context is propagated to command handlers and can be used for cancellation.
+//
+// Run is not safe for concurrent use on the same App: it resets and fills
+// the flags of the command tree. Calling Run several times in sequence is
+// supported: each Run first undoes what the previous Run set in every flag
+// and its destination variable, so values parsed by one Run never leak
+// into the next, while a value the program assigned between two Runs is
+// kept. Custom values need a Reset method for this (see FlagSet.Var). A
+// handler may call Run itself (an alias command, an interactive shell):
+// that nested Run starts from the values the outer Run has, and when it
+// returns it puts back everything it changed, so the handler continues
+// with its own values, Changed and Source. To run commands in parallel,
+// build one App per goroutine.
 func (a *App) Run(ctx context.Context, args []string) error {
 	if a.Root == nil {
 		return errors.New("clix: no root command configured")
 	}
 
-	a.ensureRootPrepared()
+	// Adopt the root (it may have been replaced since NewApp).
+	a.bindRoot()
 
-	// Apply extensions (extensions add optional commands)
+	// Prepare the tree on every Run: commands appended to Children (or a
+	// new Root) since the last Run need a flag set, --help and parent links.
+	// Preparing is idempotent.
+	a.prepareTree()
+
+	// Apply extensions (extensions add optional commands), then prepare
+	// whatever they attached directly to Children.
 	if err := a.ApplyExtensions(); err != nil {
 		return err
 	}
+	a.prepareTree()
 
 	if args == nil {
 		args = os.Args[1:]
@@ -34,15 +58,28 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// --help and --version have had a chance to run.
 	configErr := a.ensureConfigLoaded(ctx)
 
-	// Use Flags() to get root command's flags (symmetric with cmd.Flags).
-	// It also guarantees the root flag set exists and is non-strict.
-	rootFlags := a.Flags()
+	rootFlags := a.Root.Flags
+
+	// Undo what the previous Run set (unless the program changed it
+	// since), and record what this one changes. A nested Run (started by
+	// a handler) puts back what it changed when it ends.
+	end := a.startRun()
+	defer end()
 
 	// Find the command first, then parse every flag exactly once: flags bind
 	// to the innermost command that defines them and fall back to the root.
-	cmd, positionals, stray, err := a.parseCommandLine(args)
+	path, positionals, unknown, stray, err := a.parseCommandLine(args)
 	if err != nil {
 		return err
+	}
+	cmd := path[len(path)-1]
+	if cmd != a.Root {
+		// Root flags given while another command runs are app flags.
+		for _, f := range rootFlags.flags {
+			if f.cliSet {
+				f.source = SourceAppFlag
+			}
+		}
 	}
 
 	// Check if global --version flag was set
@@ -50,16 +87,16 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		// Show version info - same format as "version" command but simpler (no commit/date)
 		// The version extension sets app.Version, so if it's enabled, we show it
 		if a.Version != "" {
-			fmt.Fprintf(a.Out, "%s version %s\n", a.Name, a.Version)
+			_, _ = fmt.Fprintf(a.stdout(), "%s version %s\n", a.Name, a.Version)
 		} else {
-			fmt.Fprintf(a.Out, "%s\n", a.Name)
+			_, _ = fmt.Fprintf(a.stdout(), "%s\n", a.Name)
 		}
 		return nil
 	}
 
 	// --help/-h (automatic for all commands) takes precedence over
 	// everything else, including positional arguments and required flags.
-	if helpRequested(cmd) {
+	if helpRequested(path) {
 		return a.printCommandHelp(cmd)
 	}
 
@@ -76,17 +113,24 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			return err
 		}
 		if len(excess) > 0 {
+			// An unknown flag the non-strict root let through is still an
+			// unknown flag, not just an extra argument.
+			for i := len(positionals) - len(excess); i < len(positionals); i++ {
+				if unknown[i] {
+					name, _, _ := strings.Cut(positionals[i], "=")
+					return usageErrorf("unknown flag: %s", name)
+				}
+			}
 			return usageErrorf("unexpected arguments: %s", strings.Join(excess, " "))
 		}
 	}
 
-	// Count user-defined children (groups or commands, excluding default commands like help, config, autocomplete)
-	userChildren := a.countUserChildren(cmd)
-
-	// If command has user-defined children:
-	// - If it has a Run handler, execute it (command with children can have default behavior)
-	// - If it has no Run handler, show help (group behavior)
-	if userChildren > 0 && cmd.Run == nil {
+	// A command with children:
+	// - with a Run handler, runs it (a command with children can have
+	//   default behavior);
+	// - without one, is a group and shows help. This includes a root whose
+	//   only children were added by extensions (help, version, ...).
+	if len(cmd.Children) > 0 && cmd.Run == nil {
 		return a.printCommandHelp(cmd)
 	}
 
@@ -95,12 +139,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	// Fill in flags the command line did not set, in precedence order:
-	// environment, then config file, then defaults.
-	if err := a.applyConfigToFlags(rootFlags); err != nil {
-		return err
-	}
-	if cmd.Flags != rootFlags {
-		if err := a.applyConfigToFlags(cmd.Flags); err != nil {
+	// environment, then config file, then defaults. Every command on the
+	// path takes part: the root, each group, and the command itself.
+	for _, c := range path {
+		if err := a.applyConfigToFlags(c.Flags); err != nil {
 			return err
 		}
 	}
@@ -110,11 +152,15 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	//    (only when the app is interactive; otherwise an error)
 	// 2. All required satisfied (from any source) → run
 	// 3. Some CLI flags passed + required missing → error
-	// Root (app-level) flags count as "flags passed" too: "mk --project p"
+	// Flags anywhere on the path count as "flags passed": "mk --project p"
 	// is a scripted invocation even though --project lives on the root.
-	missing := cmd.Flags.MissingRequired()
+	missing := missingRequired(path)
 	if len(missing) > 0 {
-		if cmd.Flags.AnyCLISet() || rootFlags.AnyCLISet() || !a.IsInteractive() {
+		anyCLI := false
+		for _, c := range path {
+			anyCLI = anyCLI || c.Flags.AnyCLISet()
+		}
+		if anyCLI || !a.IsInteractive() {
 			// Mode 3 (or nobody to ask): report what is missing.
 			return a.missingFlagsError(missing)
 		}
@@ -129,6 +175,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		Context: ctx,
 		App:     a,
 		Command: cmd,
+		path:    path,
 	}
 
 	if cmd.PreRun != nil {
@@ -155,62 +202,78 @@ func (a *App) Run(ctx context.Context, args []string) error {
 }
 
 // parseCommandLine resolves the command path in args and parses all flags
-// in a single pass.
+// in a single pass. README.md ("Routing") states these rules for users.
 //
 // The path is found first: words that name a child command descend into it,
 // and flag tokens are skipped (together with their value, when the flag is
 // known to take one). Parsing then binds each flag to the command in effect
-// where it appears, falling back to the root flag set, so a command's -f is
-// never shadowed by a root -f. Flags after the command name therefore resolve
-// against the command before the root. A bare "--" ends flag parsing and
-// everything after it is positional.
+// where it appears: the flag is looked up on that command, then on each of
+// its ancestors up to the root, so a command's -f is never shadowed by a
+// root -f, and a group's flag also works after the leaf. A bare "--" ends
+// flag parsing and everything after it is positional.
 //
-// It returns the matched command, the positional arguments, and the first
-// word that did not match a child command (stray), if any.
-func (a *App) parseCommandLine(args []string) (cmd *Command, positionals []string, stray string, err error) {
+// It returns the matched command path, the positional arguments, and the
+// first word that did not match a child command (stray), if any.
+//
+// unknown marks the positionals that are unknown flags a non-strict flag
+// set let through.
+func (a *App) parseCommandLine(args []string) (path []*Command, positionals []string, unknown map[int]bool, stray string, err error) {
 	root := a.Root
-	cmd = root
-	path := []*Command{root}
-	scope := make([]*Command, len(args)) // command in effect for each flag token
-	isPath := make([]bool, len(args))    // tokens that name the command path
+	path = []*Command{root}
+	scope := make([]int, len(args))    // depth on path of the command in effect for each flag token, plus one
+	isPath := make([]bool, len(args))  // tokens that name the command path
+	isValue := make([]bool, len(args)) // tokens pass 1 skipped as a flag's value
+	scanned := len(args)               // pass 1 looked at args[:scanned]
 	sawWord := false
 
 	// Pass 1: find the command path.
 scan:
 	for i := 0; i < len(args); i++ {
+		scanned = i + 1
 		tok := args[i]
 		switch {
 		case tok == "--":
 			break scan
 		case isFlagArg(tok):
-			scope[i] = cmd
-			name, _, hasValue := strings.Cut(tok, "=")
-			if f := lookupArg(name, cmd.Flags, root.Flags); f != nil && !hasValue && takesValue(f) {
+			uses, ok := resolveFlagToken(tok, flagChain(path), nil)
+			if !ok && isNumberArg(tok) && !a.mayBeFlag(tok) {
+				// "-5" is a word, like any other positional, unless some
+				// command registers it as a flag (-1 for --one), which a
+				// command named later may own.
+				stray = tok
+				break scan
+			}
+			scope[i] = len(path)
+			if ok && uses[len(uses)-1].needsNext && i+1 < len(args) {
 				i++ // skip the flag's value
+				isValue[i] = true
 			}
 		default:
 			if !sawWord {
 				sawWord = true
 				// The binary may be invoked as "app-name app-name child".
-				if strings.EqualFold(tok, root.Name) {
+				if a.skipsRootName(tok) {
 					isPath[i] = true
 					continue
 				}
 			}
-			child := cmd.findChild(tok)
+			child := path[len(path)-1].findChildMatch(tok, a.CaseSensitive)
 			if child == nil {
 				stray = tok
 				break scan
 			}
 			isPath[i] = true
-			cmd = child
 			path = append(path, child)
 		}
 	}
 
-	for _, c := range path {
-		resetFlagState(c.Flags)
+	// A command may be shared by several groups; its parent is the one on
+	// the path that was matched, so Path and help name that path.
+	for i := 1; i < len(path); i++ {
+		path[i].parent = path[i-1]
 	}
+	markShadowed(path)
+	cmd := path[len(path)-1]
 
 	// Pass 2: parse flags and collect positionals.
 	for i := 0; i < len(args); i++ {
@@ -227,47 +290,171 @@ scan:
 			continue
 		}
 
-		sc := scope[i]
-		if sc == nil {
-			sc = cmd
+		depth := scope[i]
+		if depth == 0 {
+			depth = len(path)
 		}
-		name, value, hasValue := strings.Cut(tok, "=")
-		f := lookupArg(name, sc.Flags, root.Flags)
-		if f == nil && sc != cmd {
-			// A switch written before the command name, such as
-			// "app --force delete", can still belong to the command. Only
-			// accept it when it does not need a separate value, which pass 1
-			// could not have known to skip.
-			if g := lookupArg(name, cmd.Flags); g != nil && (hasValue || !takesValue(g)) {
-				f = g
-			}
+		// A switch written before the command name, such as
+		// "app --force delete", can still belong to the command (late).
+		// Only a flag that does not need a separate value is accepted that
+		// way, because pass 1 could not have known to skip the value.
+		var late []*FlagSet
+		if depth != len(path) {
+			late = flagChain(path)
 		}
-		if f == nil {
-			if cmd.Flags.strict {
-				return nil, nil, "", usageErrorf("unknown flag: %s", name)
+		uses, ok := resolveFlagToken(tok, flagChain(path[:depth]), late)
+		if !ok {
+			switch {
+			case isNumberArg(tok):
+				positionals = append(positionals, tok)
+			case cmd.Flags.strict:
+				return nil, nil, nil, "", usageErrorf("unknown flag: %s", unknownFlagName(tok, flagChain(path[:depth]), late))
+			default:
+				if unknown == nil {
+					unknown = make(map[int]bool)
+				}
+				unknown[len(positionals)] = true
+				positionals = append(positionals, tok)
 			}
-			positionals = append(positionals, tok)
 			continue
 		}
-		err := setFromArg(f, name, value, hasValue, func() (string, bool) {
-			if i+1 >= len(args) {
-				return "", false
+		for _, u := range uses {
+			// Both passes must agree on which tokens are values. A cluster
+			// written before the command, such as -fp in "moln -fp deploy"
+			// with -f from deploy and -p from the root, could not be read
+			// in pass 1, so the next token was not set aside as -p's value
+			// and may be the command itself.
+			if u.needsNext && i+1 < scanned && !isValue[i+1] {
+				return nil, nil, nil, "", usageErrorf("%s needs a value: write %s=VALUE, or put the flags after the command", u.name, tok)
 			}
-			i++
-			return args[i], true
-		})
-		if err != nil {
-			return nil, nil, "", err
+			err := setFromArg(u.flag, u.name, u.value, u.hasValue, func() (string, bool) {
+				if i+1 >= len(args) {
+					return "", false
+				}
+				i++
+				return args[i], true
+			})
+			if err != nil {
+				return nil, nil, nil, "", err
+			}
 		}
 	}
 
-	return cmd, positionals, stray, nil
+	return path, positionals, unknown, stray, nil
 }
 
-// helpRequested reports whether --help was passed for cmd or any command on
-// its path, including the root.
-func helpRequested(cmd *Command) bool {
-	for c := cmd; c != nil; c = c.parent {
+// mayBeFlag reports whether some command in the tree registers tok's name
+// as a flag, or every letter of it as a short flag.
+func (a *App) mayBeFlag(tok string) bool {
+	name, _, _ := strings.Cut(tok, "=")
+	found := false
+	eachFlagSetOnce(a.Root, func(fs *FlagSet) {
+		if found || fs.index[name] != nil {
+			found = true
+			return
+		}
+	})
+	if found {
+		return true
+	}
+	for _, r := range name[1:] {
+		short := "-" + string(r)
+		has := false
+		eachFlagSetOnce(a.Root, func(fs *FlagSet) { has = has || fs.index[short] != nil })
+		if !has {
+			return false
+		}
+	}
+	return true
+}
+
+// unknownFlagName names an unknown flag token in an error: the letter that
+// is not a flag when tok is a cluster whose first letter is one ("-z (in
+// -fz)"), and otherwise the token up to any "=".
+func unknownFlagName(tok string, sets, late []*FlagSet) string {
+	name, _, _ := strings.Cut(tok, "=")
+	if len(name) < 3 || name[1] == '-' {
+		return name
+	}
+	for i, r := range name[1:] {
+		short := "-" + string(r)
+		if lookupArg(short, sets...) == nil && lookupArg(short, late...) == nil {
+			if i == 0 {
+				return name
+			}
+			return short + " (in " + name + ")"
+		}
+	}
+	return name
+}
+
+// flagChain returns the flag sets of the commands on path, innermost
+// first, ending with the root's.
+func flagChain(path []*Command) []*FlagSet {
+	sets := make([]*FlagSet, 0, len(path))
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i].Flags != nil {
+			sets = append(sets, path[i].Flags)
+		}
+	}
+	return sets
+}
+
+// skipsRootName reports whether word, the first word on the command line,
+// is a repeat of the root's name ("app app child") that should be
+// skipped. It is skipped only when it cannot mean anything else: no child
+// has that name, and the root either has no Run handler or takes no
+// positional arguments. Otherwise "echo echo" would lose its argument and a
+// child named like the app would be unreachable.
+func (a *App) skipsRootName(word string) bool {
+	root := a.Root
+	if !a.namesMatch(word, root.Name) {
+		return false
+	}
+	if root.findChildMatch(word, a.CaseSensitive) != nil {
+		return false
+	}
+	return root.Run == nil || len(root.Flags.PositionalFlags()) == 0
+}
+
+// namesMatch reports whether word names a command called name, using the
+// same rules as command routing (see CaseSensitive).
+func (a *App) namesMatch(word, name string) bool {
+	if a.CaseSensitive {
+		return word == name
+	}
+	return equalFoldASCII(word, name)
+}
+
+// missingRequired returns the required flags without a value on path
+// (root first), outermost command first, leaving out the flags the Run
+// ignores (see markShadowed). A command added by an extension
+// (IsExtensionCommand), and everything below it, only checks the flags
+// from that command down, so "app version" never asks for a required
+// --project on the root.
+func missingRequired(path []*Command) []*Flag {
+	from := 0
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i].IsExtensionCommand {
+			from = i
+			break
+		}
+	}
+	var missing []*Flag
+	for _, c := range path[from:] {
+		for _, f := range c.Flags.MissingRequired() {
+			if !f.shadowed {
+				missing = append(missing, f)
+			}
+		}
+	}
+	return missing
+}
+
+// helpRequested reports whether --help was passed for any command on
+// path, including the root.
+func helpRequested(path []*Command) bool {
+	for _, c := range path {
 		if c.Flags == nil {
 			continue
 		}
@@ -278,12 +465,65 @@ func helpRequested(cmd *Command) bool {
 	return false
 }
 
-func (a *App) ensureRootPrepared() {
-	if a.Root == nil || a.rootPrepared {
+// prepareTree links every command to its parent and gives each one a flag
+// set and a --help flag. It is idempotent, so Run calls it every time. A
+// command shared by several groups keeps the parent it was last reached
+// through (by Run or ResolvePath) while that group still lists it, so
+// preparing never changes what Path reports.
+func (a *App) prepareTree() {
+	if a.Root == nil {
 		return
 	}
-	a.Root.prepare(nil)
-	a.rootPrepared = true
+	a.Root.parent = nil
+	listedBy := map[*Command][]*Command{}
+	eachCommandOnce(a.Root, func(c *Command) {
+		c.caseSensitive = a.CaseSensitive
+		c.prepareFlags()
+		for _, child := range c.Children {
+			if child != nil && child != a.Root {
+				listedBy[child] = append(listedBy[child], c)
+			}
+		}
+	})
+	for child, parents := range listedBy {
+		listed := false
+		for _, p := range parents {
+			listed = listed || p == child.parent
+		}
+		if !listed {
+			child.parent = parents[len(parents)-1]
+		}
+	}
+}
+
+// stdout returns Out, or os.Stdout when Out is nil (for example, in a
+// zero-value App).
+func (a *App) stdout() io.Writer {
+	if a.Out == nil {
+		return os.Stdout
+	}
+	return a.Out
+}
+
+// stderr returns Err, or os.Stderr when Err is nil.
+func (a *App) stderr() io.Writer {
+	if a.Err == nil {
+		return os.Stderr
+	}
+	return a.Err
+}
+
+// prompter returns Prompter, or a TextPrompter on In and Err when it is
+// nil.
+func (a *App) prompter() Prompter {
+	if a.Prompter != nil {
+		return a.Prompter
+	}
+	var in io.Reader = os.Stdin
+	if a.In != nil {
+		in = a.In
+	}
+	return TextPrompter{In: in, Out: a.stderr()}
 }
 
 func (a *App) ensureConfigLoaded(ctx context.Context) error {
@@ -309,20 +549,24 @@ func (a *App) ensureConfigLoaded(ctx context.Context) error {
 // trying environment variables, then the config file, then the flag's
 // default. It must run after parsing so command-line values keep the highest
 // precedence. A value that the flag rejects is reported as an error naming
-// its source.
+// its source. Flags the Run ignores (see markShadowed) are left alone.
 func (a *App) applyConfigToFlags(flags *FlagSet) error {
 	if flags == nil {
 		return nil
 	}
 
 	for _, flag := range flags.flags {
-		if flag.cliSet {
+		if flag.cliSet || flag.shadowed {
 			continue
 		}
 
-		// The built-in --help and --version switches only come from the
-		// command line; MYAPP_HELP or MYAPP_VERSION must not hijack every run.
+		// CommandLineOnly flags, and the built-in --help and --version
+		// switches, only come from the command line; MYAPP_FORCE or
+		// MYAPP_HELP must not hijack every run.
 		if isCommandLineOnly(flag) {
+			if err := a.trySetFromDefault(flag); err != nil {
+				return err
+			}
 			continue
 		}
 
@@ -339,19 +583,51 @@ func (a *App) applyConfigToFlags(flags *FlagSet) error {
 			}
 			continue
 		}
-		a.trySetFromDefault(flag)
+		if err := a.trySetFromDefault(flag); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// isCommandLineOnly reports whether flag is a boolean --help or --version
-// switch, which are never read from the environment or the config file.
+// isCommandLineOnly reports whether flag is never read from the
+// environment or the config file: it is marked CommandLineOnly, or it is a
+// boolean --help or --version switch.
 func isCommandLineOnly(flag *Flag) bool {
+	return flag.CommandLineOnly || isBuiltinSwitch(flag)
+}
+
+// isBuiltinSwitch reports whether flag is a boolean --help or --version
+// switch.
+func isBuiltinSwitch(flag *Flag) bool {
 	if flag.Name != "help" && flag.Name != "version" {
 		return false
 	}
-	_, ok := flag.Value.(boolFlag)
-	return ok
+	return switchOf(flag.Value) != nil
+}
+
+// autoEnv reports whether flags read <EnvPrefix>_<NAME> (App.AutoEnv).
+func (a *App) autoEnv() bool {
+	return a.AutoEnv == nil || *a.AutoEnv
+}
+
+// autoConfig reports whether flags read the config key named after them
+// (App.AutoConfig).
+func (a *App) autoConfig() bool {
+	return a.AutoConfig == nil || *a.AutoConfig
+}
+
+// flagConfigKey returns the config file key that supplies flag, if any.
+func (a *App) flagConfigKey(flag *Flag) (string, bool) {
+	switch {
+	case isCommandLineOnly(flag) || flag.NoConfig:
+		return "", false
+	case flag.ConfigKey != "":
+		return flag.ConfigKey, true
+	case a.autoConfig():
+		return flag.Name, true
+	}
+	return "", false
 }
 
 // envVarName returns the default environment variable for a flag or key:
@@ -371,7 +647,8 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 		return false, nil
 	}
 	if err := setAndValidate(flag, val); err != nil {
-		return false, fmt.Errorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
+		// A usage error, like the same value on the command line.
+		return false, usageErrorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
 	}
 	flag.set = true
 	flag.source = SourceEnvVar
@@ -381,7 +658,7 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 // setAndValidate parses raw into flag and then runs the flag's Validate
 // function, mirroring what the command-line parser does.
 func setAndValidate(flag *Flag, raw string) error {
-	if err := flag.Value.Set(raw); err != nil {
+	if err := flag.setValue(raw); err != nil {
 		return err
 	}
 	if flag.Validate != nil {
@@ -391,8 +668,12 @@ func setAndValidate(flag *Flag, raw string) error {
 }
 
 // flagEnvVars lists the environment variables consulted for flag, in order:
-// EnvVar, then each of EnvVars, then the APP_KEY default.
+// EnvVar, then each of EnvVars, then the APP_KEY default (unless AutoEnv is
+// off). Flags that are CommandLineOnly or NoEnv have none.
 func (a *App) flagEnvVars(flag *Flag) []string {
+	if isCommandLineOnly(flag) || flag.NoEnv {
+		return nil
+	}
 	names := make([]string, 0, len(flag.EnvVars)+2)
 	seen := make(map[string]bool, cap(names))
 	add := func(name string) {
@@ -405,7 +686,9 @@ func (a *App) flagEnvVars(flag *Flag) []string {
 	for _, name := range flag.EnvVars {
 		add(name)
 	}
-	add(a.envVarName(flag.Name))
+	if a.autoEnv() {
+		add(a.envVarName(flag.Name))
+	}
 	return names
 }
 
@@ -427,24 +710,66 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 	if a.Config == nil {
 		return false, nil
 	}
-
-	val, ok := a.Config.Get(flag.Name)
+	key, ok := a.flagConfigKey(flag)
 	if !ok {
 		return false, nil
 	}
+
+	val, ok := a.Config.Get(key)
+	if !ok {
+		return false, nil
+	}
+	if slice, isSlice := flag.Value.(*StringSliceValue); isSlice {
+		// A YAML list goes to a slice flag item by item, so an item may
+		// contain commas or quotes.
+		if items, ok := a.Config.list(key); ok {
+			slice.setItems(items)
+			if flag.Validate != nil {
+				if err := flag.Validate(slice.String()); err != nil {
+					return false, usageErrorf("invalid value %q for --%s from config file key %q: %w", slice.String(), flag.Name, key, err)
+				}
+			}
+			flag.set = true
+			flag.source = SourceConfigFile
+			return true, nil
+		}
+	}
+	if isNumericValue(flag.Value) {
+		// Numeric flags read YAML's numeric value: 0x1F is 31 and 0755 is
+		// 493, as in YAML; every other flag gets the text as written.
+		if n, ok := a.Config.number(key); ok {
+			val = n
+		}
+	}
 	if err := setAndValidate(flag, val); err != nil {
-		return false, fmt.Errorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, flag.Name, err)
+		return false, usageErrorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, key, err)
 	}
 	flag.set = true
 	flag.source = SourceConfigFile
 	return true, nil
 }
 
-// trySetFromDefault sets a flag value from its default if available.
-func (a *App) trySetFromDefault(flag *Flag) {
-	if flag.Default != "" {
-		flag.Value.Set(flag.Default)
+// isNumericValue reports whether v is one of the built-in int or float
+// values.
+func isNumericValue(v Value) bool {
+	switch v.(type) {
+	case *IntValue, *Int64Value, *Float64Value:
+		return true
 	}
+	return false
+}
+
+// trySetFromDefault sets a flag value from its default if available. A
+// default the flag rejects (one changed after registration, say) is an
+// error.
+func (a *App) trySetFromDefault(flag *Flag) error {
+	if !flag.hasDefault() {
+		return nil
+	}
+	if err := flag.setValue(flag.Default); err != nil {
+		return fmt.Errorf("clix: invalid default %q for --%s: %w", flag.Default, flag.Name, err)
+	}
+	return nil
 }
 
 // missingFlagsError describes missing flags together with the environment
@@ -478,7 +803,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 			}
 		}
 
-		value, err := a.Prompter.Prompt(ctx, PromptRequest{
+		value, err := a.prompter().Prompt(ctx, PromptRequest{
 			Label:    label,
 			Theme:    a.DefaultTheme,
 			Validate: promptValidator(flag),
@@ -535,20 +860,5 @@ func checkValue(v Value, raw string) error {
 
 func (a *App) printCommandHelp(cmd *Command) error {
 	helper := HelpRenderer{App: a, Command: cmd}
-	return helper.Render(a.Out)
-}
-
-// countUserChildren returns the count of child commands/groups that are not extension commands.
-func (a *App) countUserChildren(cmd *Command) int {
-	if cmd == nil || len(cmd.Children) == 0 {
-		return 0
-	}
-
-	count := 0
-	for _, child := range cmd.Children {
-		if !child.IsExtensionCommand {
-			count++
-		}
-	}
-	return count
+	return helper.Render(a.stdout())
 }
