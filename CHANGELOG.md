@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-11-19
+
 ### Added
 
 - Help topics, like gh's `help environment` and gcloud's `topic` pages: `App.AddHelpTopic(name, short, body)`, read with `myapp help <topic>` (ext/help), listed under ADDITIONAL HELP TOPICS in root help when the root has a help command, suggested for typos and offered by shell completion. clix ships `environment` (the variables it reads for the app: `<PREFIX>_<FLAG>`, global flags' variables, `<PREFIX>_CONFIGURATION`, `<PREFIX>_DISABLE_PROMPTS`, `XDG_CONFIG_HOME`, `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE`, `TERM`) and `exit-codes` (0, 1, 2, 130, 143), written for the app when shown. A topic of the same name replaces a built-in one and an empty body removes a topic; the app's topics win over extensions', and commands win over topics (`App.Validate` reports it). Also `HelpTopic`, `App.HelpTopics`, `App.LookupHelpTopic` and `HelpRenderer.RenderTopic`.
@@ -281,7 +283,8 @@ Prepared as 1.0.0 (commit 464e98b, "Prepare for v1.0.0 release") but tagged as t
 - `ext/survey` – Chained prompts with branching logic
 - `ext/validation` – Common validation functions
 
-[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.7.0...HEAD
+[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.8.0...HEAD
+[2.8.0]: https://github.com/SCKelemen/clix/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/SCKelemen/clix/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/SCKelemen/clix/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/SCKelemen/clix/compare/v2.4.1...v2.5.0
