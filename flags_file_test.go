@@ -394,6 +394,22 @@ func TestFlagsFileErrors(t *testing.T) {
 			t.Fatalf("err = %v", err)
 		}
 	})
+	t.Run("the value limit is per run", func(t *testing.T) {
+		var b strings.Builder
+		b.WriteString("--tag:\n")
+		for range 6000 {
+			b.WriteString("- x\n")
+		}
+		a := newFlagsFileApp(t)
+		path := writeTestFile(t, t.TempDir(), "f.yaml", b.String())
+		if err := a.app.Run(context.Background(), []string{"deploy", "--flags-file", path}); err != nil {
+			t.Fatal(err)
+		}
+		err := a.app.Run(context.Background(), []string{"deploy", "--flags-file", path, "--flags-file", path})
+		if err == nil || !strings.Contains(err.Error(), "more than 10000 flag values") {
+			t.Fatalf("err = %v", err)
+		}
+	})
 	t.Run("aliases cannot multiply values", func(t *testing.T) {
 		var b strings.Builder
 		b.WriteString("- &m\n")

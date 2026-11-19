@@ -146,8 +146,7 @@ func (r *fileReader) applyFlagsFileUse(u flagUse, sets, late []*FlagSet, next fu
 		return usageErrorf("invalid value for %s: %w", u.flag.Name, err)
 	}
 	u.flag.markCLI()
-	values := 0
-	return r.flagsFile(path, sets, late, nil, &values)
+	return r.flagsFile(path, sets, late, nil)
 }
 
 // flagsFileFrame is a flags file being read, for finding cycles.
@@ -157,9 +156,8 @@ type flagsFileFrame struct {
 }
 
 // flagsFile reads the flags file at path and applies its flags. stack
-// holds the files that named it, outermost first; values counts the flag
-// values taken from flags files so far.
-func (r *fileReader) flagsFile(path string, sets, late []*FlagSet, stack []flagsFileFrame, values *int) error {
+// holds the files that named it, outermost first.
+func (r *fileReader) flagsFile(path string, sets, late []*FlagSet, stack []flagsFileFrame) error {
 	shown := displayPath(path)
 	if len(stack) >= maxFlagsFileDepth {
 		return usageErrorf("--flags-file %s: flags files are nested more than %d deep", shown, maxFlagsFileDepth)
@@ -184,7 +182,7 @@ func (r *fileReader) flagsFile(path string, sets, late []*FlagSet, stack []flags
 	}
 	stack = append(stack, flagsFileFrame{path: path, info: info})
 
-	entries, err := parseFlagsFile(data, values)
+	entries, err := parseFlagsFile(data, &r.values)
 	if err != nil {
 		return usageErrorf("flags file %s: %w", shown, err)
 	}
@@ -205,7 +203,7 @@ func (r *fileReader) flagsFile(path string, sets, late []*FlagSet, stack []flags
 				if v.null || v.text == "" {
 					return usageErrorf("flags file %s, line %d: --%s needs a file name", shown, v.line, e.name)
 				}
-				if err := r.flagsFile(resolvePath(dir, v.text), sets, late, stack, values); err != nil {
+				if err := r.flagsFile(resolvePath(dir, v.text), sets, late, stack); err != nil {
 					return err
 				}
 			}

@@ -27,6 +27,7 @@ type fileReader struct {
 	limit     int64
 	stdinUser string // the flag that read standard input, "" until one does
 	files     int    // flags files read so far (see maxFlagsFiles)
+	values    int    // flag values taken from flags files so far (see maxFlagsFileValues)
 }
 
 // newFileReader returns a reader for one Run of a (or for a FlagSet used
