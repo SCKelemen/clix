@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strconv"
 	"strings"
 
@@ -59,15 +58,7 @@ func (l *linePrompt) printError(cfg *clix.PromptConfig, msg string) {
 // is a terminal, and are not trimmed.
 func (l *linePrompt) readLine(ctx context.Context, secret bool) (string, error) {
 	if secret {
-		if f, ok := l.in.(*os.File); ok && tty.IsTerminal(f) {
-			if restore, err := tty.DisableEcho(f); err == nil {
-				line, err := clix.ReadLine(ctx, l.in)
-				restore()
-				_, _ = fmt.Fprint(l.out, "\n")
-				return line, err
-			}
-		}
-		return clix.ReadLine(ctx, l.in)
+		return clix.ReadSecretLine(ctx, l.in, l.out)
 	}
 	line, err := clix.ReadLine(ctx, l.in)
 	return strings.TrimSpace(line), err

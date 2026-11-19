@@ -640,7 +640,7 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 		var value string
 		var err error
 		if cfg.Secret {
-			value, err = readSecretLine(ctx, p.In, p.Out)
+			value, err = ReadSecretLine(ctx, p.In, p.Out)
 		} else {
 			value, err = readLine(ctx, p.In)
 			value = strings.TrimSpace(value)
