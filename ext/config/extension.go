@@ -561,7 +561,9 @@ func sortedInterfaceKeys(values map[string]interface{}) []string {
 // When the config path is a symbolic link (for example, into a dotfiles
 // repository), the file it points to is removed and the link is kept, the
 // way ConfigManager.Save writes through the link, so the next "config set"
-// recreates the file where the link expects it.
+// recreates the file where the link expects it. Only a regular file is
+// removed: a directory, device or other special file at the config path
+// (or at the end of its links) is reported and left alone.
 func removeConfigFile(app *clix.App) error {
 	path, err := app.ConfigFile()
 	if err != nil {
@@ -570,6 +572,16 @@ func removeConfigFile(app *clix.App) error {
 	target, err := filepath.EvalSymlinks(path)
 	switch {
 	case err == nil:
+		info, err := os.Lstat(target)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				break
+			}
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("config file %s is not a regular file (%s); not removing it", target, describeMode(info.Mode()))
+		}
 		if err := os.Remove(target); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
@@ -580,4 +592,19 @@ func removeConfigFile(app *clix.App) error {
 	}
 	app.Config.Reset()
 	return nil
+}
+
+// describeMode names the kind of a file that is not a regular file.
+func describeMode(m os.FileMode) string {
+	switch {
+	case m.IsDir():
+		return "a directory"
+	case m&os.ModeDevice != 0:
+		return "a device"
+	case m&os.ModeNamedPipe != 0:
+		return "a named pipe"
+	case m&os.ModeSocket != 0:
+		return "a socket"
+	}
+	return "mode " + m.Type().String()
 }
