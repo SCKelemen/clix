@@ -379,6 +379,8 @@ type Context struct {
 
 	// Command is the currently executing command.
 	Command *Command
+
+	path []*Command // the matched command path, root first, when Run built the Context
 }
 
 // resolveValue retrieves a configuration value following the precedence chain:
@@ -496,7 +498,9 @@ func (ctx *Context) isFlag(key string) bool {
 }
 
 // pathFlags returns the flag sets of the executing command and each of its
-// ancestors, innermost first, ending with the root flag set.
+// ancestors, innermost first, ending with the root flag set. The ancestors
+// are those on the path Run matched; a Context built by hand follows
+// parent links.
 func (ctx *Context) pathFlags() []*FlagSet {
 	var sets []*FlagSet
 	add := func(fs *FlagSet) {
@@ -510,8 +514,14 @@ func (ctx *Context) pathFlags() []*FlagSet {
 		}
 		sets = append(sets, fs)
 	}
-	for c := ctx.Command; c != nil; c = c.parent {
-		add(c.Flags)
+	if ctx.path != nil {
+		for i := len(ctx.path) - 1; i >= 0; i-- {
+			add(ctx.path[i].Flags)
+		}
+	} else {
+		for c := ctx.Command; c != nil; c = c.parent {
+			add(c.Flags)
+		}
 	}
 	add(ctx.App.rootFlagSet())
 	return sets

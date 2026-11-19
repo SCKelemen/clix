@@ -44,15 +44,16 @@ func (a *App) Validate() error {
 		errs = append(errs, fmt.Errorf("clix: extension: %w", err))
 	}
 	a.prepareTree()
-	a.validateCommand(a.Root, map[string]string{}, &errs)
+	a.validateCommand(a.Root, a.Root.Name, map[string]string{}, &errs)
 	return errors.Join(errs...)
 }
 
 // validateCommand checks cmd and its subtree. inherited maps the long
 // flag names defined on cmd's ancestors to the path of the command that
 // defines them.
-func (a *App) validateCommand(cmd *Command, inherited map[string]string, errs *[]error) {
-	path := cmd.Path()
+// path is cmd's path as reached in this walk, since a command shared by
+// several groups is checked once under each.
+func (a *App) validateCommand(cmd *Command, path string, inherited map[string]string, errs *[]error) {
 	for _, err := range append(append([]error(nil), cmd.Flags.errs...), cmd.Flags.conflicts...) {
 		*errs = append(*errs, fmt.Errorf("%s: %w", path, err))
 	}
@@ -99,7 +100,7 @@ func (a *App) validateCommand(cmd *Command, inherited map[string]string, errs *[
 
 	for _, child := range cmd.Children {
 		if child != nil {
-			a.validateCommand(child, own, errs)
+			a.validateCommand(child, path+" "+child.Name, own, errs)
 		}
 	}
 }

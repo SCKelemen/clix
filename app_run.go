@@ -57,10 +57,11 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	// Find the command first, then parse every flag exactly once: flags bind
 	// to the innermost command that defines them and fall back to the root.
-	cmd, positionals, stray, err := a.parseCommandLine(args)
+	path, positionals, stray, err := a.parseCommandLine(args)
 	if err != nil {
 		return err
 	}
+	cmd := path[len(path)-1]
 	if cmd != a.Root {
 		// Root flags given while another command runs are app flags.
 		for _, f := range rootFlags.flags {
@@ -84,7 +85,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	// --help/-h (automatic for all commands) takes precedence over
 	// everything else, including positional arguments and required flags.
-	if helpRequested(cmd) {
+	if helpRequested(path) {
 		return a.printCommandHelp(cmd)
 	}
 
@@ -121,7 +122,6 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// Fill in flags the command line did not set, in precedence order:
 	// environment, then config file, then defaults. Every command on the
 	// path takes part: the root, each group, and the command itself.
-	path := commandPath(cmd)
 	for _, c := range path {
 		if err := a.applyConfigToFlags(c.Flags); err != nil {
 			return err
@@ -135,7 +135,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// 3. Some CLI flags passed + required missing → error
 	// Flags anywhere on the path count as "flags passed": "mk --project p"
 	// is a scripted invocation even though --project lives on the root.
-	missing := missingRequired(cmd)
+	missing := missingRequired(path)
 	if len(missing) > 0 {
 		anyCLI := false
 		for _, c := range path {
@@ -156,6 +156,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		Context: ctx,
 		App:     a,
 		Command: cmd,
+		path:    path,
 	}
 
 	if cmd.PreRun != nil {
@@ -194,11 +195,11 @@ func (a *App) Run(ctx context.Context, args []string) error {
 //
 // It returns the matched command, the positional arguments, and the first
 // word that did not match a child command (stray), if any.
-func (a *App) parseCommandLine(args []string) (cmd *Command, positionals []string, stray string, err error) {
+func (a *App) parseCommandLine(args []string) (path []*Command, positionals []string, stray string, err error) {
 	root := a.Root
-	cmd = root
-	scope := make([]*Command, len(args)) // command in effect for each flag token
-	isPath := make([]bool, len(args))    // tokens that name the command path
+	path = []*Command{root}
+	scope := make([]int, len(args))   // depth on path of the command in effect for each flag token, plus one
+	isPath := make([]bool, len(args)) // tokens that name the command path
 	sawWord := false
 
 	// Pass 1: find the command path.
@@ -209,13 +210,13 @@ scan:
 		case tok == "--":
 			break scan
 		case isFlagArg(tok):
-			uses, ok := resolveFlagToken(tok, flagChain(cmd), nil)
+			uses, ok := resolveFlagToken(tok, flagChain(path), nil)
 			if !ok && isNumberArg(tok) {
 				// "-5" is a word, like any other positional.
 				stray = tok
 				break scan
 			}
-			scope[i] = cmd
+			scope[i] = len(path)
 			if ok && uses[len(uses)-1].needsNext {
 				i++ // skip the flag's value
 			}
@@ -228,15 +229,22 @@ scan:
 					continue
 				}
 			}
-			child := cmd.findChildMatch(tok, a.CaseSensitive)
+			child := path[len(path)-1].findChildMatch(tok, a.CaseSensitive)
 			if child == nil {
 				stray = tok
 				break scan
 			}
 			isPath[i] = true
-			cmd = child
+			path = append(path, child)
 		}
 	}
+
+	// A command may be shared by several groups; its parent is the one on
+	// the path that was matched, so Path and help name that path.
+	for i := 1; i < len(path); i++ {
+		path[i].parent = path[i-1]
+	}
+	cmd := path[len(path)-1]
 
 	// Start every Run from the values flags held before the first one, so
 	// nothing parsed by a previous Run (on any command) carries over.
@@ -257,19 +265,19 @@ scan:
 			continue
 		}
 
-		sc := scope[i]
-		if sc == nil {
-			sc = cmd
+		depth := scope[i]
+		if depth == 0 {
+			depth = len(path)
 		}
 		// A switch written before the command name, such as
 		// "app --force delete", can still belong to the command (late).
 		// Only a flag that does not need a separate value is accepted that
 		// way, because pass 1 could not have known to skip the value.
 		var late []*FlagSet
-		if sc != cmd {
-			late = flagChain(cmd)
+		if depth != len(path) {
+			late = flagChain(path)
 		}
-		uses, ok := resolveFlagToken(tok, flagChain(sc), late)
+		uses, ok := resolveFlagToken(tok, flagChain(path[:depth]), late)
 		if !ok {
 			name, _, _ := strings.Cut(tok, "=")
 			switch {
@@ -296,16 +304,16 @@ scan:
 		}
 	}
 
-	return cmd, positionals, stray, nil
+	return path, positionals, stray, nil
 }
 
-// flagChain returns the flag sets of cmd and each of its ancestors,
-// innermost first, ending with the root's.
-func flagChain(cmd *Command) []*FlagSet {
-	var sets []*FlagSet
-	for c := cmd; c != nil; c = c.parent {
-		if c.Flags != nil {
-			sets = append(sets, c.Flags)
+// flagChain returns the flag sets of the commands on path, innermost
+// first, ending with the root's.
+func flagChain(path []*Command) []*FlagSet {
+	sets := make([]*FlagSet, 0, len(path))
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i].Flags != nil {
+			sets = append(sets, path[i].Flags)
 		}
 	}
 	return sets
@@ -337,25 +345,12 @@ func (a *App) namesMatch(word, name string) bool {
 	return equalFoldASCII(word, name)
 }
 
-// commandPath returns the commands from the root down to cmd.
-func commandPath(cmd *Command) []*Command {
-	var path []*Command
-	for c := cmd; c != nil; c = c.parent {
-		path = append(path, c)
-	}
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
-	}
-	return path
-}
-
-// missingRequired returns the required flags without a value on cmd's
-// path, outermost command first. A command added by an extension
+// missingRequired returns the required flags without a value on path
+// (root first), outermost command first. A command added by an extension
 // (IsExtensionCommand), and everything below it, only checks the flags
 // from that command down, so "app version" never asks for a required
 // --project on the root.
-func missingRequired(cmd *Command) []*Flag {
-	path := commandPath(cmd)
+func missingRequired(path []*Command) []*Flag {
 	from := 0
 	for i := len(path) - 1; i >= 0; i-- {
 		if path[i].IsExtensionCommand {
@@ -370,10 +365,10 @@ func missingRequired(cmd *Command) []*Flag {
 	return missing
 }
 
-// helpRequested reports whether --help was passed for cmd or any command on
-// its path, including the root.
-func helpRequested(cmd *Command) bool {
-	for c := cmd; c != nil; c = c.parent {
+// helpRequested reports whether --help was passed for any command on
+// path, including the root.
+func helpRequested(path []*Command) bool {
+	for _, c := range path {
 		if c.Flags == nil {
 			continue
 		}
