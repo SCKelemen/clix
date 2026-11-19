@@ -79,7 +79,11 @@ func (p TerminalPrompter) startRaw() (s *rawSession, ok bool) {
 
 // close restores the terminal.
 func (s *rawSession) close() {
-	_, _ = io.WriteString(s.out, seqPasteOff)
+	// A prompt inside another prompt's Validate function leaves bracketed
+	// paste on for the outer one.
+	if s.state.outermost() {
+		_, _ = io.WriteString(s.out, seqPasteOff)
+	}
 	if s.cursorHidden {
 		_, _ = io.WriteString(s.out, seqShowCursor)
 	}

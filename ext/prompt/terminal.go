@@ -16,8 +16,9 @@ import (
 // TerminalState manages raw terminal mode for interactive prompts.
 type TerminalState struct {
 	fd       int
-	oldState *term.State
+	oldState *term.State // used only by states not made by EnableRawMode
 	restored bool
+	shared   *rawTerminal // the terminal's process-wide restore point
 
 	mu          sync.Mutex     // guards restored
 	stopOnce    sync.Once      // makes Restore's cleanup idempotent
@@ -27,6 +28,74 @@ type TerminalState struct {
 	watchDone   chan struct{}  // closed when the signal watcher exits
 }
 
+// rawTerminal is the one restore point for a terminal in raw mode. A
+// prompt started while another prompt already has the terminal in raw
+// mode (say, from a Validate callback) shares it: the terminal goes back
+// to the state it had before the outermost prompt only when every prompt
+// is done, or at once on SIGINT or SIGTERM. Restoring from each prompt's
+// own snapshot instead could leave the terminal raw, depending on the
+// order the signal reached them.
+type rawTerminal struct {
+	fd       int
+	original *term.State
+	depth    int  // prompts using the terminal in raw mode
+	done     bool // restored; the entry is gone from rawTerminals
+}
+
+// rawTerminals holds the restore point of each terminal in raw mode.
+var rawTerminals = struct {
+	sync.Mutex
+	byFd map[int]*rawTerminal
+}{byFd: make(map[int]*rawTerminal)}
+
+// acquireRaw puts the terminal in raw mode, or joins the prompt that
+// already did.
+func acquireRaw(fd int) (*rawTerminal, error) {
+	rawTerminals.Lock()
+	defer rawTerminals.Unlock()
+	r := rawTerminals.byFd[fd]
+	if r == nil {
+		old, err := term.MakeRaw(fd)
+		if err != nil {
+			return nil, err
+		}
+		r = &rawTerminal{fd: fd, original: old}
+		rawTerminals.byFd[fd] = r
+	}
+	r.depth++
+	return r, nil
+}
+
+// release ends one prompt's use of the terminal; the last one restores it.
+// With now set (a signal arrived), the terminal is restored at once.
+func (r *rawTerminal) release(now bool) error {
+	rawTerminals.Lock()
+	defer rawTerminals.Unlock()
+	if r.done {
+		return nil
+	}
+	r.depth--
+	if r.depth > 0 && !now {
+		return nil
+	}
+	r.done = true
+	if rawTerminals.byFd[r.fd] == r {
+		delete(rawTerminals.byFd, r.fd)
+	}
+	return term.Restore(r.fd, r.original)
+}
+
+// outermost reports whether no other prompt is using the terminal in raw
+// mode, so leaving raw mode really ends it.
+func (ts *TerminalState) outermost() bool {
+	if ts == nil || ts.shared == nil {
+		return true
+	}
+	rawTerminals.Lock()
+	defer rawTerminals.Unlock()
+	return ts.shared.depth <= 1
+}
+
 // EnableRawMode enables raw terminal mode for reading individual keystrokes.
 //
 // While the terminal is in raw mode, SIGINT and SIGTERM restore it, and the
@@ -34,17 +103,18 @@ type TerminalState struct {
 // is not exited, so the application's deferred cleanup and own signal
 // handling still run. Call Restore when done; it also stops the signal
 // handling, so nothing is left running.
+//
+// Nested calls for the same terminal (a prompt inside another prompt's
+// Validate function) share one restore point: the terminal returns to the
+// mode it had before the first call when the last Restore runs, or
+// immediately on a signal.
 func EnableRawMode(in *os.File) (*TerminalState, error) {
 	fd := int(in.Fd())
-	oldState, err := term.MakeRaw(fd)
+	shared, err := acquireRaw(fd)
 	if err != nil {
 		return nil, err
 	}
-
-	state := &TerminalState{
-		fd:       fd,
-		oldState: oldState,
-	}
+	state := &TerminalState{fd: fd, shared: shared}
 	state.watchSignals()
 	return state, nil
 }
@@ -63,7 +133,7 @@ func (ts *TerminalState) watchSignals() {
 		case <-ts.sigCh:
 			// Stop intercepting so a second signal gets its normal effect.
 			signal.Stop(ts.sigCh)
-			_ = ts.restoreTerminal()
+			_ = ts.restoreTerminal(true)
 			close(ts.interrupted)
 		case <-ts.stop:
 		}
@@ -81,17 +151,25 @@ func (ts *TerminalState) Restore() error {
 			close(ts.stop)
 		}
 	})
-	return ts.restoreTerminal()
+	return ts.restoreTerminal(false)
 }
 
-// restoreTerminal puts the terminal back into its original mode once.
-func (ts *TerminalState) restoreTerminal() error {
+// restoreTerminal ends this state's use of raw mode once. now restores the
+// terminal immediately, even while other prompts use it (on a signal).
+func (ts *TerminalState) restoreTerminal(now bool) error {
 	ts.mu.Lock()
-	defer ts.mu.Unlock()
-	if ts.restored || ts.oldState == nil {
+	if ts.restored {
+		ts.mu.Unlock()
 		return nil
 	}
 	ts.restored = true
+	ts.mu.Unlock()
+	if ts.shared != nil {
+		return ts.shared.release(now)
+	}
+	if ts.oldState == nil {
+		return nil
+	}
 	return term.Restore(ts.fd, ts.oldState)
 }
 
