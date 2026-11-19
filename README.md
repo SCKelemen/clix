@@ -475,11 +475,12 @@ Raw mode keys:
 | Esc | clear the input | cancel (`clix.ErrCancelled`) |
 | Ctrl-C | cancel (`clix.ErrCancelled`), always | cancel, always |
 
-Text is edited by user-perceived character: `José 日本`, combining accents and emoji sequences are never split, and the cursor is placed by display width (East Asian wide characters take two columns). Pasted text is inserted without acting on it (bracketed paste is on while a prompt is open); a single-line prompt keeps the first line of a multi-line paste. Esc is told apart from Alt+key and from escape sequences by a 30 ms pause. Keys a prompt does not use, such as unbound function keys, are ignored. Option lists taller than the terminal scroll in a window and redraw when the terminal is resized. Outside UTF-8 locales (decided by `LC_ALL`, `LC_CTYPE` and `LANG`), symbols fall back to ASCII. There is no type-to-filter in select prompts.
+Text is edited by user-perceived character: `José 日本`, combining accents and emoji sequences are never split, and the cursor is placed by display width (East Asian wide characters take two columns). Pasted text is inserted without acting on it (bracketed paste is on while a prompt is open); a single-line prompt keeps the first line of a multi-line paste. Esc is told apart from Alt+key and from escape sequences by a 50 ms pause (as in Neovim); a paste stays a paste even when it stalls. A prompt opened inside another prompt (for example from `Validate`) shares its raw mode, and SIGINT or SIGTERM always puts the terminal back as it was before the outermost prompt. Keys a prompt does not use, such as unbound function keys, are ignored. Option lists taller than the terminal scroll in a window and redraw when the terminal is resized. Outside UTF-8 locales (decided by `LC_ALL`, `LC_CTYPE` and `LANG`), symbols fall back to ASCII. There is no type-to-filter in select prompts.
 
 Line mode answers:
 
 - **Text**: the line, trimmed of surrounding spaces (secrets are not trimmed). An empty line gives the default.
+- **Secret**: read with echo off when the input is a terminal; SIGINT or SIGTERM turns echo back on and returns `clix.ErrCancelled`. `clix.ReadSecretLine` does the same for custom prompters.
 - **Confirm**: `y`, `yes`, `n` or `no` in any case; an empty line gives the default. Anything else is reported and asked again.
 - **Select**: an option's value or label (exact, ignoring case), then its number when the whole answer is a number, then a prefix of exactly one label or value. `3rd-party` is not option 3. An answer that matches nothing, or more than one option, is reported and asked again. An empty line gives the default (or the first option).
 - **Multi-select**: each line toggles options by number (`1,3` or `1 3`) or by exact value or label; `done`, `finish`, `q` or an empty line finishes.
@@ -493,6 +494,8 @@ Line mode answers:
 - A confirm `Default` of `n`, `no`, `false`, `f`, `0` or `off` (any case) makes Enter mean No; anything else, or no default, means Yes.
 - A select or multi-select with an empty option list returns `clix.ErrNoOptions`, and a `Default` that names no option returns `clix.ErrInvalidDefault`. A multi-select `Default` is a comma-separated list of values or labels (or, when none of the parts is one, of 1-based option numbers).
 - A prompt made from command code returns `clix.ErrPromptsDisabled` when `App.Interactive` is `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` is set. With `InteractiveAuto` it still answers from a pipe.
+- A secret is never shown: not while typing, not in the finished prompt, and not in validation messages, where the typed value is replaced with `[redacted]`. The value of a `Sensitive` flag is also redacted in errors about it, whether it came from a prompt, an environment variable or the config file.
+- On Windows, and for inputs that cannot be polled (descriptors above `FD_SETSIZE` on macOS, readers that are not files), keys are read in a goroutine. A byte it reads after a prompt ended (for example after Esc) goes to the next prompt or `clix.ReadLine` on the same input, in order; code that reads that input directly, not through clix, can miss it.
 
 #### Key bindings
 
@@ -642,9 +645,9 @@ cmd.Run = func(ctx *clix.Context) error {
 
 `clix.FormatData(w, data, format)` writes deterministic output in each format:
 
-- **JSON** (`encoding/json/v2`): two-space indentation and a trailing newline, sorted map keys, no HTML escaping of `<`, `>` and `&`, durations as ISO 8601 (`"PT1M30S"`), times as RFC 3339 (fractional seconds only when non-zero), `[]` and `{}` for nil slices and maps, invalid UTF-8 replaced with U+FFFD, and v2's `omitempty`/`omitzero` rules.
-- **YAML**: `json.RawMessage` is decoded first, and durations in maps and slices are ISO 8601.
-- **Text**: sorted `key = value` lines with nested keys flattened as `a.b`, one line per element of a list, a blank line between objects in a list, structs through their JSON field names, durations as `1m30s`, `fmt.Stringer` values through `String`, and nothing for nil. Flat maps and lists of scalars print exactly as before.
+- **JSON**: `encoding/json/v2` with `encoding/json`'s rules (field names, `omitempty`, `,string`, `MarshalJSON`, embedded fields), plus two-space indentation and a trailing newline, sorted map keys, `<`, `>` and `&` not escaped, durations as ISO 8601 (`"PT1M30S"`), times as RFC 3339 (fractional seconds only when non-zero), and `[]` and `{}` for nil slices and maps.
+- **YAML** (`go.yaml.in/yaml/v3`): `json.RawMessage` is decoded first; durations are ISO 8601 at the top level and in maps, slices, arrays and pointers, while struct fields keep YAML's own names and `1m30s`.
+- **Text**: sorted `key = value` lines with nested keys flattened as `a.b`, one line per element of a list, a blank line between objects in a list, structs through their JSON field names (fields tagged `json:"-"` never print), durations as `1m30s`, `fmt.Stringer` values through `String`, and nothing for nil. Flat maps and lists of scalars print exactly as before.
 
 Without the extension there is no `--format` flag, so call `clix.FormatData` with a fixed format such as `clix.FormatJSON`. The `version` and `config list` extension commands also read `--format` when the extension is registered.
 
@@ -835,6 +838,8 @@ Adds configuration management commands using dot-separated key paths (e.g. `proj
 
 The file is `App.ConfigPath`, or `$XDG_CONFIG_HOME/<app>/config.yaml`, written with mode 0600 in a 0700 directory, through symbolic links. `set` and `unset` rewrite the whole file as flat, sorted `dotted.key: "string"` lines: comments, nesting and anchors are dropped, lists become `a,b`, and keys with null values are removed. The key and value arguments are read only from the command line, never from environment variables or the config file.
 
+`set` checks the value against the schema and against every flag that reads the key, so `config set format xml` is refused instead of breaking later runs. The config commands, `help`, `version` and shell completion still run when the file or the environment holds a value a flag rejects: they print a warning and use the flag's default (see `clix.AllowConfigErrors`). On a file that is not valid YAML, `list`, `get`, `set` and `unset` fail with a hint to run `config reset`, which removes it. `reset` removes only a regular file (through a symbolic link it removes the target and keeps the link) and never a directory. Keys of `Sensitive` flags are asked for with echo off; `set` then prints `key set`, `list` shows `[redacted]`, and `get` needs `--reveal`.
+
 Optional schemas can enforce types when setting values:
 
 ```go
@@ -848,16 +853,21 @@ With a schema, `config set project.retries 5` succeeds while `config set project
 
 #### Autocomplete Extension (`clix/ext/autocomplete`)
 
-Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion script on stdout (and nothing else, so it can be redirected to a file); without a shell it shows help, including installation steps. Load a script with `source <(myapp autocomplete bash)`, `source <(myapp autocomplete zsh)` (after `compinit`), `myapp autocomplete fish | source`, or `myapp autocomplete powershell | Out-String | Invoke-Expression`, or install it, for example as `_myapp` on zsh's `$fpath`.
+Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion script on stdout (and nothing else, so it can be redirected to a file); without a shell it shows help, including installation steps. To load it:
+
+- **bash:** `eval "$(myapp autocomplete bash)"` in `~/.bashrc`. This works in bash 3.2 and 5; `source <(...)` does nothing in bash 3.2, the macOS `/bin/bash`.
+- **zsh:** `source <(myapp autocomplete zsh)` after `compinit`, or save the output as `_myapp` in a directory on `$fpath`.
+- **fish:** `myapp autocomplete fish | source`.
+- **PowerShell:** save the output to a file and dot-source it from `$PROFILE`.
 
 The scripts are thin wrappers that ask the program itself through a hidden `__complete` command, so completion always matches the installed version and no command name or description ever becomes shell code. Completion follows the parser:
 
 - commands and aliases where they are valid, never hidden or shadowed ones;
 - the flags in scope (the command's, its ancestors' and the root's; long and short), leaving out flags already given, except repeatable ones;
 - values for flags and positional arguments registered with `cmd.Flags.SetCompletion(name, fn)`, for example `clix.CompleteValues("eu", "us")` or `clix.CompleteOptions(options...)` (the same `SelectOption` list a select prompt uses); `true`/`false` for `--switch=`;
-- `--flag=value` forms, nothing but arguments after `--`, and file names when nothing else is known.
+- `--flag=value` forms (including file names after `--file=`), nothing but arguments after `--`, and file names when nothing else is known, quoted so that names containing `$(...)` or backquotes are inserted literally, also inside `"` and `'`.
 
-bash 3.2 (macOS) and later work with or without bash-completion; zsh shows descriptions.
+bash 3.2 (macOS) and later work with or without bash-completion; zsh shows descriptions. A broken config file, or a config or environment value a flag rejects, never breaks completion or `autocomplete <shell>`. In bash 3.2 a directory with exactly one entry completes straight to that entry, and an empty directory still gets a trailing space.
 
 #### Version Extension (`clix/ext/version`)
 
@@ -878,7 +888,7 @@ app.AddExtension(version.Extension{
 
 #### Format Extension (`clix/ext/format`)
 
-Adds a global `--format` / `-f` flag (`-f` unless your app uses it) that takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. An app flag named `--format` replaces the extension's. Read the selected value with `format.OutputFormat(app)` and pass it to `clix.FormatData`; see [Structured Output](#structured-output).
+Adds a global `--format` / `-f` flag (`-f` unless your app uses it) that takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. An app flag named `--format` replaces the extension's. Shell completion offers `json`, `yaml` and `text`. Read the selected value with `format.OutputFormat(app)` and pass it to `clix.FormatData`; see [Structured Output](#structured-output).
 
 #### Prompt, Survey, and Validation Extensions
 
