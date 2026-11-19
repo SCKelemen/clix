@@ -56,25 +56,18 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
-        with:
-          # Pull requests compare against their merge base, which needs history.
-          fetch-depth: ${{ github.event_name == 'pull_request' && '0' || '1' }}
 
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
 
-      # The root module has pre-existing findings (see .golangci.yml), so only
-      # issues introduced by the pull request or push fail the job. For pull
-      # requests the comparison runs in git against the merge base: the
-      # action's only-new-issues reads the pull request's patch from the
-      # GitHub API, which refuses diffs over 20,000 lines and then reports
-      # every finding in the module instead.
+      # The root module has no findings, so the whole module is linted on
+      # every run, and any finding fails the job. Both limits are off so the
+      # log lists every finding, not the first 50 per linter.
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.15.0
-          only-new-issues: ${{ github.event_name != 'pull_request' }}
-          args: ${{ github.event_name == 'pull_request' && format('--new-from-merge-base=origin/{0}', github.base_ref) || '' }}
+          args: --max-issues-per-linter=0 --max-same-issues=0
 
   examples:
     name: Example (${{ matrix.example }})
