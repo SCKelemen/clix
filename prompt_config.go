@@ -101,6 +101,10 @@ func NewPromptConfig(ctx context.Context, opts ...PromptOption) (*PromptConfig, 
 	if reason := app.promptsDisabled(); reason != "" {
 		return cfg, fmt.Errorf("cannot prompt for %q: %w (%s)", cfg.Label, ErrPromptsDisabled, reason)
 	}
+	// The prompt is about to draw on the terminal: a progress indicator
+	// drawing there steps aside until its next Update (see
+	// Context.Progress).
+	app.pauseProgress()
 	if cfg.Confirm {
 		return cfg, nil
 	}

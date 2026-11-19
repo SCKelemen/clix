@@ -36,6 +36,11 @@ func (a *App) main(ctx context.Context, args []string) int {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// Progress indicators leave signals to Main: the first one cancels
+	// ctx, which ends them and restores the terminal.
+	a.inMain.Store(true)
+	defer a.inMain.Store(false)
+
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(signals)

@@ -725,6 +725,38 @@ cmd.Run = func(ctx *clix.Context) error {
 
 Without the extension there is no `--format` flag, so call `clix.FormatData` with a fixed format such as `clix.FormatJSON`. The `version` and `config list` extension commands also read `--format` when the extension is registered.
 
+### Progress for long waits
+
+`ctx.Progress(label)` shows that a long-running operation is under way, like gcloud's `Waiting for operation...`. It writes to `App.Err` only, so `App.Out` stays clean for data:
+
+```go
+cmd.Run = func(ctx *clix.Context) error {
+        p := ctx.Progress("Deploying")
+        for i, step := range steps {
+                p.Update(float64(i)/float64(len(steps)), step.Name) // fraction (0 to 1, or -1 for unknown) and status
+                if err := step.Run(ctx); err != nil {
+                        p.Fail(err.Error())
+                        return err
+                }
+        }
+        p.Done("deployed") // "✓ Deploying: deployed"
+        return nil
+}
+```
+
+How it shows depends on `App.Err` and `App.ProgressMode`:
+
+- **On a terminal** (`clix.ProgressAuto`, the default): a spinner, the label, the latest message and percentage (`⠹ Deploying: uploading (42%)`), redrawn on one line about ten times a second, cut to the terminal width so it never wraps, with the cursor hidden. `Done` and `Fail` replace it with a final line: `✓ Deploying: deployed` or `✗ Deploying: failed`. The spinner and symbols are colored unless `NO_COLOR` is set or `CLICOLOR=0`. With `TERM=dumb` the spinner is ASCII and redrawn with carriage returns and spaces only, with no escape sequences at all. Outside a UTF-8 locale (`LC_ALL`, `LC_CTYPE` or `LANG`), frames and symbols are ASCII (`|/-\`, `+`, `!`).
+- **Not a terminal** (a pipe, a file, CI), or `clix.ProgressPlain`: one plain line, `Deploying...` when it starts and the final message when it ends, as in `Deploying...done`. `Update` prints nothing.
+- **`clix.ProgressQuiet`**: nothing. Map your own `--quiet` flag to it with `ctx.App.ProgressMode = clix.ProgressQuiet`.
+
+An indicator ends once, at the first of `Done`, `Fail` (messages default to `done` and `failed`), the end of its context (`cancelled`, or `timed out` for a deadline), or its command's handler returning: `Run` ends an indicator that `PreRun`, `Run` or `PostRun` left running, with `Done` when they succeeded and `Fail` otherwise. Later calls do nothing, and every method is a no-op on a nil `*Progress`.
+
+- **Prompts**: when a prompt starts (any prompter built on `clix.NewPromptConfig`, which includes `TextPrompter` and `clix/ext/prompt`), the indicator clears its line, shows the cursor and stops drawing until its next `Update`, `Done` or `Fail`. In plain mode it ends its partial line first and prints its end as a full line (`Deploying: done`).
+- **One at a time**: one indicator draws on an App at a time. One started while another is running prints only its final line.
+- **Ctrl-C**: the terminal is always put back. Under `App.Main`, the first signal cancels the context, which ends the indicator (`✗ Deploying: cancelled`) and shows the cursor. Without `Main`, on Unix, a running spinner also catches SIGINT and SIGTERM: it clears its line and shows the cursor, then delivers the signal again, so the signal has the effect it would have had without the indicator (the default action ends the process; a handler such as `signal.NotifyContext` receives it). On Windows it relies on the context.
+- Labels and messages are shown without escape sequences or control characters, so text from a server cannot move the cursor or break the line.
+
 ### Styling
 
 Optional styling hooks allow integration with packages like [`lipgloss`](https://github.com/charmbracelet/lipgloss):
@@ -1068,8 +1100,9 @@ type App struct {
         In        io.Reader
         EnvPrefix string
 
-        Interactive InteractiveMode // InteractiveAuto, InteractiveAlways or InteractiveNever
-        ConfigPath  string          // overrides the config file location
+        Interactive  InteractiveMode // InteractiveAuto, InteractiveAlways or InteractiveNever
+        ProgressMode ProgressMode    // ProgressAuto, ProgressPlain or ProgressQuiet (see Progress for long waits)
+        ConfigPath   string          // overrides the config file location
 
         DefaultTheme PromptTheme
         Styles       Styles
