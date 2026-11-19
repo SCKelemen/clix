@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `clix/ext/format`: the Google Cloud CLI's list flags, opt-in per command with `format.ListFlags(cmd)` or `format.WithListFlags()`: `--filter EXPRESSION`, `--sort-by FIELD[,~FIELD...]` (`~` for descending, dotted paths) and `--limit N` (or `unlimited`). `format.Write` applies them before the output flags, in gcloud's order: filter, then sort, then limit. A slice or array stays a slice of its element type, so every format prints the elements as before; a single object is a usage error. The flags are `Ambient` and read from the command line only; a flag the command already has keeps its meaning. `format.FiltersTopic` is a help topic about them for `App.AddHelpTopic`.
+- `--filter` is a strict subset of gcloud's filter expressions, implemented as a port of gcloud's client-side evaluator: `:` (contains, with `*` globs), `=`, `!=`, `<`, `<=`, `>`, `>=`, `AND`, `OR`, `NOT`, `-term`, juxtaposition, parentheses, quoting and lists of values, with gcloud's rules for case, accents, numbers, `null`, lists, `zone` and `region`, and dates and times. Anything else, such as `~`, bare words, transforms and relative times, is an error that says it "is not supported in clix --filter", never a different result. `--sort-by` sorts as gcloud does under Python 3, by the text of the values. Differential tests compare both with the gcloud library when `CLIX_GCLOUD_SDK` names an installed Cloud SDK, and gcloud's recorded results run in CI.
+
+### Dependencies
+
+- `golang.org/x/text`, for the Unicode decomposition (NFKD) with which `--filter` ignores accents as gcloud does.
+
 ## [2.8.0] - 2026-11-19
 
 ### Added
