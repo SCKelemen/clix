@@ -60,6 +60,10 @@ prompter.Prompt(ctx, clix.PromptRequest{
 ### Identifiers
 - `UUID(value string) error` - Validates UUID strings (e.g., "550e8400-e29b-41d4-a716-446655440000")
 
+### Times and Durations
+- `ISO8601Time(value string) error` - Validates an RFC 3339 (ISO 8601) timestamp with a time zone, such as "2026-11-19T08:30:00Z"
+- `ISO8601Duration(value string) error` - Validates an ISO 8601 duration of days, hours, minutes and seconds (PnDTnHnMnS, optional sign, fractional seconds), such as "PT1M30S" or "P1DT12H"; years, months and weeks are rejected
+
 ### Numeric
 - `Integer(value string) error` - Validates that a string can be parsed as an integer (int)
 - `Int64(value string) error` - Validates that a string can be parsed as an int64
