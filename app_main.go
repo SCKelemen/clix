@@ -68,7 +68,7 @@ func (a *App) main(ctx context.Context, args []string) int {
 		}
 	}
 	if err != nil && ExitCode(err) != 130 {
-		fmt.Fprintln(a.stderr(), err)
+		_, _ = fmt.Fprintln(a.stderr(), err)
 	}
 	return code
 }

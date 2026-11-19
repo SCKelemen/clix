@@ -457,21 +457,21 @@ func (m *ConfigManager) Save(path string) error {
 	}
 	tmp := file.Name()
 	if err := m.writeYAML(file); err != nil {
-		file.Close()
-		os.Remove(tmp)
+		_ = file.Close()
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := file.Sync(); err != nil {
-		file.Close()
-		os.Remove(tmp)
+		_ = file.Close()
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := file.Close(); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return err
 	}
 	if err := os.Rename(tmp, target); err != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return err
 	}
 	return nil

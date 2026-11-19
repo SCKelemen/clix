@@ -73,13 +73,13 @@ func TestNoEnvAndNoConfig(t *testing.T) {
 
 // One bare config key fed every command's --force; ConfigKey scopes it.
 func TestConfigKeyScopesConfigValues(t *testing.T) {
-	app, force, src := newForceApp(t, clix.FlagOptions{ConfigKey: "delete.force"})
+	app, force, _ := newForceApp(t, clix.FlagOptions{ConfigKey: "delete.force"})
 	writeConfigFile(t, app, "force: true\n")
 	if err := app.Run(bg, []string{"delete"}); err != nil || *force {
 		t.Fatalf("bare key: err = %v, force = %v", err, *force)
 	}
 
-	app, force, src = newForceApp(t, clix.FlagOptions{ConfigKey: "delete.force"})
+	app, force, src := newForceApp(t, clix.FlagOptions{ConfigKey: "delete.force"})
 	writeConfigFile(t, app, "delete:\n  force: true\n")
 	if err := app.Run(bg, []string{"delete"}); err != nil || !*force || *src != clix.SourceConfigFile {
 		t.Fatalf("delete.force: err = %v, force = %v from %v", err, *force, *src)

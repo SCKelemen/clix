@@ -168,10 +168,10 @@ func (w *owner) claim(rank int, name string) {
 // describe names the owner for error messages: "the app",
 // "extension #2 (config.Extension)", or "a flag registered during Run".
 func (w owner) describe() string {
-	switch {
-	case w.rank == 0:
+	switch w.rank {
+	case 0:
 		return "the app"
-	case w.rank == runtimeRank:
+	case runtimeRank:
 		return "a flag registered during Run"
 	}
 	return "extension " + w.ownerName
@@ -458,7 +458,7 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 		}
 	}
 	value := &StringValue{target: stringOpts.Value}
-	flag := stringOpts.FlagOptions.newFlag(value, stringOpts.Default)
+	flag := stringOpts.newFlag(value, stringOpts.Default)
 	fs.addFlag(flag)
 	fs.applyDefault(flag)
 }
@@ -591,7 +591,7 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 	if boolOpts.Default {
 		def = "true"
 	}
-	flag := boolOpts.FlagOptions.newFlag(value, def)
+	flag := boolOpts.newFlag(value, def)
 	fs.addFlag(flag)
 	if boolOpts.Default {
 		_ = value.SetBool(true)
@@ -621,7 +621,7 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 		}
 	}
 	value := &DurationValue{target: durationOpts.Value}
-	flag := durationOpts.FlagOptions.newFlag(value, durationOpts.Default)
+	flag := durationOpts.newFlag(value, durationOpts.Default)
 	fs.addFlag(flag)
 	fs.applyDefault(flag)
 }
@@ -692,7 +692,7 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 		}
 	}
 	value := &IntValue{target: intOpts.Value}
-	flag := intOpts.FlagOptions.newFlag(value, intOpts.Default)
+	flag := intOpts.newFlag(value, intOpts.Default)
 	fs.addFlag(flag)
 	fs.applyDefault(flag)
 }
@@ -763,7 +763,7 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 		}
 	}
 	value := &Int64Value{target: int64Opts.Value}
-	flag := int64Opts.FlagOptions.newFlag(value, int64Opts.Default)
+	flag := int64Opts.newFlag(value, int64Opts.Default)
 	fs.addFlag(flag)
 	fs.applyDefault(flag)
 }
@@ -834,7 +834,7 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 		}
 	}
 	value := &Float64Value{target: float64Opts.Value}
-	flag := float64Opts.FlagOptions.newFlag(value, float64Opts.Default)
+	flag := float64Opts.newFlag(value, float64Opts.Default)
 	fs.addFlag(flag)
 	fs.applyDefault(flag)
 }

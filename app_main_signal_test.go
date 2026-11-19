@@ -26,7 +26,7 @@ func TestMainHelperProcess(t *testing.T) {
 	app := clix.NewApp("probe", clix.WithAppInteractive(clix.InteractiveNever))
 	app.ConfigPath = os.DevNull
 	app.Root.Run = func(ctx *clix.Context) error {
-		os.Stderr.WriteString("running\n")
+		_, _ = os.Stderr.WriteString("running\n")
 		switch mode {
 		case "ignore":
 			time.Sleep(time.Second) // a handler that does not watch ctx

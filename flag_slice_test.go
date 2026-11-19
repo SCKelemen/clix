@@ -38,7 +38,7 @@ func TestSliceFlagGetsYAMLListItems(t *testing.T) {
 			t.Errorf("%q: %v", c.body, err)
 			continue
 		}
-		if !reflect.DeepEqual(*tags, c.want) && !(len(*tags) == 0 && len(c.want) == 0) {
+		if !reflect.DeepEqual(*tags, c.want) && (len(*tags) != 0 || len(c.want) != 0) {
 			t.Errorf("%q: tags = %q, want %q", c.body, *tags, c.want)
 		}
 	}

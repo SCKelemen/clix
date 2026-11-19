@@ -68,7 +68,7 @@ func captureStdout(t *testing.T) func() string {
 		}
 		restored = true
 		os.Stdout = orig
-		w.Close()
+		_ = w.Close()
 		return <-done
 	}
 	t.Cleanup(func() { restore() })

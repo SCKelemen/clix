@@ -86,9 +86,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		// Show version info - same format as "version" command but simpler (no commit/date)
 		// The version extension sets app.Version, so if it's enabled, we show it
 		if a.Version != "" {
-			fmt.Fprintf(a.stdout(), "%s version %s\n", a.Name, a.Version)
+			_, _ = fmt.Fprintf(a.stdout(), "%s version %s\n", a.Name, a.Version)
 		} else {
-			fmt.Fprintf(a.stdout(), "%s\n", a.Name)
+			_, _ = fmt.Fprintf(a.stdout(), "%s\n", a.Name)
 		}
 		return nil
 	}
