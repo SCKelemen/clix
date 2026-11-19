@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-11-19
+
 ### Added
 
-- `FlagOptions.Ambient` (also on `Flag`) and `WithFlagAmbient` mark a flag that sets the context a command runs in, such as `--target`, `--token`, `--timeout` or `--format`, rather than an input. An Ambient flag on the command line does not count as a passed flag when `Run` decides whether to prompt for missing required flags, so `moln --target X widgets create` prompts for the missing fields (when the app is interactive) instead of returning a `*MissingFlagsError`. Any other flag on the command line, by name or by position, still turns prompting off; environment variables and config values never counted. Parsing, environment and config lookup, `Required`, help and `FlagSet.AnyCLISet` are unchanged.
+- `FlagOptions.Ambient` (also on `Flag`) and `WithFlagAmbient` mark a flag that sets the context a command runs in, such as `--target`, `--token`, `--timeout` or `--format`, rather than an input. An Ambient flag on the command line does not count as a passed flag when `Run` decides whether to prompt for missing required flags, so `myapp --target X widgets create` prompts for the missing fields (when the app is interactive) instead of returning a `*MissingFlagsError`. Any other flag on the command line, by name or by position, still turns prompting off; environment variables and config values never counted. Parsing, environment and config lookup, `Required`, help and `FlagSet.AnyCLISet` are unchanged.
 
 ### Changed
 
@@ -254,7 +256,8 @@ Prepared as 1.0.0 (commit 464e98b, "Prepare for v1.0.0 release") but tagged as t
 - `ext/survey` – Chained prompts with branching logic
 - `ext/validation` – Common validation functions
 
-[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/SCKelemen/clix/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/SCKelemen/clix/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/SCKelemen/clix/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/SCKelemen/clix/compare/v2.4.0...v2.4.1
