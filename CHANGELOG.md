@@ -142,6 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--help` and `--version` ignore environment variables and config; empty environment variables count as unset.
 - Invalid environment or config values are errors that name their source, and they run `Validate`.
 - `Required` works for every flag type. If a long flag name is registered twice, the first registration wins.
+- `FlagSet.MissingRequired` reports a required flag only when it was never set (from any source, including a prompt) and has no default; v2.4.x reported any required flag whose value printed as an empty string. A required flag set to `""` (`--name ""`, or an empty prompt answer) no longer counts as missing, and required non-string flags are reported when unset, where their zero values (`0`, `false`) used to hide them. Code that checks for empty values after prompting should check the value itself.
 - The config directory and file are created only on save (modes 0700 and 0600).
 - YAML via `go.yaml.in/yaml/v3`, which replaces the archived `gopkg.in/yaml.v3`.
 - Lower the `go` directive from 1.25.4 to 1.25.0, so modules that depend on clix are no longer forced onto Go 1.25.4.
