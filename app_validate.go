@@ -39,7 +39,9 @@ import (
 //   - flag groups (see FlagSet.MarkMutuallyExclusive) that name a flag
 //     that is not defined on the command or above it, that have fewer
 //     than two flags, or that are mutually exclusive with a required flag;
-//   - nil children.
+//   - nil children;
+//   - help topics (see AddHelpTopic) that a root command shadows, or whose
+//     names cannot be typed as one word.
 //
 // Like Run, Validate first adopts the root, prepares the tree and applies
 // pending extensions, so it also checks what extensions add.
@@ -55,6 +57,7 @@ func (a *App) Validate() error {
 	}
 	a.prepareTree()
 	a.validateCommand(a.Root, a.Root.Name, map[string]ancestorFlag{}, &errs)
+	a.validateTopics(&errs)
 	return errors.Join(errs...)
 }
 

@@ -125,7 +125,7 @@ func TestHelpCompletesCommandNames(t *testing.T) {
 		toComplete string
 		want       string
 	}{
-		{nil, "", "help widgets"},
+		{nil, "", "help widgets environment exit-codes"}, // then the help topics
 		{[]string{"widgets"}, "", "get list"},
 		{[]string{"widgets", "get"}, "", ""},
 		{[]string{"nope"}, "", ""},

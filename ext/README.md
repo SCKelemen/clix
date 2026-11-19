@@ -61,8 +61,25 @@ app.Run(context.Background(), nil)
 Adds command-based help similar to man pages:
 - `cli help` - Show help for the root command
 - `cli help [command]` - Show help for a specific command
+- `cli help <topic>` - Show a help topic added with `app.AddHelpTopic`, or a built-in one: `environment` and `exit-codes`; root help lists them under ADDITIONAL HELP TOPICS
 
 **Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
+
+### Alias Extension (`clix/ext/alias`)
+
+Adds gh-style command aliases, stored in the config file under `aliases.<name>`:
+- `cli alias set <name> <expansion> [--clobber]` - Create a shortcut; `$1`, `$2`, ... take the arguments after it, the rest are appended
+- `cli alias list` - List the aliases
+- `cli alias delete <name>` or `--all` - Delete aliases
+
+Aliases never run a shell (there is no `--shell`, and `!` expansions are refused), never shadow a command, and only ever expand into one of the app's commands. See "Alias Extension" in the main README for the full rules.
+
+### Plugin Extension (`clix/ext/plugin`)
+
+Runs kubectl- and gh-style plugins: `cli foo args...` runs the executable `cli-foo` from PATH when `foo` is not a command, with the app's standard streams, and passes on its exit status.
+- `cli plugin list` - List the plugins found on PATH, with warnings for shadowed, overridden and insecure ones
+
+Only absolute PATH directories are searched, never the current directory; plugins never shadow commands; a world-writable plugin is refused. See "Plugin Extension" in the main README for the security model.
 
 ### Config Extension (`clix/ext/config`)
 

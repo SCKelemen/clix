@@ -2,6 +2,7 @@ package clix
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -22,8 +23,10 @@ import (
 // handlers and stops Main from catching signals, so a second one kills the
 // process as usual, even if a handler ignores the context. After a signal,
 // Main exits with 130 for SIGINT or 143 for SIGTERM, even if Run returned
-// nil, and prints no error for the cancellation itself. Tests should call
-// Run with explicit arguments instead.
+// nil, and prints no error for the cancellation itself. After a plugin
+// ran (see App.Plugins), Main exits with the plugin's status instead and
+// prints nothing for it. Tests should call Run with explicit arguments
+// instead.
 func (a *App) Main(ctx context.Context) {
 	os.Exit(a.main(ctx, os.Args[1:]))
 }
@@ -66,13 +69,16 @@ func (a *App) main(ctx context.Context, args []string) int {
 	wg.Wait()
 
 	code := ExitCode(err)
-	if caught != nil {
+	if caught != nil && !a.ranPlugin {
 		code = 130
 		if caught == syscall.SIGTERM {
 			code = 143
 		}
 	}
-	if err != nil && ExitCode(err) != 130 {
+	// A plugin reports its own errors and handles its own signals: its
+	// exit status is passed on as it is, and nothing is printed for it.
+	var plugin *PluginExitError
+	if err != nil && ExitCode(err) != 130 && !errors.As(err, &plugin) {
 		_, _ = fmt.Fprintln(a.stderr(), err)
 	}
 	return code

@@ -2,6 +2,7 @@ package autocomplete
 
 import (
 	"context"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -66,6 +67,18 @@ func (e *engine) complete(words []string, cur string) result {
 	if e.app == nil || e.app.Root == nil {
 		return result{}
 	}
+	if e.app.ExpandAliases && len(words) > 0 {
+		// An alias completes like the command line it stands for. Until
+		// the arguments its $1, $2, ... need are typed, there is nothing
+		// to offer for them.
+		expanded, isAlias, err := e.app.ExpandAlias(words)
+		if isAlias {
+			if err != nil {
+				return result{}
+			}
+			words = expanded
+		}
+	}
 	st := e.walk(words)
 	cmd := st.path[len(st.path)-1]
 
@@ -88,6 +101,15 @@ func (e *engine) complete(words []string, cur string) result {
 	var out result
 	if !st.strayed {
 		out.candidates = e.children(cmd, cur)
+		if len(words) == 0 {
+			// Run expands an alias only as the first word, and looks a plugin
+			// up only for a word no command or alias has.
+			out.candidates = append(out.candidates, e.userAliases(cur)...)
+			out.candidates = append(out.candidates, e.plugins(cur)...)
+		}
+	} else if e.isPlugin(words) {
+		// What a plugin takes is up to the plugin.
+		return result{files: true}
 	}
 	pos := e.positional(st, cur)
 	out.candidates = append(out.candidates, pos.candidates...)
@@ -245,6 +267,65 @@ func (e *engine) children(cmd *clix.Command, cur string) []clix.Completion {
 		}
 	}
 	return out
+}
+
+// plugins returns the plugins on PATH (see clix.App.Plugins) that start
+// with cur and would run: not those a command or an alias shadows.
+func (e *engine) plugins(cur string) []clix.Completion {
+	if !e.app.Plugins {
+		return nil
+	}
+	var out []clix.Completion
+	for _, p := range e.app.ListPlugins() {
+		if p.Runnable() && strings.HasPrefix(p.Name, cur) && e.findChild(e.app.Root, p.Name) == nil && !e.isUserAlias(p.Name) {
+			out = append(out, clix.Completion{Value: p.Name, Description: "Plugin " + filepath.Base(p.Path)})
+		}
+	}
+	return out
+}
+
+// userAliases returns the aliases users defined (see
+// clix.App.ExpandAliases) that start with cur and that Run would expand:
+// not those a command shadows, and none when the root takes positional
+// arguments.
+func (e *engine) userAliases(cur string) []clix.Completion {
+	if !e.app.ExpandAliases {
+		return nil
+	}
+	aliases := e.app.Aliases()
+	var out []clix.Completion
+	for _, name := range e.app.AliasNames() {
+		if !e.hasNamePrefix(name, cur) {
+			continue
+		}
+		if _, isAlias, _ := e.app.ExpandAlias([]string{name}); !isAlias {
+			continue
+		}
+		out = append(out, clix.Completion{Value: name, Description: "Alias for " + strconv.Quote(aliases[name])})
+	}
+	return out
+}
+
+// isPlugin reports whether words start with a plugin that Run would run.
+func (e *engine) isPlugin(words []string) bool {
+	if !e.app.Plugins || len(words) == 0 || e.findChild(e.app.Root, words[0]) != nil || e.isUserAlias(words[0]) {
+		return false
+	}
+	if root := e.app.Root; root.Run != nil && root.Flags != nil && len(root.Flags.PositionalFlags()) > 0 {
+		return false // the word is the root's argument
+	}
+	p, ok := e.app.LookupPlugin(words[0])
+	return ok && p.Runnable()
+}
+
+// isUserAlias reports whether Run would expand name as a user alias,
+// which takes precedence over a plugin of the same name.
+func (e *engine) isUserAlias(name string) bool {
+	if !e.app.ExpandAliases {
+		return false
+	}
+	_, isAlias, _ := e.app.ExpandAlias([]string{name})
+	return isAlias
 }
 
 // hasNamePrefix reports whether the command name starts with prefix,

@@ -672,7 +672,7 @@ Other guarantees:
 - **Cancellation**: every prompt returns `ctx.Err()` as soon as the context is done, in raw and line mode, even while waiting on an idle pipe. In raw mode Ctrl-C returns `clix.ErrCancelled` (Esc does too in select prompts), and SIGINT or SIGTERM restores the terminal and returns `clix.ErrCancelled` instead of exiting the process. In line mode Ctrl-C is the terminal's interrupt signal; with `signal.NotifyContext` as below it cancels the context. The extension only replaces the default `TextPrompter`; a `Prompter` you set yourself is kept.
 - **Prompts from command code** follow the same rules: with `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` they fail with `clix.ErrPromptsDisabled` instead of reading stdin.
 - **Piped answers**: each prompt reads exactly one line, so `printf 'a\nb\n' | myapp mk` (with `InteractiveAlways`) answers two prompts in turn.
-- **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors, missing flags and broken flag groups, 130 for cancellation, and 1 otherwise:
+- **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors, missing flags and broken flag groups, 130 for cancellation, a plugin's own status for a `*PluginExitError`, and 1 otherwise:
 
 ```go
 package main
@@ -979,6 +979,8 @@ This design is inspired by [goldmark's extension system](https://github.com/yuin
 Everything else is opt-in via extensions, including:
 - Command-based help (`cli help`)
 - Config management commands (`cli config`)
+- Command aliases (`cli alias`)
+- Plugins found on PATH (`cli plugin`)
 - Shell completion (`cli autocomplete`)
 - Version information (`cli version`)
 - Output format selection (`--format`, `--json`, `--jq`, `--template`)
@@ -995,10 +997,12 @@ import (
         "os"
 
         "github.com/SCKelemen/clix/v2"
+        "github.com/SCKelemen/clix/v2/ext/alias"
         "github.com/SCKelemen/clix/v2/ext/autocomplete"
         "github.com/SCKelemen/clix/v2/ext/config"
         "github.com/SCKelemen/clix/v2/ext/format"
         "github.com/SCKelemen/clix/v2/ext/help"
+        "github.com/SCKelemen/clix/v2/ext/plugin"
         "github.com/SCKelemen/clix/v2/ext/version"
 )
 
@@ -1008,6 +1012,8 @@ app.Root = clix.NewCommand("myapp")
 // Add extensions for optional features
 app.AddExtension(help.Extension{})         // Adds: myapp help [command...]
 app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset (Configurations: true adds named configurations)
+app.AddExtension(alias.Extension{})        // Adds: myapp alias set|list|delete, and expands aliases
+app.AddExtension(plugin.Extension{})       // Adds: myapp plugin list, and runs myapp-<name> from PATH
 app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [bash|zsh|fish|powershell]
 app.AddExtension(format.Extension{})       // Adds: --format / -f (json|yaml|text, default text), --json, --jq / -q, --template / -t
 app.AddExtension(version.Extension{        // Adds: myapp version, --version / -v (-v unless your app uses it)
@@ -1042,10 +1048,25 @@ Extensions never override your definitions. Everything registered while an exten
 Adds command-based help similar to man pages:
 - `cli help` - Show help for the root command
 - `cli help <command>...` - Show help for a command, by name or alias; `cli help widgets get`, `cli help "widgets get"` and `cli help --command "widgets get"` are the same, and shell completion offers command names at each level
+- `cli help <topic>` - Show a help topic, such as `cli help environment` or `cli help exit-codes` (see below)
 - Hidden commands are listed nowhere, but `cli help <hidden>` still shows their help
 - An unknown name fails with `unknown command "x" for "cli"; did you mean "y"?` (exit status 1)
 
 Help (from this command and from `-h`/`--help`) shows FLAGS, INHERITED FLAGS (from groups on the path) and GLOBAL FLAGS (from the root), leaving out any flag a closer command shadows, the way the parser resolves names; it shows aliases and variadic arguments as `<name>...`. It goes to `App.Out`. Styles apply only when the output is a terminal and `NO_COLOR` is not set (`CLICOLOR=0` and `TERM=dumb` also turn color off; `CLICOLOR_FORCE=1` turns it on); without color, styles' ANSI escapes are removed and columns stay aligned. An app `help` command replaces the extension's.
+
+**Help topics.** Pages that are not about one command, like gh's `help environment` and gcloud's `topic` pages, are added with `App.AddHelpTopic(name, short, body)` and read with `cli help <topic>`; root help lists them under ADDITIONAL HELP TOPICS (when the root has a `help` command), `cli help` suggests close topic names for a typo, and shell completion offers them after the command names.
+
+```go
+app.AddHelpTopic("formatting", "Formatting output", `Every command takes --format json, yaml or text.
+...`)
+```
+
+clix ships two topics about what it owns, generated for the app when they are shown:
+
+- `environment`: the variables clix reads for the app: `<PREFIX>_<FLAG>` (unless `App.AutoEnv` is off) and each global flag's variables, `<PREFIX>_CONFIGURATION` with named configurations, `<PREFIX>_DISABLE_PROMPTS`, `XDG_CONFIG_HOME` (unless `App.ConfigPath` is set), `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` and `TERM`.
+- `exit-codes`: 0, 1, 2 (usage errors), 130 (cancelled) and 143 (SIGTERM).
+
+A topic of the same name replaces a built-in one, and an empty body removes a topic (`app.AddHelpTopic("exit-codes", "", "")`). The app's topics win over an extension's, and an extension added first wins over a later one, as for flags and commands; a command (even a hidden one) wins over a topic of its name, which `App.Validate` reports. `App.HelpTopics`, `App.LookupHelpTopic` and `HelpRenderer.RenderTopic` read and render them.
 
 **Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
 
@@ -1109,6 +1130,59 @@ The configuration a command uses is the one given with the Ambient `--configurat
 
 The same operations are methods on `App` for programs and tests: `EnableConfigurations`, `Configuration` (the name in effect and its `Source`), `Configurations`, `ConfigurationFile`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` and `ConfigurationEnvVar`. `ConfigFile` and `SaveConfig` use the configuration in effect; `ConfigDir` is still the config directory.
 
+#### Alias Extension (`clix/ext/alias`)
+
+Adds gh-style aliases: shortcuts that users define for longer command lines.
+
+```text
+myapp alias set co 'pr checkout'              # myapp co 123  runs  myapp pr checkout 123
+myapp alias set il 'issue list --label=$1'    # myapp il bug --web  runs  myapp issue list --label=bug --web
+myapp alias set co 'pr checkout --force' --clobber
+myapp alias list                              # name: expansion (JSON or YAML with --format)
+myapp alias delete co                         # or --all
+```
+
+Aliases are stored in the config file under `aliases.<name>` (`aliases: {co: pr checkout}` written by hand works too) and expanded by `Run` when `App.ExpandAliases` is set, which the extension does. `$1`, `$2`, ... are replaced by the arguments after the alias, and the arguments after the highest `$N` used are appended, as gh does; an alias that needs more arguments than it got is a usage error. Root help lists them under ALIAS COMMANDS, and shell completion offers them as the first word and, after one, completes as for its expansion.
+
+The rules, which are also the security model:
+
+- **No shell aliases.** gh's `alias set --shell` and `!` expansions run a shell; clix has neither: `--shell` is an unknown flag, and an expansion starting with `!` is refused when it is set and when a hand-edited config file holds one. An alias only ever becomes the arguments of one of the app's own commands.
+- **Nothing is evaluated.** The expansion is split into words with shell-like quoting (`'...'`, `"..."`, backslashes), but `$VAR`, globs, `~`, backquotes and `$(...)` stay literal text.
+- **Arguments are never split again.** Each one replaces its `$N` as a whole word, or as the part of the word where `$N` is (`--label=$1`), so an argument such as `"1 --force"` cannot add flags or words.
+- **Aliases never shadow commands.** `alias set` refuses a name that a root command or command alias has, hidden commands and extensions' commands included (`alias`, `help`, `config`, ...), and a command added later wins over an existing alias (`alias list` warns).
+- **One expansion, into a command.** The expansion must start with a root command, so an alias cannot name another alias and is expanded once.
+- **Only the first argument**, and only when the root takes no positional arguments of its own; flags before an alias are not supported (as in gh).
+
+Alias names are a letter or digit followed by letters, digits, hyphens and underscores, matched like command names (ASCII case is ignored unless `App.CaseSensitive`). The core API is `App.ExpandAliases`, `Aliases`, `AliasNames`, `CheckAlias`, `SetAlias`, `DeleteAlias`, `ExpandAlias` and `AliasConfigPrefix`. An app command named `alias` replaces the extension's.
+
+#### Plugin Extension (`clix/ext/plugin`)
+
+Adds kubectl- and gh-style plugins: separate programs that add commands. With `plugin.Extension{}` (or `app.Plugins = true` without the `plugin list` command), `myapp foo a b` runs the executable `myapp-foo` from PATH with `a b` when `foo` is not a command:
+
+```text
+$ cat ~/bin/myapp-hello
+#!/bin/sh
+echo "hello from $MYAPP_APP_NAME $MYAPP_APP_VERSION: $*"
+$ myapp hello world
+hello from myapp 1.2.0: world
+$ myapp plugin list
+NAME   PATH
+hello  /home/me/bin/myapp-hello
+```
+
+- **It runs like a command of the app.** The plugin gets the arguments after its name exactly as given (no shell in between), the app's standard input, output and error (a terminal stays a terminal), and its exit status becomes the app's: `Run` returns a `*clix.PluginExitError` for a status other than 0, `ExitCode` returns that status (128 plus the signal number when a signal ended it), and `Main` exits with it without printing anything. While it runs, Ctrl-C reaches the plugin through the terminal and the app keeps waiting for it; a SIGTERM sent to the app is forwarded to it.
+- **Environment.** The plugin inherits the app's environment plus `<PREFIX>_PLUGIN=1`, `<PREFIX>_PLUGIN_NAME` (the command it ran as), `<PREFIX>_APP_NAME`, `<PREFIX>_APP_VERSION` (when `App.Version` is set) and `<PREFIX>_APP_PATH` (the app's executable, to call it back); see `App.PluginEnv`. No flag value, config value or secret of the app is passed on.
+- **Plugins never shadow commands.** A plugin is looked up only for the first argument, only when it names no command (the app's or an extension's, hidden or not, by name or alias, matched like routing does) and the root takes no positional arguments; `plugin list` warns about a plugin named like a command, which never runs. Flags before a plugin's name are not supported (as in kubectl).
+- **Completion** offers the plugins as the first word, and file names after one.
+
+The security model: a plugin is trusted like any other program on PATH, since whoever can write to a directory on PATH can add one. clix searches nothing else:
+
+- only absolute PATH directories, in order, first match wins (`plugin list` warns about later ones it shadows); empty entries, `.` and other relative entries are skipped, so a plugin is **never found in the current directory**;
+- the name must be a letter or digit followed by letters, digits, hyphens and underscores, so it can never be a path;
+- on Unix only executable regular files run (symbolic links are followed), and a file that every user can write to (mode o+w) is refused; on Windows only `.exe` and `.com` files run, never `.bat` or `.cmd` scripts, whose arguments `cmd.exe` would interpret.
+
+`App.LookupPlugin(name)` and `App.ListPlugins()` return `clix.Plugin` values (`Name`, `Path`, `Shadowed`, `Command`, `Insecure`, `Runnable`). An app command named `plugin` replaces the extension's.
+
 #### Autocomplete Extension (`clix/ext/autocomplete`)
 
 Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion script on stdout (and nothing else, so it can be redirected to a file); without a shell it shows help, including installation steps. To load it:
@@ -1121,6 +1195,8 @@ Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion 
 The scripts are thin wrappers that ask the program itself through a hidden `__complete` command, so completion always matches the installed version and no command name or description ever becomes shell code. Completion follows the parser:
 
 - commands and aliases where they are valid, never hidden or shadowed ones;
+- user aliases (see the alias extension) as the first word, and after one, what its expansion takes;
+- plugins (see the plugin extension) as the first word, and file names after one;
 - the flags in scope (the command's, its ancestors' and the root's; long and short), leaving out flags already given, except repeatable ones, and the other flags of a mutually exclusive group once one is given;
 - values for flags and positional arguments registered with `cmd.Flags.SetCompletion(name, fn)`, for example `clix.CompleteValues("eu", "us")` or `clix.CompleteOptions(options...)` (the same `SelectOption` list a select prompt uses); `true`/`false` for `--switch=`;
 - `--flag=value` forms (including file names after `--file=`), nothing but arguments after `--`, and file names when nothing else is known, quoted so that names containing `$(...)` or backquotes are inserted literally, also inside `"` and `'`.

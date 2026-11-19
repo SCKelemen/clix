@@ -82,6 +82,7 @@ func UsageErrorf(format string, args ...any) error {
 // status:
 //
 //   - 0 when err is nil
+//   - the plugin's exit status for a *PluginExitError (see App.Plugins)
 //   - 130 when the user cancelled (ErrCancelled, or context.Canceled as
 //     produced by signal.NotifyContext on Ctrl-C)
 //   - 2 for command-line usage errors, such as an unknown flag or command,
@@ -99,6 +100,10 @@ func UsageErrorf(format string, args ...any) error {
 func ExitCode(err error) int {
 	if err == nil {
 		return 0
+	}
+	var plugin *PluginExitError
+	if errors.As(err, &plugin) {
+		return plugin.Code
 	}
 	if errors.Is(err, ErrCancelled) || errors.Is(err, context.Canceled) {
 		return 130

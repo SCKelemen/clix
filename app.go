@@ -117,6 +117,22 @@ type App struct {
 	// non-ASCII letters always match exactly.
 	CaseSensitive bool
 
+	// ExpandAliases makes Run expand user-defined aliases, which are stored
+	// in the config file under "aliases.<name>" (see ExpandAlias,
+	// CheckAlias and ext/alias, which sets this field and adds "alias set",
+	// "alias list" and "alias delete"). An alias is only looked up for the
+	// first argument, when it names no command, so aliases never shadow
+	// commands, and it never runs a shell.
+	ExpandAliases bool
+
+	// Plugins makes Run run the executable <Name>-<word> from PATH, as
+	// kubectl and gh do, when the first argument is a word that names no
+	// command: "myapp foo a b" runs "myapp-foo a b". Plugins never shadow
+	// commands and are never looked up in the current directory; see
+	// LookupPlugin, PluginEnv and ext/plugin, which sets this field and
+	// adds "plugin list".
+	Plugins bool
+
 	// ProgressMode controls how Context.Progress reports long-running
 	// work. The default, ProgressAuto, animates a spinner when Err is a
 	// terminal and prints one plain line otherwise; ProgressPlain always
@@ -142,8 +158,15 @@ type App struct {
 	extending  bool  // an extension's Extend is running
 	running    bool  // Run is running
 
+	extRank int    // while extending: the rank of the extension whose Extend runs
+	extName string // while extending: its name for messages
+
+	topics []HelpTopic // added with AddHelpTopic
+
 	progress progressBoard // the progress indicators writing to Err (see Context.Progress)
 	inMain   atomic.Bool   // Main is running the app, so it handles SIGINT and SIGTERM
+
+	ranPlugin bool // the last Run ran a plugin, whose exit status Main passes on
 }
 
 // AppOption configures an App using the functional options pattern.
