@@ -35,7 +35,6 @@
 package alias
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -175,6 +174,9 @@ func deleteCommand(app *clix.App) *clix.Command {
 		FlagOptions: clix.FlagOptions{Name: "all", Usage: "Delete every alias", CommandLineOnly: true},
 		Value:       &all,
 	})
+	// Exactly one of them: help shows (--name=NAME | --all).
+	cmd.Flags.MarkMutuallyExclusive("name", "all")
+	cmd.Flags.MarkOneRequired("name", "all")
 	cmd.Flags.SetCompletion("name", completeAliases(app))
 	clix.AllowConfigErrors(cmd)
 	cmd.Run = func(ctx *clix.Context) error {
@@ -183,12 +185,8 @@ func deleteCommand(app *clix.App) *clix.Command {
 		}
 		var names []string
 		switch {
-		case all && name != "":
-			return errors.New("give an alias name or --all, not both")
 		case all:
 			names = app.AliasNames()
-		case name == "":
-			return &clix.MissingFlagsError{Flags: []string{"name"}}
 		default:
 			if _, ok := app.Aliases()[name]; !ok {
 				return fmt.Errorf("no such alias %q", name)

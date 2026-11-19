@@ -128,8 +128,14 @@ func TestAliasCommands(t *testing.T) {
 	if len(a.app.Aliases()) != 0 {
 		t.Fatalf("after --all: %v", a.app.Aliases())
 	}
-	if _, err := a.try("alias", "delete", "x", "--all"); err == nil {
-		t.Fatal("delete NAME --all succeeded")
+	if _, err := a.try("alias", "delete", "x", "--all"); err == nil || err.Error() != "--name and --all cannot be used together" || clix.ExitCode(err) != 2 {
+		t.Fatalf("delete NAME --all: %v", err)
+	}
+	if _, err := a.try("alias", "delete"); err == nil || err.Error() != "one of --name or --all is required" || clix.ExitCode(err) != 2 {
+		t.Fatalf("delete: %v", err)
+	}
+	if help := a.run(t, "alias", "delete", "--help"); !strings.Contains(help, "Exactly one of these must be given: --name, --all") {
+		t.Fatalf("delete --help:\n%s", help)
 	}
 	a.run(t, "alias", "list")
 	if a.errOut.String() != "no aliases configured\n" {
