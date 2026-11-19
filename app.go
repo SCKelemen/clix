@@ -95,6 +95,11 @@ type App struct {
 	configLoaded  bool
 	configLoadErr error
 
+	// boundRoot and boundFlags are the root command and root flag set the
+	// App last adopted (see bindRoot), so Run can tell when Root changed.
+	boundRoot  *Command
+	boundFlags *FlagSet
+
 	// Extensions for optional batteries-included features
 	extensions     []Extension
 	extensionsOnce sync.Once
@@ -181,12 +186,9 @@ func NewApp(name string, opts ...AppOption) *App {
 		app.Prompter = TextPrompter{In: app.In, Out: promptOut}
 	}
 
-	// Ensure root has a FlagSet initialized
-	// Root flags are non-strict by default to allow test flags and other system flags
-	if app.Root.Flags == nil {
-		app.Root.Flags = NewFlagSet(app.Root.Name)
-		app.Root.Flags.SetStrict(false)
-	}
+	// Adopt the root: it gets a flag set, made non-strict unless SetStrict
+	// was called on it, so it may receive test flags and other system flags.
+	app.bindRoot()
 
 	// Standard flags on root command (accessible via app.Flags()).
 	// NewCommand and NewGroup already register --help, so only add it when
@@ -210,7 +212,11 @@ func NewApp(name string, opts ...AppOption) *App {
 // command apply to all commands (they are "global" by virtue of being on the root).
 // This provides a symmetric API with cmd.Flags.
 // Flags() always returns a non-nil FlagSet, creating one if necessary.
-// Root flags are non-strict by default to allow test flags and other system flags.
+// Root flags are non-strict by default to allow test flags and other system
+// flags; call SetStrict(true) on the returned set to reject unknown flags.
+//
+// Flags only reads the App once a root has been adopted (by NewApp, Run or
+// the first Flags call), so handlers may call it concurrently.
 func (a *App) Flags() *FlagSet {
 	if a.Root == nil {
 		// Create a minimal root if one doesn't exist
@@ -220,9 +226,41 @@ func (a *App) Flags() *FlagSet {
 	if a.Root.Flags == nil {
 		// Ensure FlagSet is initialized even if root was created manually
 		a.Root.Flags = NewFlagSet(a.Root.Name)
+		a.Root.Flags.strict = false
 	}
-	// Ensure root flags are non-strict (they may receive test flags or other system flags)
-	a.Root.Flags.SetStrict(false)
+	if a.boundFlags == nil {
+		// A zero-value App: remember the set handed out.
+		a.bindRoot()
+	}
+	return a.Root.Flags
+}
+
+// bindRoot adopts a.Root as the root command. The first time a root is
+// adopted its flag set is made non-strict, unless SetStrict was called on
+// it. Run calls bindRoot so that a Root replaced after NewApp is adopted
+// too.
+func (a *App) bindRoot() {
+	root := a.Root
+	if root == nil {
+		return
+	}
+	if root.Flags == nil {
+		root.Flags = NewFlagSet(root.Name)
+	}
+	if root == a.boundRoot && root.Flags == a.boundFlags {
+		return
+	}
+	if !root.Flags.strictSet {
+		root.Flags.strict = false
+	}
+	a.boundRoot, a.boundFlags = root, root.Flags
+}
+
+// rootFlagSet returns the root command's flag set without creating one.
+func (a *App) rootFlagSet() *FlagSet {
+	if a == nil || a.Root == nil {
+		return nil
+	}
 	return a.Root.Flags
 }
 

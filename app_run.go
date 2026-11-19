@@ -14,10 +14,17 @@ import (
 // Run executes the application with the given context and arguments.
 // If args is nil, os.Args[1:] is used.
 // The context is propagated to command handlers and can be used for cancellation.
+//
+// Run is not safe for concurrent use on the same App: it resets and fills
+// the flags of the command tree. Calling Run several times in sequence is
+// supported. To run commands in parallel, build one App per goroutine.
 func (a *App) Run(ctx context.Context, args []string) error {
 	if a.Root == nil {
 		return errors.New("clix: no root command configured")
 	}
+
+	// Adopt the root (it may have been replaced since NewApp).
+	a.bindRoot()
 
 	// Prepare the tree on every Run: commands appended to Children (or a
 	// new Root) since the last Run need a flag set, --help and parent links.
@@ -39,9 +46,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// --help and --version have had a chance to run.
 	configErr := a.ensureConfigLoaded(ctx)
 
-	// Use Flags() to get root command's flags (symmetric with cmd.Flags).
-	// It also guarantees the root flag set exists and is non-strict.
-	rootFlags := a.Flags()
+	rootFlags := a.Root.Flags
 
 	// Find the command first, then parse every flag exactly once: flags bind
 	// to the innermost command that defines them and fall back to the root.

@@ -34,11 +34,12 @@ import (
 //		Value: &verbose,
 //	})
 type FlagSet struct {
-	name   string
-	flags  []*Flag
-	index  map[string]*Flag
-	strict bool    // If true, unknown flags cause errors instead of being treated as positionals
-	errs   []error // Registration problems, such as duplicate flag names
+	name      string
+	flags     []*Flag
+	index     map[string]*Flag
+	strict    bool    // If true, unknown flags cause errors instead of being treated as positionals
+	strictSet bool    // SetStrict was called, so the App must not change strict
+	errs      []error // Registration problems, such as duplicate flag names
 }
 
 // NewFlagSet initialises an empty flag set.
@@ -50,8 +51,13 @@ func NewFlagSet(name string) *FlagSet {
 // SetStrict enables or disables strict mode. When strict mode is enabled (the default),
 // unknown flags cause Parse to return an error instead of being treated as positional arguments.
 // Set to false to allow unknown flags to be treated as positional arguments.
+//
+// The root flag set (App.Flags) is made non-strict once, when the App
+// adopts the root command. An explicit SetStrict call on it is honored and
+// never undone by Run or Flags.
 func (fs *FlagSet) SetStrict(strict bool) {
 	fs.strict = strict
+	fs.strictSet = true
 }
 
 // Strict returns whether strict mode is enabled.
