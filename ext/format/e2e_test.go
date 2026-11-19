@@ -50,7 +50,8 @@ func run(t *testing.T, app *clix.App, out *bytes.Buffer, args ...string) (string
 	return out.String(), err
 }
 
-const e2eText = "meta.app = web\nmeta.zone = eu\nname = a\ntags = x, y\n\nname = b\n"
+// A list of objects in text is tab-separated when Out is not a terminal.
+const e2eText = "a\tx, y\t{\"app\":\"web\",\"zone\":\"eu\"}\nb\t\t\n"
 
 func TestFormatE2E_DefaultIsText(t *testing.T) {
 	app, out := e2eApp(t)

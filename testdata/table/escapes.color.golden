@@ -1,0 +1,4 @@
+[1mNAME[0m        [1mPATH[0m
+tab\there   C:\dir
+two\nlines  esc\x1b[31mred\x1b[0m
+cr\rx       del\x7f c1\u0085

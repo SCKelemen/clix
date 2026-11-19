@@ -46,7 +46,7 @@ func TestFormatTextIsReadable(t *testing.T) {
 		{"nil pointer", (*textUser)(nil), ""},
 		{"struct", textUser{UserName: "ann"}, "user_name = ann\n"},
 		{"struct pointer", &textUser{UserName: "ann", Age: 7}, "age = 7\nuser_name = ann\n"},
-		{"slice of structs", []textUser{{UserName: "ann"}, {UserName: "bob", Age: 3}}, "user_name = ann\n\nage = 3\nuser_name = bob\n"},
+		{"slice of structs", []textUser{{UserName: "ann"}, {UserName: "bob", Age: 3}}, "ann\t\nbob\t3\n"}, // a table; tab-separated when not a terminal
 		{"map[string]int", map[string]int{"b": 2, "a": 1}, "a = 1\nb = 2\n"},
 		{"nested map", map[string]interface{}{"go": map[string]string{"os": "darwin", "arch": "arm64"}, "name": "x"}, "go.arch = arm64\ngo.os = darwin\nname = x\n"},
 		{"deeply nested", map[string]interface{}{"a": map[string]interface{}{"b": map[string]int{"c": 1}}}, "a.b.c = 1\n"},
@@ -54,7 +54,7 @@ func TestFormatTextIsReadable(t *testing.T) {
 		{"list of values in a map", map[string]interface{}{"tags": []string{"a", "b"}, "n": []int{1, 2}}, "n = 1, 2\ntags = a, b\n"},
 		{"list of objects in a map", map[string]interface{}{"items": []textUser{{UserName: "a"}, {UserName: "b"}}}, "items.0.user_name = a\nitems.1.user_name = b\n"},
 		{"slice of ints", []int{1, 2, 3}, "1\n2\n3\n"},
-		{"slice of maps", []map[string]string{{"a": "1"}, {"b": "2"}}, "a = 1\n\nb = 2\n"},
+		{"slice of maps", []map[string]string{{"a": "1"}, {"b": "2"}}, "1\t\n\t2\n"},
 		{"mixed list", []interface{}{"x", map[string]int{"a": 1}}, "x\n\na = 1\n"},
 		{"MarshalJSON", map[string]interface{}{"level": textLevel{1}, "users": []textUser{{UserName: "ann"}}}, "level = high\nusers.0.user_name = ann\n"},
 		{"Stringer beside a nested map", map[string]interface{}{"id": textStringer{1}, "at": when, "m": map[string]int{"x": 1}}, "at = 2026-01-02 03:04:05 +0000 UTC\nid = stringer-1\nm.x = 1\n"},
