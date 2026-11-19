@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Package `iso8601` (stdlib only): `ParseTime` for ISO 8601-1:2019 calendar, ordinal and week dates and date-times in the basic or extended format, `FormatTime` for the RFC 3339 profile, and `Duration` with `ParseDuration`, `FormatDuration`, `FromStd`, `Exact`, `AddTo` and text marshaling. Errors are `*iso8601.ParseError` values with the input and byte offset.
+
 ### Changed
 
 - Require Go 1.27: the `go` directive is 1.27.0, with `toolchain go1.27.4` for development and CI. `golang.org/x/term` 0.48.0 needs Go 1.26, and Go 1.27 provides `encoding/json/v2`.
