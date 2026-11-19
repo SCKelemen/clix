@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `App.Main(ctx)`: the usual program entry point. It runs the app with `os.Args[1:]`, cancels the context on SIGINT or SIGTERM, prints any error to `App.Err` and exits with `ExitCode`.
+- `App.Validate()` reports definition mistakes that `Run` tolerates: duplicate long flag names, short names that were already taken, defaults that do not parse, root flags that conflicted with a replaced `Root`, children that share a name or alias, flags that shadow an ancestor's flag of the same name, and nil children. Call it from a test.
+- `FlagOptions.CommandLineOnly`, `NoEnv`, `NoConfig` and `ConfigKey` (also on `Flag`), with `WithFlagCommandLineOnly`, `WithFlagNoEnv`, `WithFlagNoConfig` and `WithFlagConfigKey`, control where a flag may come from. Use `CommandLineOnly` for destructive switches such as `--force`.
+- `App.AutoEnv` and `App.AutoConfig` (`*bool`, nil means on) stop flags from reading the environment variable or config key named after them.
+- `App.CaseSensitive` matches command names and aliases exactly.
+- `FlagSet.Var` (`VarOptions`, `WithValue`, `WithVarDefault`) registers a flag with a custom `Value`; a value with `SetBool`, or `IsBoolFlag()` returning true, is a switch.
+- `FlagSet.StringSliceVar` (`StringSliceValue`, `StringSliceVarOptions`, `WithStringSliceValue`, `WithStringSliceDefault`) and `FlagSet.StringSlice`: repeatable, comma-separated string flags.
+- `BoolVarOptions.Default` and `WithBoolDefault`.
+- `FlagSet.Lookup`, `FlagSet.Changed` (set on the command line), `Flag.Source` and `FlagSet.Duration`.
+- `Context.Int`, `Int64`, `Float64`, `Duration` and `EffectiveDuration`.
+- Short flag clusters (`-xv`), attached short values (`-fa.tar`) and negative numbers as positional arguments (`add -5 3`).
+- A "Routing" section in the README that states how arguments are matched, backed by a table-driven test (`routing_test.go`).
+
+### Changed
+
+- A short name that is already in use is never taken over: the first flag keeps it, a later flag with the same short name gets none (its long name still works), and the conflict is recorded in `FlagSet.Err`. Previously the newest flag took it, so `ext/version`'s `-v` and `ext/format`'s `-f` took over an app's own `-v` and `-f`. The built-in `--help` still gives `-h` up to a command's own flag, such as `--host`.
+- Config file values keep the text written in the file (`1.10`, `0755`, `1e3`, `2024-01-02`) instead of being re-printed from a decoded Go value. Int and float flags, `ConfigManager.Int`/`Int64`/`Float64` and the numeric `Context` getters still read YAML's number (`0755` is 493, `0x1F` is 31). Non-string keys (`ports: {80: http}`) flatten to `ports.80`, lists of maps flatten with indexes, and a key defined twice after flattening is an error.
+- A flag is looked up on the command in effect, then on each of its ancestors, then on the root; before, groups were skipped, so a group's flag written after the leaf was an unknown flag.
+- A bad value from an environment variable or the config file is a usage error (exit status 2), like the same value on the command line.
+
+### Fixed
+
+- Root and group flags were second-class: a `Required` flag on `app.Flags()` or on a group was never enforced for subcommands, environment variables and the config file never filled a group's flags, and `Context` getters could not see them. Commands with `IsExtensionCommand` set skip the required flags of the commands above them.
+- Values leaked between runs of one `App`: `rm --force` followed by `rm` still had `force` set. Each `Run` now restores every flag, and its bound variable, to its value before the first `Run`.
+- Flags registered with `app.Flags()` before `app.Root` was replaced were silently dropped (and `--project p1 ls` failed with `unknown command: moln p1`); they now move to the new root.
+- `app.Flags().SetStrict(true)` was undone by every `Flags()` call, which also raced with handlers calling it concurrently.
+- A first word equal to the root's name was always skipped, so `echo Echo` lost its argument and a child named like the app was unreachable. It is now skipped only when nothing else can use it.
+- An extension error was returned only by the first `Run`, and extensions added after the first `Run` (or by another extension) were never applied.
+- `Run` panicked on a `&Command{}` appended to `Children` after a `Run`, on a `Root` replaced after a `Run`, and on `--help` in a zero-value `App` (nil `Out`).
+- The built-in `--help` took `-h` from a `--host` flag on a hand-built `Command` or a `WithAppRoot` root.
+- Command names matched with Unicode case folding, so `ſtatus` (U+017F) ran `status` and a Kelvin sign matched `k`, which let argv words slip past allow and deny lists. Matching now folds ASCII letters only.
+- An unparsable `Default` (such as `"eighty"` for an int flag) was ignored silently and satisfied `Required`; it is now recorded in `FlagSet.Err` and counts as no default.
+- A bare `--force` skipped `Validate`, while `--force=true` ran it.
+- For a key that is not a flag, an empty environment variable hid the config file in `Context` getters.
+- A root with no `Run` handler whose only children came from extensions failed on a bare invocation instead of showing help.
+- `ctx.String` on a duration returned `90s` from the default but `1m30s` from the command line; getters now return the parsed value from every source.
+- Config file parse errors did not name the file.
+- `ConfigManager.Save` replaced a symbolic link with a regular file; it now writes the link's target, atomically, with mode 0600.
+- Documented that `Run(ctx, nil)` reads `os.Args` (tests should pass explicit arguments) and that `Run` is not safe for concurrent use on one `App`.
+- Doc comment examples for `App`, `Command`, `NewApp`, `NewGroup` and `FlagOption` did not compile.
+
 ## [2.5.0] - 2026-11-19
 
 ### Added
