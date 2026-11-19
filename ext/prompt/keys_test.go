@@ -2,11 +2,13 @@ package prompt_test
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/SCKelemen/clix/v2"
 	"github.com/SCKelemen/clix/v2/ext/prompt"
 )
 
@@ -100,7 +102,43 @@ func TestReadKeySequences(t *testing.T) {
 		{"SGR mouse", "\x1b[<0;10;5M", prompt.KeyUnknown},
 		{"X10 mouse", "\x1b[M !!", prompt.KeyUnknown},
 		{"keypad 5", "\x1b[E", prompt.KeyUnknown},
-		{"kitty key", "\x1b[97;5u", prompt.KeyUnknown},
+		// Kitty keyboard protocol (CSI code;mods u), which a program that
+		// crashed can leave on: keys read as their legacy encoding would.
+		// https://sw.kovidgoyal.net/kitty/keyboard-protocol/
+		{"kitty Ctrl-A", "\x1b[97;5u", prompt.Key{Rune: 1, Code: 1}},
+		{"kitty Ctrl-C", "\x1b[99;5u", prompt.KeyCtrlC},
+		{"kitty Ctrl-Shift-C", "\x1b[99;6u", prompt.KeyCtrlC},
+		{"kitty Ctrl-C with Caps Lock", "\x1b[99;69u", prompt.KeyCtrlC},
+		{"kitty Ctrl-C repeat", "\x1b[99;5:2u", prompt.KeyCtrlC},
+		{"kitty Ctrl-C release", "\x1b[99;5:3u", prompt.KeyUnknown},
+		{"kitty Ctrl-H", "\x1b[104;5u", prompt.KeyBackspace},
+		{"kitty Ctrl-1", "\x1b[49;5u", prompt.KeyUnknown},
+		{"kitty Ctrl-Alt-C", "\x1b[99;7u", prompt.KeyUnknown},
+		{"kitty Super-A", "\x1b[97;9u", prompt.KeyUnknown},
+		{"kitty Esc", "\x1b[27u", prompt.KeyEscape},
+		{"kitty Alt-Esc", "\x1b[27;3u", prompt.KeyUnknown},
+		{"kitty Enter", "\x1b[13u", prompt.KeyEnter},
+		{"kitty Shift-Enter", "\x1b[13;2u", prompt.KeyEnter},
+		{"kitty Tab", "\x1b[9u", prompt.KeyTab},
+		{"kitty Shift-Tab", "\x1b[9;2u", prompt.KeyShiftTab},
+		{"kitty Backspace", "\x1b[127u", prompt.KeyBackspace},
+		{"kitty Alt-Backspace", "\x1b[127;3u", prompt.KeyWordBackspace},
+		{"kitty Alt-b", "\x1b[98;3u", prompt.KeyWordLeft},
+		{"kitty Alt-f", "\x1b[102;3u", prompt.KeyWordRight},
+		{"kitty Alt-x", "\x1b[120;3u", prompt.KeyUnknown},
+		{"kitty Space", "\x1b[32u", prompt.KeySpace},
+		{"kitty a", "\x1b[97u", prompt.Key{Rune: 'a', Code: 'a'}},
+		{"kitty Shift-a", "\x1b[97;2u", prompt.Key{Rune: 'A', Code: 'A'}},
+		{"kitty Shift-1 with alternate key", "\x1b[49:33;2u", prompt.Key{Rune: '!', Code: '!'}},
+		{"kitty key with text", "\x1b[101;1;233u", prompt.Key{Rune: 'é'}},
+		{"kitty é", "\x1b[233u", prompt.Key{Rune: 'é'}},
+		{"kitty Left Shift alone", "\x1b[57441;2u", prompt.KeyUnknown},
+		{"kitty Up release", "\x1b[1;1:3A", prompt.KeyUnknown},
+		{"kitty Ctrl-Left press", "\x1b[1;5:1D", prompt.KeyWordLeft},
+		{"kitty F3", "\x1b[13~", prompt.KeyF3},
+		{"kitty flags reply", "\x1b[?1u", prompt.KeyUnknown},
+		{"kitty no code", "\x1b[;5u", prompt.KeyUnknown},
+		{"CSI 0~", "\x1b[0~", prompt.KeyUnknown},
 		{"paste markers outside a prompt", "\x1b[200~", prompt.KeyUnknown},
 		{"keypad Enter", "\x1bOM", prompt.KeyEnter},
 		{"keypad 7", "\x1bOw", prompt.Key{Rune: '7', Code: '7'}},
@@ -193,5 +231,27 @@ func TestKeyIsPrintable(t *testing.T) {
 		if k.IsPrintable() {
 			t.Errorf("%#v printable", k)
 		}
+	}
+}
+
+// With the kitty keyboard protocol left on by another program, a prompt
+// still works: Esc clears a text prompt and cancels a select, Ctrl-A goes
+// to the start of the line, and Ctrl-C cancels. Ghostty sends these as
+// CSI u sequences then (see testdata/keys).
+func TestKittyKeysInRawPrompt(t *testing.T) {
+	v, _, err := runRaw(t, []string{"a", "\x1b[27u", "b", "\x1b[97;5u", "x", "\r"}, clix.WithLabel("Name"))
+	if err != nil || v != "xb" {
+		t.Fatalf("text prompt: got %q, %v; want \"xb\"", v, err)
+	}
+	if _, _, err := runRaw(t, []string{"a", "\x1b[99;5u"}, clix.WithLabel("Name")); !errors.Is(err, clix.ErrCancelled) {
+		t.Fatalf("Ctrl-C: err = %v, want ErrCancelled", err)
+	}
+	if _, _, err := runRaw(t, []string{"\x1b[27u"}, clix.WithLabel("Pick"), prompt.Select(envs)); !errors.Is(err, clix.ErrCancelled) {
+		t.Fatalf("Esc in a select: err = %v, want ErrCancelled", err)
+	}
+	// A key release never acts: Enter is pressed once.
+	v, _, err = runRaw(t, []string{"\x1b[1;1:1B", "\x1b[1;1:3B", "\x1b[13u", "\x1b[13;1:3u"}, clix.WithLabel("Pick"), prompt.Select(envs))
+	if err != nil || v != "production" {
+		t.Fatalf("select with release events: got %q, %v; want production", v, err)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/SCKelemen/clix/v2"
@@ -254,21 +255,28 @@ func (r *keyReader) next() (keyEvent, error) {
 			r.unread(nb)
 		}
 		return keyEvent{key: KeyEnter}, nil
-	case b == '\n':
-		return keyEvent{key: KeyEnter}, nil
-	case b == '\t':
-		return keyEvent{key: KeyTab}, nil
-	case b == 0x7f || b == 0x08:
-		return keyEvent{key: KeyBackspace}, nil
-	case b == 0x03:
-		return keyEvent{key: KeyCtrlC}, nil
-	case b == ' ':
-		return keyEvent{key: KeySpace}, nil
 	case b < 0x80:
-		return keyEvent{key: Key{rune(b), b}}, nil
+		return keyEvent{key: byteKey(b)}, nil
 	default:
 		return r.utf8(b)
 	}
+}
+
+// byteKey maps a single byte below 0x80, other than ESC, to its key.
+func byteKey(b byte) Key {
+	switch b {
+	case '\r', '\n':
+		return KeyEnter
+	case '\t':
+		return KeyTab
+	case 0x7f, 0x08:
+		return KeyBackspace
+	case 0x03:
+		return KeyCtrlC
+	case ' ':
+		return KeySpace
+	}
+	return Key{rune(b), b}
 }
 
 // utf8 decodes a multi-byte UTF-8 character starting with lead.
@@ -400,32 +408,147 @@ func (r *keyReader) csi(alt bool) (keyEvent, error) {
 	}
 }
 
-// csiParams splits the numeric parameters of a control sequence; empty
-// parameters read as def. ok is false for private or intermediate bytes.
-func csiParams(raw []byte, def int) (params []int, ok bool) {
-	cur, have := 0, false
+// csiFields splits the parameters of a control sequence into fields
+// (separated by ';') of sub-parameters (separated by ':'), as ECMA-48
+// section 5.4.2 describes. An empty sub-parameter is -1. ok is false for
+// private markers (<, =, >, ?) and intermediate bytes, which no key
+// sequence uses.
+func csiFields(raw []byte) (fields [][]int, ok bool) {
+	field := []int{-1}
 	for _, b := range raw {
+		last := len(field) - 1
 		switch {
 		case b >= '0' && b <= '9':
-			cur = cur*10 + int(b-'0')
-			have = true
-			if cur > 1<<16 {
+			if field[last] < 0 {
+				field[last] = 0
+			}
+			field[last] = field[last]*10 + int(b-'0')
+			if field[last] > 1<<21 {
 				return nil, false
 			}
-		case b == ';' || b == ':':
-			if !have {
-				cur = def
-			}
-			params = append(params, cur)
-			cur, have = 0, false
-		default: // private markers (<, =, >, ?) and intermediates
+		case b == ':':
+			field = append(field, -1)
+		case b == ';':
+			fields = append(fields, field)
+			field = []int{-1}
+		default:
 			return nil, false
 		}
 	}
-	if !have {
-		cur = def
+	return append(fields, field), true
+}
+
+// firstParams returns the first sub-parameter of each field; empty ones
+// read as def.
+func firstParams(fields [][]int, def int) []int {
+	params := make([]int, len(fields))
+	for i, f := range fields {
+		params[i] = f[0]
+		if params[i] < 0 {
+			params[i] = def
+		}
 	}
-	return append(params, cur), true
+	return params
+}
+
+// kittyKey maps a key in the kitty keyboard protocol,
+// CSI code[:shifted[:base]] [; mods[:event] [; text]] u, which a terminal
+// sends for Esc and for Ctrl or Alt with a key (or for every key, with
+// higher flags) while a program has the protocol on. A program that
+// crashed can leave it on, so a prompt must still read these keys; it
+// maps them to the keys their legacy encoding gives.
+// https://sw.kovidgoyal.net/kitty/keyboard-protocol/#an-overview
+func kittyKey(fields [][]int, alt bool) Key {
+	code := fields[0][0]
+	if code <= 0 {
+		return KeyUnknown
+	}
+	mods := 0
+	if len(fields) > 1 && fields[1][0] > 1 {
+		mods = fields[1][0] - 1
+	}
+	// Bits: 1 Shift, 2 Alt, 4 Ctrl, 8 Super, 16 Hyper, 32 Meta, 64 Caps
+	// Lock, 128 Num Lock. The lock keys do not change the key.
+	mods &^= 64 | 128
+	shift, ctrl := mods&1 != 0, mods&4 != 0
+	alt = alt || mods&2 != 0
+	if mods&^7 != 0 {
+		return KeyUnknown // Super, Hyper or Meta: no prompt binding
+	}
+	switch code {
+	case 27:
+		if mods == 0 && !alt {
+			return KeyEscape
+		}
+		return KeyUnknown
+	case 13:
+		if alt {
+			return KeyUnknown
+		}
+		return KeyEnter
+	case 9:
+		switch {
+		case alt || ctrl:
+			return KeyUnknown
+		case shift:
+			return KeyShiftTab
+		}
+		return KeyTab
+	case 127, 8:
+		if alt {
+			return KeyWordBackspace
+		}
+		return KeyBackspace
+	}
+	if code >= 0xe000 && code <= 0xf8ff {
+		// Private-use code points stand for keys with no character
+		// (keypad, media and modifier keys).
+		return KeyUnknown
+	}
+	lower := rune(code)
+	if lower >= 'A' && lower <= 'Z' {
+		lower += 'a' - 'A'
+	}
+	switch {
+	case ctrl && alt:
+		return KeyUnknown
+	case ctrl:
+		// Ctrl with a letter is the control character the legacy
+		// encoding sends: Ctrl-C cancels, Ctrl-A goes to the start.
+		if lower >= 'a' && lower <= 'z' {
+			return byteKey(byte(lower-'a') + 1)
+		}
+		return KeyUnknown
+	case alt:
+		switch lower {
+		case 'b':
+			return KeyWordLeft
+		case 'f':
+			return KeyWordRight
+		}
+		return KeyUnknown
+	}
+	// A character key, reported only with "report all keys as escape
+	// codes": prefer the text the terminal reports (field 3), then the
+	// shifted key (with "report alternate keys").
+	ch := rune(code)
+	if len(fields) > 2 && fields[2][0] > 0 {
+		ch = rune(fields[2][0])
+	} else if shift && len(fields[0]) > 1 && fields[0][1] > 0 {
+		ch = rune(fields[0][1])
+	} else if shift && ch >= 'a' && ch <= 'z' {
+		ch -= 'a' - 'A'
+	}
+	if ch < 0x80 {
+		if ch < 0x20 {
+			return KeyUnknown
+		}
+		return byteKey(byte(ch))
+	}
+	if !utf8.ValidRune(ch) || !unicode.IsPrint(ch) {
+		return KeyUnknown
+	}
+	return Key{Rune: ch}
 }
 
 // csiKey maps a complete control sequence to a key.
@@ -439,10 +562,20 @@ func (r *keyReader) csiKey(raw []byte, final byte, alt bool) (keyEvent, error) {
 		}
 		return keyEvent{key: KeyUnknown}, nil
 	}
-	params, ok := csiParams(raw, 1)
+	fields, ok := csiFields(raw)
 	if !ok {
 		return keyEvent{key: KeyUnknown}, nil
 	}
+	// With the kitty keyboard protocol's event types on, the modifier
+	// field carries the event as a sub-parameter (mods:event); a key
+	// release (3) is not a key press.
+	if len(fields) > 1 && len(fields[1]) > 1 && fields[1][1] == 3 {
+		return keyEvent{key: KeyUnknown}, nil
+	}
+	if final == 'u' {
+		return keyEvent{key: kittyKey(fields, alt)}, nil
+	}
+	params := firstParams(fields, 1)
 	mod := 1
 	if len(params) > 1 {
 		mod = params[1]
@@ -634,9 +767,12 @@ func functionKey(n int) Key {
 // It understands the escape sequences terminals send for arrows, Home,
 // End, Insert, Delete, Page Up/Down, Shift-Tab and F1-F12, in both normal
 // and application cursor mode (ESC [ and ESC O), with xterm modifier
-// parameters, plus the Linux console's F1-F5. Ctrl or Alt with Left/Right
-// and Alt-b/Alt-f read as KeyWordLeft/KeyWordRight. UTF-8 characters are
-// decoded whole. A lone Esc is reported after a short pause (50 ms)
+// parameters, plus the Linux console's F1-F5. Kitty keyboard protocol
+// keys (CSI code;mods u), which a terminal sends while another program,
+// perhaps one that crashed, has that protocol on, read as their legacy
+// encoding would, so Ctrl-C and Esc still work; key releases are ignored.
+// Ctrl or Alt with Left/Right and Alt-b/Alt-f read as
+// KeyWordLeft/KeyWordRight. UTF-8 characters are decoded whole. A lone Esc is reported after a short pause (50 ms)
 // when nothing follows it, so the next key is not swallowed. Sequences it
 // does not recognize, and Alt with other keys, return KeyUnknown with a nil
 // error, never KeyEscape; callers should ignore KeyUnknown.
