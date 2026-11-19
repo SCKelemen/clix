@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `validation.ISO8601Time` and `validation.ISO8601Duration` check values with the `iso8601` package, and their errors now say what is wrong and where, such as `month 13 is out of range 01-12` or `only seconds may have a fraction`. `ISO8601Duration` accepts exactly the durations it accepted before, and a differential test pins that. `ISO8601Time` keeps its RFC 3339 contract, `YYYY-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`. It now rejects four forms that are not RFC 3339 but that `time.Parse(time.RFC3339, …)` let through ([golang/go#54580](https://go.dev/issue/54580)): a one-digit hour (`T8:30:00Z`), a comma before the fraction (`00,5Z`), and an offset hour of 24 or offset minute of 60 (`+24:00`, `+23:60`). Everything else it accepted, and only that, is still accepted.
+- JSON and YAML output format durations with `iso8601.FormatDuration`. The output is unchanged, and a test compares the old and new formatters.
+
 ## [2.8.0] - 2026-11-19
 
 ### Added
