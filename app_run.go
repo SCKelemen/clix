@@ -206,13 +206,16 @@ func (a *App) Run(ctx context.Context, args []string) error {
 func (a *App) parseCommandLine(args []string) (path []*Command, positionals []string, stray string, err error) {
 	root := a.Root
 	path = []*Command{root}
-	scope := make([]int, len(args))   // depth on path of the command in effect for each flag token, plus one
-	isPath := make([]bool, len(args)) // tokens that name the command path
+	scope := make([]int, len(args))    // depth on path of the command in effect for each flag token, plus one
+	isPath := make([]bool, len(args))  // tokens that name the command path
+	isValue := make([]bool, len(args)) // tokens pass 1 skipped as a flag's value
+	scanned := len(args)               // pass 1 looked at args[:scanned]
 	sawWord := false
 
 	// Pass 1: find the command path.
 scan:
 	for i := 0; i < len(args); i++ {
+		scanned = i + 1
 		tok := args[i]
 		switch {
 		case tok == "--":
@@ -225,8 +228,9 @@ scan:
 				break scan
 			}
 			scope[i] = len(path)
-			if ok && uses[len(uses)-1].needsNext {
+			if ok && uses[len(uses)-1].needsNext && i+1 < len(args) {
 				i++ // skip the flag's value
+				isValue[i] = true
 			}
 		default:
 			if !sawWord {
@@ -295,6 +299,14 @@ scan:
 			continue
 		}
 		for _, u := range uses {
+			// Both passes must agree on which tokens are values. A cluster
+			// written before the command, such as -fp in "moln -fp deploy"
+			// with -f from deploy and -p from the root, could not be read
+			// in pass 1, so the next token was not set aside as -p's value
+			// and may be the command itself.
+			if u.needsNext && i+1 < scanned && !isValue[i+1] {
+				return nil, nil, "", usageErrorf("%s needs a value: write %s=VALUE, or put the flags after the command", u.name, tok)
+			}
 			err := setFromArg(u.flag, u.name, u.value, u.hasValue, func() (string, bool) {
 				if i+1 >= len(args) {
 					return "", false

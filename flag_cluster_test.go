@@ -2,6 +2,7 @@ package clix_test
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/SCKelemen/clix/v2"
@@ -74,5 +75,27 @@ func TestFlagSetParseClustersAndNumbers(t *testing.T) {
 	}
 	if _, err := fs.Parse([]string{"-abz"}); err == nil {
 		t.Fatal("unknown letter in a cluster was accepted")
+	}
+}
+
+// A cluster written before the command, mixing the command's switch with
+// a root flag that takes a value, used the command name as the value:
+// "moln -fp deploy" ran deploy with --project=deploy.
+func TestClusterBeforeCommandDoesNotEatTheCommand(t *testing.T) {
+	for _, args := range [][]string{{"-fp", "deploy"}, {"-fp", "deploy", "prod"}, {"-fr", "deploy"}} {
+		app, _ := newTestApp(t, "moln")
+		var project, rootRegion string
+		ran := false
+		app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "project", Short: "p"}, Value: &project})
+		app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "root-region", Short: "r"}, Value: &rootRegion})
+		deploy := clix.NewCommand("deploy", clix.WithCommandRun(mark(&ran)))
+		deploy.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "force", Short: "f"}})
+		deploy.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "target", Positional: true}})
+		app.Root.AddCommand(deploy)
+		err := app.Run(bg, args)
+		want := args[0][2:] // the value letter
+		if err == nil || clix.ExitCode(err) != 2 || !strings.Contains(err.Error(), "-"+want+" needs a value: write "+args[0]+"=VALUE") || ran {
+			t.Errorf("Run(%q) = %v, ran = %v, project = %q, root-region = %q", args, err, ran, project, rootRegion)
+		}
 	}
 }

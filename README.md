@@ -423,6 +423,7 @@ moln [--project/-p] [--verbose/-v]
 - `moln project --org acme ls` and `moln project ls --org acme` both set the group's `--org`.
 - When a command and one of its ancestors define the same name, a token after the command sets the command's flag and a token before it sets the ancestor's; `Context` getters prefer whichever was set on the command line. `App.Validate` reports this shadowing.
 - A flag written before the command that defines it (`moln --force deploy`) is accepted only if it needs no separate value: a switch, or `--name=value`. While matching the path, the parser cannot know that the next token is that flag's value, so `moln --org acme project ls` reads `acme` as a word and fails with `unknown command: moln acme`.
+- For the same reason, a cluster written before the command that mixes that command's switches with a flag that takes a value cannot take its value from the next token: `moln -fp deploy` (deploy's `-f`, the root's `-p`) fails with `-p needs a value: write -fp=VALUE, or put the flags after the command`. `moln -fp=p1 deploy` and `moln deploy -fp p1` work.
 
 **Unknown flags and extra arguments.**
 
