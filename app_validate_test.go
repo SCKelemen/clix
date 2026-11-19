@@ -105,3 +105,33 @@ func TestInvalidDefaultDoesNotSatisfyRequired(t *testing.T) {
 		t.Fatalf("Run = %v, ctx.String(port) = %q", err, got)
 	}
 }
+
+// Validate missed names that cannot be typed, a short name longer than
+// one letter (which hides a cluster), the same short name on a command and
+// an ancestor for different flags, and a command that can do nothing.
+func TestValidateReportsMoreMistakes(t *testing.T) {
+	app, _ := newTestApp(t, "v")
+	c := clix.NewCommand("c", clix.WithCommandRun(noop))
+	c.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "aa", Short: "a"}})
+	c.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "bb", Short: "b"}})
+	c.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "abab", Short: "ab"}})
+	c.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "dry=run"}})
+	c.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "-x"}})
+	c.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "two words"}})
+	c.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "eq", Short: "="}})
+	app.Flags().BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "verbose", Short: "a"}})
+	shared := clix.NewCommand("ls", clix.WithCommandRun(noop))
+	app.Root.AddCommand(clix.NewGroup("g1", "", shared))
+	app.Root.AddCommand(clix.NewGroup("g2", "", shared))
+	app.Root.AddCommand(c)
+	app.Root.AddCommand(clix.NewCommand("empty"))
+	assertValidate(t, app,
+		`v c: flag --abab: short name -ab is longer than one letter; -ab then means --abab instead of the cluster of -a -b`,
+		`v c: flag name "dry=run" contains "=", so --dry=run cannot be typed on a command line`,
+		`v c: flag name "-x" starts with "-", so ---x cannot be typed on a command line`,
+		`v c: flag name "two words" contains white space, so --two words cannot be typed on a command line`,
+		`v c: flag --eq: short name "=" contains "=", so it cannot be typed`,
+		`v c: flag --aa: -a is also the short name of --verbose on "v"; before the command name -a means --verbose, after it --aa`,
+		`v empty: command has no Run handler and no children, so running it fails`,
+	)
+}

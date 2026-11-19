@@ -3,6 +3,9 @@ package clix
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Validate checks the command tree for definition mistakes that Run
@@ -44,32 +47,60 @@ func (a *App) Validate() error {
 		errs = append(errs, fmt.Errorf("clix: extension: %w", err))
 	}
 	a.prepareTree()
-	a.validateCommand(a.Root, a.Root.Name, map[string]string{}, &errs)
+	a.validateCommand(a.Root, a.Root.Name, map[string]ancestorFlag{}, &errs)
 	return errors.Join(errs...)
 }
 
+// ancestorFlag is a flag defined on a command above the one being checked.
+type ancestorFlag struct {
+	flag *Flag
+	path string // the path of the command that defines it
+}
+
 // validateCommand checks cmd and its subtree. inherited maps the long
-// flag names defined on cmd's ancestors to the path of the command that
-// defines them.
-// path is cmd's path as reached in this walk, since a command shared by
-// several groups is checked once under each.
-func (a *App) validateCommand(cmd *Command, path string, inherited map[string]string, errs *[]error) {
+// ("--name") and short ("-n") flag names defined on cmd's ancestors to
+// the flags. path is cmd's path as reached in this walk, since a command
+// shared by several groups is checked once under each.
+func (a *App) validateCommand(cmd *Command, path string, inherited map[string]ancestorFlag, errs *[]error) {
 	for _, err := range append(append([]error(nil), cmd.Flags.errs...), cmd.Flags.conflicts...) {
 		*errs = append(*errs, fmt.Errorf("%s: %w", path, err))
 	}
+	report := func(format string, args ...any) {
+		*errs = append(*errs, fmt.Errorf("%s: "+format, append([]any{path}, args...)...))
+	}
 
-	own := make(map[string]string, len(inherited)+len(cmd.Flags.flags))
-	for name, where := range inherited {
-		own[name] = where
+	if cmd.Run == nil && len(cmd.Children) == 0 {
+		report("command has no Run handler and no children, so running it fails")
+	}
+
+	own := make(map[string]ancestorFlag, len(inherited)+2*len(cmd.Flags.flags))
+	for name, af := range inherited {
+		own[name] = af
 	}
 	for _, f := range cmd.Flags.flags {
 		if f.Name == "help" {
 			continue
 		}
-		if where, ok := inherited[f.Name]; ok {
-			*errs = append(*errs, fmt.Errorf("%s: flag --%s is also defined on %q; before the command name --%s sets %q's flag, after it this command's, so the two can disagree", path, f.Name, where, f.Name, where))
+		if bad := untypable(f.Name); bad != "" {
+			report("flag name %q %s, so --%s cannot be typed on a command line", f.Name, bad, f.Name)
 		}
-		own[f.Name] = path
+		if short := f.wantShort; short != "" {
+			if bad := untypable(short); bad != "" {
+				report("flag --%s: short name %q %s, so it cannot be typed", f.Name, short, bad)
+			} else if utf8.RuneCountInString(short) > 1 {
+				report("flag --%s: short name -%s is longer than one letter; -%s then means --%s instead of the cluster of -%s", f.Name, short, short, f.Name, strings.Join(strings.Split(short, ""), " -"))
+			}
+		}
+		if af, ok := inherited["--"+f.Name]; ok {
+			report("flag --%s is also defined on %q; before the command name --%s sets %q's flag, after it this command's, so the two can disagree", f.Name, af.path, f.Name, af.path)
+		}
+		if f.Short != "" {
+			if af, ok := inherited["-"+f.Short]; ok && af.flag.Name != f.Name {
+				report("flag --%s: -%s is also the short name of --%s on %q; before the command name -%s means --%s, after it --%s", f.Name, f.Short, af.flag.Name, af.path, f.Short, af.flag.Name, f.Name)
+			}
+			own["-"+f.Short] = ancestorFlag{f, path}
+		}
+		own["--"+f.Name] = ancestorFlag{f, path}
 	}
 
 	match := nameMatcher(a.CaseSensitive)
@@ -103,4 +134,18 @@ func (a *App) validateCommand(cmd *Command, path string, inherited map[string]st
 			a.validateCommand(child, path+" "+child.Name, own, errs)
 		}
 	}
+}
+
+// untypable describes why name cannot be written as a flag on a command
+// line, or returns "".
+func untypable(name string) string {
+	switch {
+	case strings.ContainsRune(name, '='):
+		return "contains \"=\""
+	case strings.HasPrefix(name, "-"):
+		return "starts with \"-\""
+	case strings.IndexFunc(name, unicode.IsSpace) >= 0:
+		return "contains white space"
+	}
+	return ""
 }
