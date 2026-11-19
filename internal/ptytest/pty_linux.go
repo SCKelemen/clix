@@ -19,7 +19,7 @@ func Open() (master, tty *os.File, err error) {
 	master = os.NewFile(uintptr(fd), "/dev/ptmx")
 	defer func() {
 		if err != nil {
-			master.Close()
+			_ = master.Close()
 		}
 	}()
 	if err := unix.IoctlSetPointerInt(fd, unix.TIOCSPTLCK, 0); err != nil {
