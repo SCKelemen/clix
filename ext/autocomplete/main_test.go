@@ -120,6 +120,9 @@ func newProbeApp(out, errw io.Writer) *clix.App {
 	// User aliases come from the config file; only the alias tests write
 	// one (see alias_shells_test.go).
 	app.ExpandAliases = true
+	// Plugins come from PATH; only the plugin tests put one there (see
+	// plugin_shells_test.go).
+	app.Plugins = true
 	app.AddExtension(Extension{})
 	return app
 }

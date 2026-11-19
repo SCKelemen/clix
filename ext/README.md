@@ -73,6 +73,13 @@ Adds gh-style command aliases, stored in the config file under `aliases.<name>`:
 
 Aliases never run a shell (there is no `--shell`, and `!` expansions are refused), never shadow a command, and only ever expand into one of the app's commands. See "Alias Extension" in the main README for the full rules.
 
+### Plugin Extension (`clix/ext/plugin`)
+
+Runs kubectl- and gh-style plugins: `cli foo args...` runs the executable `cli-foo` from PATH when `foo` is not a command, with the app's standard streams, and passes on its exit status.
+- `cli plugin list` - List the plugins found on PATH, with warnings for shadowed, overridden and insecure ones
+
+Only absolute PATH directories are searched, never the current directory; plugins never shadow commands; a world-writable plugin is refused. See "Plugin Extension" in the main README for the security model.
+
 ### Config Extension (`clix/ext/config`)
 
 Adds configuration management commands using dot-separated key paths (e.g. `project.default`):

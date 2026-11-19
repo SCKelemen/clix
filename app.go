@@ -125,6 +125,14 @@ type App struct {
 	// commands, and it never runs a shell.
 	ExpandAliases bool
 
+	// Plugins makes Run run the executable <Name>-<word> from PATH, as
+	// kubectl and gh do, when the first argument is a word that names no
+	// command: "myapp foo a b" runs "myapp-foo a b". Plugins never shadow
+	// commands and are never looked up in the current directory; see
+	// LookupPlugin, PluginEnv and ext/plugin, which sets this field and
+	// adds "plugin list".
+	Plugins bool
+
 	// ProgressMode controls how Context.Progress reports long-running
 	// work. The default, ProgressAuto, animates a spinner when Err is a
 	// terminal and prints one plain line otherwise; ProgressPlain always
@@ -152,6 +160,8 @@ type App struct {
 
 	progress progressBoard // the progress indicators writing to Err (see Context.Progress)
 	inMain   atomic.Bool   // Main is running the app, so it handles SIGINT and SIGTERM
+
+	ranPlugin bool // the last Run ran a plugin, whose exit status Main passes on
 }
 
 // AppOption configures an App using the functional options pattern.
