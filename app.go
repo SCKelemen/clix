@@ -2,7 +2,6 @@ package clix
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -53,9 +52,24 @@ type App struct {
 	// Configuration values are automatically loaded and available via Context getters.
 	Config *ConfigManager
 
-	// Prompter handles interactive user input. Defaults to TextPrompter.
-	// Use the prompt extension to enable advanced prompts (select, multi-select).
+	// ConfigPath overrides the location of the config file. When empty,
+	// config.yaml in $XDG_CONFIG_HOME/<name> (or ~/.config/<name>) is used.
+	// The <EnvPrefix>_CONFIG environment variable, when set, takes
+	// precedence over ConfigPath. See ConfigFile.
+	ConfigPath string
+
+	// Prompter handles interactive user input. Defaults to a TextPrompter
+	// that reads from In and writes prompts to Err, keeping Out clean for
+	// data. Use the prompt extension to enable advanced prompts (select,
+	// multi-select).
 	Prompter Prompter
+
+	// Interactive controls whether Run prompts for missing required flags.
+	// The default, InteractiveAuto, prompts only when In is a terminal, so
+	// scripts and CI get a *MissingFlagsError instead of a hung process.
+	// The <EnvPrefix>_DISABLE_PROMPTS environment variable turns prompting
+	// off in every mode. See IsInteractive.
+	Interactive InteractiveMode
 
 	// Out is the writer for standard output (defaults to os.Stdout).
 	Out io.Writer
@@ -141,7 +155,6 @@ func NewApp(name string, opts ...AppOption) *App {
 
 	app.EnvPrefix = strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
 	app.Config = NewConfigManager(name)
-	app.Prompter = TextPrompter{In: app.In, Out: app.Out}
 	app.DefaultTheme = DefaultPromptTheme
 	app.Styles = DefaultStyles
 
@@ -159,6 +172,17 @@ func NewApp(name string, opts ...AppOption) *App {
 		app.Root = NewCommand(name)
 	}
 
+	// Build the default prompter only now, so it uses the streams chosen by
+	// WithAppIn/WithAppErr, and never replaces one set by WithAppPrompter.
+	// Prompts go to Err so that Out stays clean for data.
+	if app.Prompter == nil {
+		promptOut := app.Err
+		if promptOut == nil {
+			promptOut = app.Out
+		}
+		app.Prompter = TextPrompter{In: app.In, Out: promptOut}
+	}
+
 	// Ensure root has a FlagSet initialized
 	// Root flags are non-strict by default to allow test flags and other system flags
 	if app.Root.Flags == nil {
@@ -167,15 +191,19 @@ func NewApp(name string, opts ...AppOption) *App {
 	}
 
 	// Standard flags on root command (accessible via app.Flags()).
-	var help bool
-	app.Flags().BoolVar(BoolVarOptions{
-		FlagOptions: FlagOptions{
-			Name:  "help",
-			Short: "h",
-			Usage: "Show help information",
-		},
-		Value: &help,
-	})
+	// NewCommand and NewGroup already register --help, so only add it when
+	// the root does not have one yet (for example, a hand-built Command).
+	if app.Flags().lookup("help") == nil {
+		var help bool
+		app.Flags().BoolVar(BoolVarOptions{
+			FlagOptions: FlagOptions{
+				Name:  "help",
+				Short: "h",
+				Usage: "Show help information",
+			},
+			Value: &help,
+		})
+	}
 
 	return app
 }
@@ -229,6 +257,9 @@ const (
 	SourceConfigFile
 	// SourceDefault indicates the value came from a flag's default value.
 	SourceDefault
+	// SourcePrompt indicates the value was entered at an interactive prompt
+	// for a missing required flag.
+	SourcePrompt
 )
 
 // String returns a human-readable representation of the source.
@@ -244,6 +275,8 @@ func (s Source) String() string {
 		return "config file"
 	case SourceDefault:
 		return "default"
+	case SourcePrompt:
+		return "prompt"
 	default:
 		return "unknown"
 	}
@@ -294,51 +327,45 @@ type Context struct {
 // command flags > app flags > env > config > defaults.
 // Returns the raw string value, its source, and whether it was found.
 func (ctx *Context) resolveValue(key string) (string, Source, bool) {
-	// First check command-level flags (only if explicitly set)
-	if ctx.Command != nil && ctx.Command.Flags != nil {
-		if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.set {
-			if v, ok := ctx.Command.Flags.String(key); ok {
-				return v, SourceCommandFlag, true
+	// First check values the user supplied directly: command-level flags,
+	// then root flags. A value typed at a prompt for a missing required flag
+	// counts as supplied directly but reports SourcePrompt.
+	if flag := ctx.commandFlags().lookup(key); flag != nil {
+		if flag.cliSet {
+			return flag.Value.String(), SourceCommandFlag, true
+		}
+		if flag.set && flag.source == SourcePrompt {
+			return flag.Value.String(), SourcePrompt, true
+		}
+	}
+	if ctx.App != nil {
+		if flag := ctx.App.Flags().lookup(key); flag != nil {
+			if flag.cliSet {
+				return flag.Value.String(), SourceAppFlag, true
+			}
+			if flag.set && flag.source == SourcePrompt {
+				return flag.Value.String(), SourcePrompt, true
 			}
 		}
 	}
 
-	// Then check root flags (only if explicitly set)
+	// Then check environment variables: a flag's EnvVar, its EnvVars
+	// aliases, and the APP_KEY default, in that order.
 	if ctx.App != nil {
-		rootFlags := ctx.App.Flags()
-		if rootFlags != nil {
-			if flag := rootFlags.lookup(key); flag != nil && flag.set {
-				if v, ok := rootFlags.String(key); ok {
-					return v, SourceAppFlag, true
-				}
-			}
-		}
-	}
-
-	// Then check environment variables
-	// First check if any flag defines an EnvVar for this key
-	if ctx.App != nil {
-		// Check command flags for EnvVar
-		if ctx.Command != nil && ctx.Command.Flags != nil {
-			if flag := ctx.Command.Flags.lookup(key); flag != nil && flag.EnvVar != "" {
-				if val, ok := os.LookupEnv(flag.EnvVar); ok {
+		isFlag := false
+		for _, fs := range []*FlagSet{ctx.commandFlags(), ctx.App.Flags()} {
+			if flag := fs.lookup(key); flag != nil {
+				isFlag = true
+				if _, val, ok := ctx.App.lookupFlagEnv(flag); ok {
 					return val, SourceEnvVar, true
 				}
 			}
 		}
-		// Check root flags for EnvVar
-		rootFlags := ctx.App.Flags()
-		if rootFlags != nil {
-			if flag := rootFlags.lookup(key); flag != nil && flag.EnvVar != "" {
-				if val, ok := os.LookupEnv(flag.EnvVar); ok {
-					return val, SourceEnvVar, true
-				}
+		// Keys that are not flags only have the APP_KEY default.
+		if !isFlag {
+			if val, ok := os.LookupEnv(ctx.App.envVarName(key)); ok {
+				return val, SourceEnvVar, true
 			}
-		}
-		// Check default env var pattern (APP_KEY)
-		upper := fmt.Sprintf("%s_%s", ctx.App.EnvPrefix, strings.ToUpper(strings.ReplaceAll(key, "-", "_")))
-		if val, ok := os.LookupEnv(upper); ok {
-			return val, SourceEnvVar, true
 		}
 	}
 
@@ -367,6 +394,14 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	}
 
 	return "", 0, false
+}
+
+// commandFlags returns the executing command's flag set, or nil.
+func (ctx *Context) commandFlags() *FlagSet {
+	if ctx.Command == nil {
+		return nil
+	}
+	return ctx.Command.Flags
 }
 
 // String retrieves a string configuration value with the given key, looking at
@@ -515,6 +550,12 @@ func WithAppIn(in io.Reader) AppOption {
 	return appInOption{in: in}
 }
 
+// WithAppInteractive sets App.Interactive, which controls whether Run
+// prompts for missing required flags.
+func WithAppInteractive(mode InteractiveMode) AppOption {
+	return appInteractiveOption(mode)
+}
+
 // Internal option types
 
 type appDescriptionOption string
@@ -589,4 +630,10 @@ type appInOption struct {
 
 func (o appInOption) ApplyApp(app *App) {
 	app.In = o.in
+}
+
+type appInteractiveOption InteractiveMode
+
+func (o appInteractiveOption) ApplyApp(app *App) {
+	app.Interactive = InteractiveMode(o)
 }

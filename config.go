@@ -3,12 +3,13 @@ package clix
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 )
 
 // ConfigManager loads and stores configuration from YAML files and environment variables.
@@ -117,8 +118,10 @@ func NewConfigManager(name string) *ConfigManager {
 	}
 }
 
-// Load reads configuration from the provided path. Missing files are ignored.
-// The file format is YAML. Nested structures are flattened using dot notation.
+// Load reads configuration from the provided path. Missing and empty files
+// are ignored. The file format is YAML. Nested structures are flattened
+// using dot notation, and null values (for example, "project:" with nothing
+// after it) are skipped, so they never count as configured.
 func (m *ConfigManager) Load(path string) error {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -132,6 +135,10 @@ func (m *ConfigManager) Load(path string) error {
 	var data map[string]interface{}
 	decoder := yaml.NewDecoder(file)
 	if err := decoder.Decode(&data); err != nil {
+		if errors.Is(err, io.EOF) {
+			// An empty file (or one holding only comments) has no documents.
+			return nil
+		}
 		return fmt.Errorf("failed to parse config file as YAML: %w", err)
 	}
 
@@ -151,6 +158,9 @@ func flattenYAML(prefix string, data map[string]interface{}, result map[string]s
 		}
 
 		switch v := value.(type) {
+		case nil:
+			// "key:" with no value is YAML null; treat it as unset.
+			continue
 		case map[string]interface{}:
 			// Recurse into nested maps
 			flattenYAML(fullKey, v, result)
@@ -158,7 +168,9 @@ func flattenYAML(prefix string, data map[string]interface{}, result map[string]s
 			// For arrays, convert to comma-separated string
 			parts := make([]string, len(v))
 			for i, item := range v {
-				parts[i] = fmt.Sprintf("%v", item)
+				if item != nil {
+					parts[i] = fmt.Sprintf("%v", item)
+				}
 			}
 			result[fullKey] = strings.Join(parts, ",")
 		default:
@@ -170,41 +182,58 @@ func flattenYAML(prefix string, data map[string]interface{}, result map[string]s
 
 // Save writes the configuration to the provided path in YAML format.
 // Dot-notation keys (e.g., "project.name") are saved as flat key:value pairs.
+//
+// Config files often hold credentials or project identifiers, so a missing
+// directory is created with mode 0700 and the file is written with mode
+// 0600. The file is replaced atomically via a temporary file and rename.
 func (m *ConfigManager) Save(path string) error {
 	if m.values == nil {
 		return nil
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
 
-	tmp := path + ".tmp"
-	file, err := os.Create(tmp)
+	// os.CreateTemp creates the file with mode 0600.
+	file, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	tmp := file.Name()
+	if err := m.writeYAML(file); err != nil {
+		file.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := file.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
+}
 
+// writeYAML encodes the values as a flat YAML mapping.
+func (m *ConfigManager) writeYAML(w io.Writer) error {
 	// Convert flat map[string]string to map[string]interface{} for YAML encoding
-	data := make(map[string]interface{})
+	data := make(map[string]interface{}, len(m.values))
 	for k, v := range m.values {
 		data[k] = v
 	}
 
-	encoder := yaml.NewEncoder(file)
+	encoder := yaml.NewEncoder(w)
 	encoder.SetIndent(2)
 	if err := encoder.Encode(data); err != nil {
-		file.Close()
+		_ = encoder.Close()
 		return err
 	}
-
-	if err := file.Close(); err != nil {
-		return err
-	}
-
-	return os.Rename(tmp, path)
+	// Close flushes any output the encoder is still buffering.
+	return encoder.Close()
 }
 
 // Get retrieves a value.
@@ -273,23 +302,62 @@ func (m *ConfigManager) Values() map[string]string {
 //		clix.ConfigSchema{Key: "project.retries"},
 //		clix.WithConfigType(clix.ConfigInt),
 //	)
+//
+// Functional options and struct fields that follow a key apply to that key,
+// so WithConfigKey("a"), WithConfigType(ConfigInt) registers one schema. A
+// new key (from WithConfigKey or a ConfigSchema with a different Key)
+// starts the next schema, which is how several schemas are registered in
+// one call.
 func (m *ConfigManager) RegisterSchema(entries ...ConfigSchemaOption) {
 	if m.schemas == nil {
 		m.schemas = make(map[string]ConfigSchema)
 	}
-	for _, entry := range entries {
-		var schema ConfigSchema
-		switch v := entry.(type) {
-		case ConfigSchema:
-			schema = v
-		default:
-			entry.ApplyConfigSchema(&schema)
+
+	var current ConfigSchema
+	flush := func() {
+		if current.Key != "" {
+			m.schemas[current.Key] = current
 		}
-		if schema.Key == "" {
+		current = ConfigSchema{}
+	}
+
+	for _, entry := range entries {
+		if entry == nil {
 			continue
 		}
-		m.schemas[schema.Key] = schema
+		if p, ok := entry.(*ConfigSchema); ok {
+			if p == nil {
+				continue
+			}
+			entry = *p
+		}
+
+		if v, ok := entry.(ConfigSchema); ok && v.Key != "" {
+			// A complete struct describes its own key. Options given before
+			// any key carry over to it unless the struct sets them itself.
+			pending := current
+			if pending.Key != "" {
+				flush()
+				pending = ConfigSchema{}
+			}
+			current = v
+			if current.Type == ConfigString {
+				current.Type = pending.Type
+			}
+			if current.Validate == nil {
+				current.Validate = pending.Validate
+			}
+			continue
+		}
+
+		var probe ConfigSchema
+		entry.ApplyConfigSchema(&probe)
+		if probe.Key != "" && current.Key != "" && probe.Key != current.Key {
+			flush()
+		}
+		entry.ApplyConfigSchema(&current)
 	}
+	flush()
 }
 
 // NormalizeValue validates and canonicalises a value according to the schema (if present).

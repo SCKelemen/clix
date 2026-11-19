@@ -97,6 +97,8 @@ func TestPrincipleRequiredFlagsPrompt(t *testing.T) {
 
 		// Mock prompter that returns a value
 		var prompted bool
+		// The fake prompter stands in for a terminal, so opt in to prompting.
+		app.Interactive = InteractiveAlways
 		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
 			prompted = true
 			return "test-value", nil
@@ -144,6 +146,8 @@ func TestPrincipleRequiredFlagsPrompt(t *testing.T) {
 		app.Root = root
 
 		var prompted bool
+		// The fake prompter stands in for a terminal, so opt in to prompting.
+		app.Interactive = InteractiveAlways
 		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
 			prompted = true
 			return "unexpected", nil
@@ -615,6 +619,8 @@ func TestPositionalIntegration(t *testing.T) {
 
 		// No args → should prompt
 		var prompted bool
+		// The fake prompter stands in for a terminal, so opt in to prompting.
+		app.Interactive = InteractiveAlways
 		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
 			prompted = true
 			return "prompted-value", nil
@@ -731,6 +737,8 @@ func TestValidateIntegration(t *testing.T) {
 		root.AddCommand(cmd)
 		app.Root = root
 
+		// The fake prompter stands in for a terminal, so opt in to prompting.
+		app.Interactive = InteractiveAlways
 		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
 			return "ab", nil
 		})
@@ -775,6 +783,8 @@ func TestValidateIntegration(t *testing.T) {
 		root.AddCommand(cmd)
 		app.Root = root
 
+		// The fake prompter stands in for a terminal, so opt in to prompting.
+		app.Interactive = InteractiveAlways
 		app.Prompter = prompterFunc(func(ctx context.Context, opts ...PromptOption) (string, error) {
 			return "alice", nil
 		})

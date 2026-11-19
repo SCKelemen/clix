@@ -35,4 +35,3 @@ func TestStylesFunctionalOptions(t *testing.T) {
 		t.Error("expected AppTitle to be set")
 	}
 }
-

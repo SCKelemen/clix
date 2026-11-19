@@ -1,7 +1,5 @@
 package clix
 
-import "fmt"
-
 // PositionalFlags returns flags marked Positional: true in registration order.
 func (fs *FlagSet) PositionalFlags() []*Flag {
 	var out []*Flag
@@ -29,11 +27,11 @@ func (fs *FlagSet) MapPositionals(args []string) ([]string, error) {
 			continue
 		}
 		if err := f.Value.Set(args[argIdx]); err != nil {
-			return nil, fmt.Errorf("invalid value for positional argument %s: %w", f.Name, err)
+			return nil, usageErrorf("invalid value for positional argument %s: %w", f.Name, err)
 		}
 		if f.Validate != nil {
 			if err := f.Validate(args[argIdx]); err != nil {
-				return nil, fmt.Errorf("invalid value for positional argument %s: %w", f.Name, err)
+				return nil, usageErrorf("invalid value for positional argument %s: %w", f.Name, err)
 			}
 		}
 		f.set = true

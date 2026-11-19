@@ -108,4 +108,3 @@ func TestFlagVariants(t *testing.T) {
 		}
 	})
 }
-

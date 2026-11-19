@@ -17,11 +17,12 @@ import (
 //
 //   - cli config                              - Show help/usage for the config group
 //   - cli config list                         - List persisted configuration as YAML (json via --format=json)
-//   - cli config get --key <key_path>         - Print the value stored at the dot-separated path
-//   - cli config set --key <key_path> --value <value>  - Persist a value at the given path
-//   - cli config unset --key <key_path>       - Remove a value from persisted config (no-op if missing)
+//   - cli config get <key_path>               - Print the value stored at the dot-separated path
+//   - cli config set <key_path> <value>       - Persist a value at the given path
+//   - cli config unset <key_path>             - Remove a value from persisted config (no-op if missing)
 //   - cli config reset                        - Remove all persisted configuration
 //
+// The key and value may also be passed as --key and --value.
 // Key paths use dot notation (e.g. "project.default", "api.timeout").
 // List/get/set/unset/reset operate purely on persisted config—they do not reflect flags or env vars.
 // The `list` command respects the `--format` flag (json|yaml|text). Default output is YAML/text.
@@ -38,8 +39,8 @@ import (
 //	// Now your app has config commands!
 //
 //	// Users can now manage configuration:
-//	//   myapp config set --key project --value my-project
-//	//   myapp config get --key project
+//	//   myapp config set project my-project
+//	//   myapp config get project
 //	//   myapp config list
 type Extension struct {
 	// Extension has no configuration options.
@@ -113,10 +114,11 @@ func configGetCommand(app *clix.App) *clix.Command {
 	var key string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "key",
-			Usage:    "Configuration key (dot-separated)",
-			Required: true,
-			Prompt:   "Configuration key (dot-separated)",
+			Name:       "key",
+			Usage:      "Configuration key (dot-separated)",
+			Required:   true,
+			Prompt:     "Configuration key (dot-separated)",
+			Positional: true,
 		},
 		Value: &key,
 	})
@@ -142,19 +144,21 @@ func configSetCommand(app *clix.App) *clix.Command {
 	var key, value string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "key",
-			Usage:    "Configuration key (dot-separated)",
-			Required: true,
-			Prompt:   "Configuration key (dot-separated)",
+			Name:       "key",
+			Usage:      "Configuration key (dot-separated)",
+			Required:   true,
+			Prompt:     "Configuration key (dot-separated)",
+			Positional: true,
 		},
 		Value: &key,
 	})
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "value",
-			Usage:    "Value to set",
-			Required: true,
-			Prompt:   "Value",
+			Name:       "value",
+			Usage:      "Value to set",
+			Required:   true,
+			Prompt:     "Value",
+			Positional: true,
 		},
 		Value: &value,
 	})
@@ -193,10 +197,11 @@ func configUnsetCommand(app *clix.App) *clix.Command {
 	var key string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:     "key",
-			Usage:    "Configuration key (dot-separated)",
-			Required: true,
-			Prompt:   "Configuration key (dot-separated)",
+			Name:       "key",
+			Usage:      "Configuration key (dot-separated)",
+			Required:   true,
+			Prompt:     "Configuration key (dot-separated)",
+			Positional: true,
 		},
 		Value: &key,
 	})

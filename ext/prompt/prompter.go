@@ -1,7 +1,6 @@
 package prompt
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -259,7 +258,7 @@ func (p TerminalPrompter) promptText(ctx context.Context, cfg *clix.PromptConfig
 
 // promptTextLineBased handles text input with line-based reading (fallback for non-terminals).
 func (p TerminalPrompter) promptTextLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
+	reader := newLineReader(p.In)
 
 	for {
 		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
@@ -371,7 +370,7 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		}
 
 		// Read a single keypress
-		key, err := ReadKey(p.In)
+		key, err := state.readKey(ctx, inFile)
 		if err != nil {
 			return "", err
 		}
@@ -450,7 +449,7 @@ func (p TerminalPrompter) promptTextInteractive(ctx context.Context, cfg *clix.P
 		case KeyCtrlC:
 			fmt.Fprint(p.Out, "\n")
 			fmt.Fprint(p.Out, "\r\033[K")
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyEscape:
 			state := clix.PromptKeyState{
 				Command:    clix.PromptCommand{Type: clix.PromptCommandEscape},
@@ -557,7 +556,7 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 
 	for {
 		// Read a single keypress
-		key, err := ReadKey(p.In)
+		key, err := state.readKey(ctx, inFile)
 		if err != nil {
 			return "", err
 		}
@@ -621,7 +620,7 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyEscape:
 			state := clix.PromptKeyState{Command: clix.PromptCommand{Type: clix.PromptCommandEscape}, Default: cfg.Default}
 			action := dispatchCommand(cfg, state, nil)
@@ -654,7 +653,7 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
 			state := clix.PromptKeyState{
 				Command: clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)},
@@ -690,7 +689,7 @@ func (p TerminalPrompter) promptSelect(ctx context.Context, cfg *clix.PromptConf
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyHome:
 			selectedIdx = 0
 			MoveCursorUp(p.Out, linesToRender)
@@ -781,7 +780,7 @@ func (p TerminalPrompter) renderSelectPrompt(cfg *clix.PromptConfig, selectedIdx
 
 // promptSelectLineBased is the fallback line-based implementation for non-terminal input.
 func (p TerminalPrompter) promptSelectLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
+	reader := newLineReader(p.In)
 
 	// Find default option index
 	defaultIdx := -1
@@ -893,7 +892,7 @@ func parseIndex(input string, max int) int {
 
 // promptConfirm handles yes/no confirmation prompts.
 func (p TerminalPrompter) promptConfirm(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
+	reader := newLineReader(p.In)
 
 	// Determine default (Y/n or y/N)
 	defaultYes := true
@@ -1038,7 +1037,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 
 	for {
 		// Read a single keypress
-		key, err := ReadKey(p.In)
+		key, err := state.readKey(ctx, inFile)
 		if err != nil {
 			return "", err
 		}
@@ -1110,7 +1109,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyEscape:
 			state := clix.PromptKeyState{Command: clix.PromptCommand{Type: clix.PromptCommandEscape}, Default: cfg.Default}
 			action := dispatchCommand(cfg, state, nil)
@@ -1143,7 +1142,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyF1, KeyF2, KeyF3, KeyF4, KeyF5, KeyF6, KeyF7, KeyF8, KeyF9, KeyF10, KeyF11, KeyF12:
 			state := clix.PromptKeyState{
 				Command: clix.PromptCommand{Type: clix.PromptCommandFunction, FunctionKey: functionKeyNumber(key)},
@@ -1179,7 +1178,7 @@ func (p TerminalPrompter) promptMultiSelect(ctx context.Context, cfg *clix.Promp
 			MoveCursorUp(p.Out, linesToRender-1)
 			fmt.Fprint(p.Out, "\r\033[K")
 			ShowCursor(p.Out)
-			return "", errors.New("cancelled")
+			return "", clix.ErrCancelled
 		case KeyHome:
 			onContinueButton = false
 			currentIdx = 0
@@ -1300,7 +1299,7 @@ func parseIndices(input string, max int) []int {
 
 // promptMultiSelectLineBased is the fallback line-based implementation for non-terminal input.
 func (p TerminalPrompter) promptMultiSelectLineBased(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
-	reader := bufio.NewReader(p.In)
+	reader := newLineReader(p.In)
 
 	// Parse default selections
 	selected := make(map[int]bool)

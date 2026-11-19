@@ -13,7 +13,9 @@ import (
 //
 // The extension adds:
 //
-//	cli autocomplete --shell [bash|zsh|fish] - Generate completion script for the specified shell
+//	cli autocomplete [bash|zsh|fish] - Generate completion script for the specified shell
+//
+// The shell may also be given as --shell.
 //
 // The generated scripts include all commands, groups, flags, and aliases
 // from your application's command tree.
@@ -27,12 +29,12 @@ import (
 //
 //	app := clix.NewApp("myapp")
 //	app.AddExtension(autocomplete.Extension{})
-//	// Now your app has: myapp autocomplete --shell [shell]
+//	// Now your app has: myapp autocomplete [shell]
 //
 //	// Users can generate and install completion:
-//	//   myapp autocomplete --shell bash > /etc/bash_completion.d/myapp
-//	//   myapp autocomplete --shell zsh > ~/.zsh/completions/_myapp
-//	//   myapp autocomplete --shell fish > ~/.config/fish/completions/myapp.fish
+//	//   myapp autocomplete bash > /etc/bash_completion.d/myapp
+//	//   myapp autocomplete zsh > ~/.zsh/completions/_myapp
+//	//   myapp autocomplete fish > ~/.config/fish/completions/myapp.fish
 type Extension struct {
 	// Extension has no configuration options.
 	// Simply add it to your app to enable autocomplete command generation.
@@ -64,14 +66,15 @@ func findChild(cmd *clix.Command, name string) *clix.Command {
 func NewAutocompleteCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("autocomplete")
 	cmd.Short = "Generate shell completion script"
-	cmd.Usage = fmt.Sprintf("%s autocomplete --shell [bash|zsh|fish]", app.Name)
+	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish]", app.Name)
 	cmd.IsExtensionCommand = true
 
 	var shell string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:  "shell",
-			Usage: "Shell type (bash, zsh, fish)",
+			Name:       "shell",
+			Usage:      "Shell type (bash, zsh, fish)",
+			Positional: true,
 		},
 		Value: &shell,
 	})
@@ -112,6 +115,9 @@ type completionEntry struct {
 	Help  string
 }
 
+// collectCompletionEntries gathers command names, aliases, and flags from
+// the command tree. Hidden commands (and everything below them) are left
+// out, matching help output.
 func collectCompletionEntries(cmd *clix.Command) []completionEntry {
 	entries := make(map[string]string)
 	var walk func(*clix.Command)
@@ -120,13 +126,18 @@ func collectCompletionEntries(cmd *clix.Command) []completionEntry {
 		for _, alias := range c.Aliases {
 			entries[alias] = c.Short
 		}
-		for _, flag := range c.Flags.Flags() {
-			entries["--"+flag.Name] = flag.Usage
-			if flag.Short != "" {
-				entries["-"+flag.Short] = flag.Usage
+		if c.Flags != nil {
+			for _, flag := range c.Flags.Flags() {
+				entries["--"+flag.Name] = flag.Usage
+				if flag.Short != "" {
+					entries["-"+flag.Short] = flag.Usage
+				}
 			}
 		}
 		for _, child := range c.Children {
+			if child == nil || child.Hidden {
+				continue
+			}
 			walk(child)
 		}
 	}
@@ -169,50 +180,70 @@ complete -F _%s_completions %s`, name, options, name, name)
 func zshCompletion(name string, entries []completionEntry) string {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("#compdef %s\n", name))
-	builder.WriteString(fmt.Sprintf("_arguments '*: :->cmds'\ncase $state in\n  cmds)\n    _values \"Commands\" "))
+	builder.WriteString("_arguments '*: :->cmds'\ncase $state in\n  cmds)\n    _values \"Commands\" ")
 	for _, entry := range entries {
 		if strings.HasPrefix(entry.Token, "-") {
 			continue
 		}
-		desc := strings.ReplaceAll(entry.Help, "\"", "'")
-		builder.WriteString(fmt.Sprintf("'%s[%s]' ", entry.Token, desc))
+		builder.WriteString(zshValue(entry))
+		builder.WriteString(" ")
 	}
 	builder.WriteString(";;\n  *)\n    _values 'Flags' ")
 	for _, entry := range entries {
 		if !strings.HasPrefix(entry.Token, "-") {
 			continue
 		}
-		desc := strings.ReplaceAll(entry.Help, "\"", "'")
-		builder.WriteString(fmt.Sprintf("'%s[%s]' ", entry.Token, desc))
+		builder.WriteString(zshValue(entry))
+		builder.WriteString(" ")
 	}
 	builder.WriteString(";;\nesac")
 	return builder.String()
+}
+
+// zshValue renders an entry as a single-quoted _values item, "name[help]".
+func zshValue(entry completionEntry) string {
+	// Inside _values items, backslash, brackets, and colons are special.
+	escape := strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`, `:`, `\:`)
+	return shellSingleQuote(escape.Replace(entry.Token) + "[" + escape.Replace(entry.Help) + "]")
+}
+
+// shellSingleQuote quotes s for POSIX-style shells such as bash and zsh.
+// A single quote cannot appear inside single quotes, so each one becomes
+// '\” (close, escaped quote, reopen).
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// fishQuote quotes s for fish, where only \\ and \' are escapes inside
+// single quotes.
+func fishQuote(s string) string {
+	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
 }
 
 func fishCompletion(name string, entries []completionEntry) string {
 	var builder strings.Builder
 	builder.WriteString(fmt.Sprintf("complete -c %s -f\n", name))
 	for _, entry := range entries {
-		desc := strings.ReplaceAll(entry.Help, "\"", "'")
+		desc := entry.Help
 		if strings.HasPrefix(entry.Token, "--") {
-			builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -l %s", name, strings.TrimPrefix(entry.Token, "--")))
+			builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -l %s", name, fishQuote(strings.TrimPrefix(entry.Token, "--"))))
 			if desc != "" {
-				builder.WriteString(fmt.Sprintf(" -d '%s'", desc))
+				builder.WriteString(" -d " + fishQuote(desc))
 			}
 			builder.WriteString("\n")
 			continue
 		}
 		if strings.HasPrefix(entry.Token, "-") {
-			builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -s %s", name, strings.TrimPrefix(entry.Token, "-")))
+			builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -s %s", name, fishQuote(strings.TrimPrefix(entry.Token, "-"))))
 			if desc != "" {
-				builder.WriteString(fmt.Sprintf(" -d '%s'", desc))
+				builder.WriteString(" -d " + fishQuote(desc))
 			}
 			builder.WriteString("\n")
 			continue
 		}
-		builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -a '%s'", name, entry.Token))
+		builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -a %s", name, fishQuote(entry.Token)))
 		if desc != "" {
-			builder.WriteString(fmt.Sprintf(" -d '%s'", desc))
+			builder.WriteString(" -d " + fishQuote(desc))
 		}
 		builder.WriteString("\n")
 	}

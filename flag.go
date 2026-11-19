@@ -1,6 +1,8 @@
 package clix
 
 import (
+	"errors"
+	"fmt"
 	"time"
 )
 
@@ -35,7 +37,8 @@ type FlagSet struct {
 	name   string
 	flags  []*Flag
 	index  map[string]*Flag
-	strict bool // If true, unknown flags cause errors instead of being treated as positionals
+	strict bool    // If true, unknown flags cause errors instead of being treated as positionals
+	errs   []error // Registration problems, such as duplicate flag names
 }
 
 // NewFlagSet initialises an empty flag set.
@@ -72,6 +75,10 @@ type Flag struct {
 	// If empty, defaults to APP_KEY format based on EnvPrefix.
 	EnvVar string
 
+	// EnvVars are additional environment variable aliases, checked in order
+	// after EnvVar and before the APP_KEY default.
+	EnvVars []string
+
 	// Default is the default value for this flag (as a string).
 	Default string
 
@@ -91,8 +98,9 @@ type Flag struct {
 	// Value is the flag value implementation.
 	Value Value
 
-	set    bool // Internal: tracks if flag was explicitly set (any source)
-	cliSet bool // Internal: tracks if flag was set via CLI argument (not env/config/default)
+	set    bool   // Internal: tracks if flag was explicitly set (any source)
+	cliSet bool   // Internal: tracks if flag was set via CLI argument (not env/config/default)
+	source Source // Internal: where a non-CLI value came from (env, config, or prompt) when set
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.
@@ -123,13 +131,15 @@ type FlagOptions struct {
 	EnvVar string
 
 	// EnvVars are optional additional environment variable aliases.
-	// All listed environment variables are checked in order.
+	// They are checked in order after EnvVar and before the APP_KEY default;
+	// the first one that is set (and not empty) wins.
 	EnvVars []string
 
 	// Required indicates this flag must be provided (or resolved from Default/env/config).
 	// When required flags are missing and no CLI flags were passed, the user is
-	// prompted interactively. When some CLI flags were passed but required flags
-	// are still missing, an error is returned.
+	// prompted interactively if the app is interactive (see App.IsInteractive).
+	// When some CLI flags were passed, or the app is not interactive, Run
+	// returns a *MissingFlagsError instead.
 	Required bool
 
 	// Prompt is the label shown when interactively prompting for this flag's value.
@@ -148,8 +158,42 @@ type FlagOptions struct {
 	Validate func(string) error
 }
 
+// ApplyFlag implements FlagOption, so a FlagOptions value (and every
+// *VarOptions struct that embeds it) can be passed alongside functional
+// options. Each non-zero field overwrites the corresponding field in fo.
+func (o FlagOptions) ApplyFlag(fo *FlagOptions) {
+	if o.Name != "" {
+		fo.Name = o.Name
+	}
+	if o.Short != "" {
+		fo.Short = o.Short
+	}
+	if o.Usage != "" {
+		fo.Usage = o.Usage
+	}
+	if o.EnvVar != "" {
+		fo.EnvVar = o.EnvVar
+	}
+	if len(o.EnvVars) > 0 {
+		fo.EnvVars = o.EnvVars
+	}
+	if o.Required {
+		fo.Required = true
+	}
+	if o.Prompt != "" {
+		fo.Prompt = o.Prompt
+	}
+	if o.Positional {
+		fo.Positional = true
+	}
+	if o.Validate != nil {
+		fo.Validate = o.Validate
+	}
+}
+
 // StringVarOptions describes the configuration for adding a string flag.
 // This struct implements FlagOption, so it can be used alongside functional options.
+// Both StringVarOptions{...} and &StringVarOptions{...} are accepted.
 //
 // Example - three API styles:
 //
@@ -191,25 +235,15 @@ type StringVarOptions struct {
 	Value *string
 }
 
-// ApplyFlag implements FlagOption so StringVarOptions can be used directly.
-func (o StringVarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *StringVarOptions) merge(v StringVarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
 	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
+	if v.Value != nil {
+		o.Value = v.Value
 	}
 }
 
@@ -246,8 +280,14 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 	var stringOpts StringVarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case StringVarOptions:
-			stringOpts = v
+			stringOpts.merge(v)
+		case *StringVarOptions:
+			if v != nil {
+				stringOpts.merge(*v)
+			}
 		case stringValueOption:
 			stringOpts.Value = v.value
 		case stringDefaultOption:
@@ -262,6 +302,7 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 		Short:      stringOpts.Short,
 		Usage:      stringOpts.Usage,
 		EnvVar:     stringOpts.EnvVar,
+		EnvVars:    append([]string(nil), stringOpts.EnvVars...),
 		Default:    stringOpts.Default,
 		Required:   stringOpts.Required,
 		Prompt:     stringOpts.Prompt,
@@ -320,25 +361,15 @@ type DurationVarOptions struct {
 	Value *time.Duration
 }
 
-// ApplyFlag implements FlagOption so DurationVarOptions can be used directly.
-func (o DurationVarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *DurationVarOptions) merge(v DurationVarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
 	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
+	if v.Value != nil {
+		o.Value = v.Value
 	}
 }
 
@@ -371,25 +402,12 @@ type BoolVarOptions struct {
 	Value *bool
 }
 
-// ApplyFlag implements FlagOption so BoolVarOptions can be used directly.
-func (o BoolVarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
-	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *BoolVarOptions) merge(v BoolVarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Value != nil {
+		o.Value = v.Value
 	}
 }
 
@@ -399,8 +417,14 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 	var boolOpts BoolVarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case BoolVarOptions:
-			boolOpts = v
+			boolOpts.merge(v)
+		case *BoolVarOptions:
+			if v != nil {
+				boolOpts.merge(*v)
+			}
 		case boolValueOption:
 			boolOpts.Value = v.value
 		default:
@@ -413,6 +437,7 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 		Short:      boolOpts.Short,
 		Usage:      boolOpts.Usage,
 		EnvVar:     boolOpts.EnvVar,
+		EnvVars:    append([]string(nil), boolOpts.EnvVars...),
 		Required:   boolOpts.Required,
 		Prompt:     boolOpts.Prompt,
 		Positional: boolOpts.Positional,
@@ -428,8 +453,14 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 	var durationOpts DurationVarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case DurationVarOptions:
-			durationOpts = v
+			durationOpts.merge(v)
+		case *DurationVarOptions:
+			if v != nil {
+				durationOpts.merge(*v)
+			}
 		case durationValueOption:
 			durationOpts.Value = v.value
 		case durationDefaultOption:
@@ -444,6 +475,7 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 		Short:      durationOpts.Short,
 		Usage:      durationOpts.Usage,
 		EnvVar:     durationOpts.EnvVar,
+		EnvVars:    append([]string(nil), durationOpts.EnvVars...),
 		Default:    durationOpts.Default,
 		Required:   durationOpts.Required,
 		Prompt:     durationOpts.Prompt,
@@ -488,25 +520,15 @@ type IntVarOptions struct {
 	Value *int
 }
 
-// ApplyFlag implements FlagOption so IntVarOptions can be used directly.
-func (o IntVarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *IntVarOptions) merge(v IntVarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
 	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
+	if v.Value != nil {
+		o.Value = v.Value
 	}
 }
 
@@ -516,8 +538,14 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 	var intOpts IntVarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case IntVarOptions:
-			intOpts = v
+			intOpts.merge(v)
+		case *IntVarOptions:
+			if v != nil {
+				intOpts.merge(*v)
+			}
 		case integerValueOption:
 			intOpts.Value = v.value
 		case integerDefaultOption:
@@ -532,6 +560,7 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 		Short:      intOpts.Short,
 		Usage:      intOpts.Usage,
 		EnvVar:     intOpts.EnvVar,
+		EnvVars:    append([]string(nil), intOpts.EnvVars...),
 		Default:    intOpts.Default,
 		Required:   intOpts.Required,
 		Prompt:     intOpts.Prompt,
@@ -576,25 +605,15 @@ type Int64VarOptions struct {
 	Value *int64
 }
 
-// ApplyFlag implements FlagOption so Int64VarOptions can be used directly.
-func (o Int64VarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *Int64VarOptions) merge(v Int64VarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
 	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
+	if v.Value != nil {
+		o.Value = v.Value
 	}
 }
 
@@ -604,8 +623,14 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 	var int64Opts Int64VarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case Int64VarOptions:
-			int64Opts = v
+			int64Opts.merge(v)
+		case *Int64VarOptions:
+			if v != nil {
+				int64Opts.merge(*v)
+			}
 		case int64ValueOption:
 			int64Opts.Value = v.value
 		case int64DefaultOption:
@@ -620,6 +645,7 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 		Short:      int64Opts.Short,
 		Usage:      int64Opts.Usage,
 		EnvVar:     int64Opts.EnvVar,
+		EnvVars:    append([]string(nil), int64Opts.EnvVars...),
 		Default:    int64Opts.Default,
 		Required:   int64Opts.Required,
 		Prompt:     int64Opts.Prompt,
@@ -664,25 +690,15 @@ type Float64VarOptions struct {
 	Value *float64
 }
 
-// ApplyFlag implements FlagOption so Float64VarOptions can be used directly.
-func (o Float64VarOptions) ApplyFlag(fo *FlagOptions) {
-	if o.Name != "" {
-		fo.Name = o.Name
+// merge applies the non-zero fields of v on top of o, so a struct passed
+// after functional options refines them instead of discarding them.
+func (o *Float64VarOptions) merge(v Float64VarOptions) {
+	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	if v.Default != "" {
+		o.Default = v.Default
 	}
-	if o.Short != "" {
-		fo.Short = o.Short
-	}
-	if o.Usage != "" {
-		fo.Usage = o.Usage
-	}
-	if o.EnvVar != "" {
-		fo.EnvVar = o.EnvVar
-	}
-	if len(o.EnvVars) > 0 {
-		fo.EnvVars = o.EnvVars
-	}
-	if o.Positional {
-		fo.Positional = true
+	if v.Value != nil {
+		o.Value = v.Value
 	}
 }
 
@@ -692,8 +708,14 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 	var float64Opts Float64VarOptions
 	for _, opt := range opts {
 		switch v := opt.(type) {
+		case nil:
+			continue
 		case Float64VarOptions:
-			float64Opts = v
+			float64Opts.merge(v)
+		case *Float64VarOptions:
+			if v != nil {
+				float64Opts.merge(*v)
+			}
 		case float64ValueOption:
 			float64Opts.Value = v.value
 		case float64DefaultOption:
@@ -708,6 +730,7 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 		Short:      float64Opts.Short,
 		Usage:      float64Opts.Usage,
 		EnvVar:     float64Opts.EnvVar,
+		EnvVars:    append([]string(nil), float64Opts.EnvVars...),
 		Default:    float64Opts.Default,
 		Required:   float64Opts.Required,
 		Prompt:     float64Opts.Prompt,
@@ -721,6 +744,17 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 	}
 }
 
+// addFlag registers flag in the set.
+//
+// A flag whose long name is already registered is not added: the first
+// registration wins, and the conflict is recorded so it can be reported by
+// Err. Registration does not panic on duplicates because existing programs
+// that happen to register a name twice must keep working.
+//
+// A short name that is already taken moves to the new flag, and the previous
+// owner loses its short name. This keeps the historical "newest wins" parsing
+// behavior (for example, a command may claim -h for --host) while making help
+// output and lookups agree on which flag owns the short name.
 func (fs *FlagSet) addFlag(flag *Flag) {
 	if flag.Name == "" {
 		panic("flag requires a name")
@@ -736,20 +770,39 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 	if fs.index == nil {
 		fs.index = make(map[string]*Flag)
 	}
+	if _, exists := fs.index["--"+flag.Name]; exists {
+		fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s redefined in flag set %q; keeping the first definition", flag.Name, fs.name))
+		return
+	}
 	fs.flags = append(fs.flags, flag)
 	fs.index["--"+flag.Name] = flag
 	if flag.Short != "" {
+		if previous, taken := fs.index["-"+flag.Short]; taken && previous != flag {
+			previous.Short = ""
+		}
 		fs.index["-"+flag.Short] = flag
 	}
 }
 
+// lookup returns the flag registered under the long name, or nil.
+// It consults the same index the parser uses, so reads and writes always
+// refer to the same flag.
 func (fs *FlagSet) lookup(name string) *Flag {
-	for _, flag := range fs.flags {
-		if flag.Name == name {
-			return flag
-		}
+	if fs == nil || fs.index == nil {
+		return nil
 	}
-	return nil
+	return fs.index["--"+name]
+}
+
+// Err reports problems found while registering flags, such as a long flag
+// name that was defined more than once. It returns nil when registration
+// succeeded. Duplicate definitions are ignored rather than causing a panic,
+// so call Err (for example, in a test) to detect them.
+func (fs *FlagSet) Err() error {
+	if fs == nil {
+		return nil
+	}
+	return errors.Join(fs.errs...)
 }
 
 // Flags returns all registered flags.

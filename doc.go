@@ -58,10 +58,18 @@
 //
 //   - Use Required: true on FlagOptions to mark a flag as mandatory
 //   - Use Prompt: "label" to set the interactive prompt label
-//   - Three execution modes:
-//     1. No flags passed → interactive prompting for required flags
-//     2. All required flags satisfied → run
-//     3. Some flags passed but required missing → error
+//   - A flag is resolved against the command it follows first and the root
+//     second, so a command's -f is never shadowed by a root -f; "--" ends
+//     flag parsing
+//   - Use ExitCode to turn the error from Run into a process exit status
+//
+// Commands run in one of three modes:
+//
+//  1. No flags passed → interactive prompting for required flags, when the
+//     app is interactive (see App.IsInteractive); otherwise Run returns a
+//     *MissingFlagsError instead of waiting for input
+//  2. All required flags satisfied → run
+//  3. Some flags passed but required missing → *MissingFlagsError
 //
 // # Context Usage
 //

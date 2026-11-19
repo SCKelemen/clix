@@ -405,6 +405,42 @@ result, err := ctx.App.Prompter.Prompt(ctx,
 
 Both APIs can be mixed - functional options can be combined with `PromptRequest` structs, with later options overriding earlier values.
 
+### Non-interactive use
+
+`clix` only prompts for missing required flags when someone is there to answer. By default (`App.Interactive` is `clix.InteractiveAuto`) it prompts only when `App.In` is a terminal. In CI, in scripts, or with stdin piped or redirected, `Run` returns a `*clix.MissingFlagsError` instead of waiting for input. The error names each missing flag and the environment variables that can supply it:
+
+```text
+missing required flags: --project (or $MYAPP_PROJECT)
+```
+
+Users can turn prompts off explicitly with `<PREFIX>_DISABLE_PROMPTS=1` (for example, `MYAPP_DISABLE_PROMPTS=1`, like gcloud's `CLOUDSDK_CORE_DISABLE_PROMPTS`). This environment variable applies in every mode. Programs can choose a mode themselves:
+
+```go
+app.Interactive = clix.InteractiveNever  // never prompt; always return MissingFlagsError
+app.Interactive = clix.InteractiveAlways // prompt even when In is not a terminal (pipes, tests)
+app.IsInteractive()                      // reports the effective decision
+```
+
+Readers that are not file descriptors, such as `strings.Reader`, are not terminals. Tests that answer prompts from a string or a fake `Prompter` should set `clix.InteractiveAlways`.
+
+Other guarantees:
+
+- **Prompts go to `App.Err`**, never `App.Out`, so `myapp get --format json | jq` stays clean.
+- **Cancellation**: `TextPrompter` returns `ctx.Err()` as soon as the context is done, even while waiting on an idle pipe. With `clix/ext/prompt`, Ctrl-C or Escape returns `clix.ErrCancelled`, and SIGINT or SIGTERM during a raw-mode prompt restores the terminal and returns `clix.ErrCancelled` instead of exiting the process. The extension only replaces the default `TextPrompter`; a `Prompter` you set yourself is kept.
+- **Piped answers**: each prompt reads exactly one line, so `printf 'a\nb\n' | myapp mk` (with `InteractiveAlways`) answers two prompts in turn.
+- **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors and missing flags, 130 for cancellation, and 1 otherwise:
+
+```go
+func main() {
+        ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+        defer stop()
+        if err := app.Run(ctx, nil); err != nil {
+                fmt.Fprintln(os.Stderr, err)
+                os.Exit(clix.ExitCode(err))
+        }
+}
+```
+
 ### Structured Output
 
 Global `--format` flag supports `json`, `yaml`, and `text` output formats:
