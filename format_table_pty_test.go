@@ -38,7 +38,7 @@ func TestTableOnTerminal(t *testing.T) {
 			if err := clix.FormatData(term.TTY, ptyRows, clix.FormatText); err != nil {
 				t.Fatal(err)
 			}
-			out := term.WaitOutput(t, "closed", 5*time.Second)
+			out := term.WaitOutput(t, "closed\r\n", 5*time.Second)
 			if got := strings.Contains(out, "\x1b[1mNAME\x1b[0m"); got != tc.bold {
 				t.Errorf("bold header = %v, want %v: %q", got, tc.bold, out)
 			}
