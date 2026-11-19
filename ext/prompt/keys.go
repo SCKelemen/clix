@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -16,14 +17,19 @@ import (
 const (
 	// escWait is how long a lone ESC waits for a following byte before it
 	// counts as the Esc key. Terminals send the bytes of an escape sequence
-	// (or Alt+key, ESC followed by the key) in one write, so they arrive
-	// within a few milliseconds; people do not type that fast.
-	escWait = 30 * time.Millisecond
+	// (or Alt+key, ESC followed by the key) in one write, so they normally
+	// arrive together; 50 ms (what Neovim uses for ttimeoutlen) also covers
+	// a sequence split by a slow link, and is still shorter than the gap
+	// between two keys a person types.
+	escWait = 50 * time.Millisecond
 	// seqWait bounds the wait for the rest of an escape sequence or a UTF-8
 	// character once it has started.
 	seqWait = 100 * time.Millisecond
-	// pasteWait bounds the wait between bytes of a bracketed paste.
-	pasteWait = 500 * time.Millisecond
+	// pasteWait bounds the wait between bytes of a bracketed paste. It is
+	// long, so a paste that stalls (a slow link, a large clipboard) stays a
+	// paste; it only guards against a terminal that never sends the end
+	// marker. The wait still ends on ctx and signals.
+	pasteWait = 5 * time.Second
 	// maxSeqLen caps the length of a control sequence we try to parse.
 	maxSeqLen = 32
 	// maxPasteLen caps a bracketed paste; the rest is dropped.
@@ -577,20 +583,35 @@ func (r *keyReader) ss3(alt bool) (keyEvent, error) {
 }
 
 // paste collects a bracketed paste up to the closing ESC [ 201 ~ marker.
+// Text beyond maxPasteLen is dropped, but the marker is still looked for,
+// so a huge paste ends where it should.
 // https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Bracketed-Paste-Mode
 func (r *keyReader) paste() (keyEvent, error) {
 	const end = "\x1b[201~"
 	var buf []byte
+	var window []byte // the last len(end) bytes read
 	for {
-		b, err := r.fetch(pasteWait, false)
-		if err != nil {
+		b, err := r.fetch(pasteWait, true)
+		if errors.Is(err, errResized) {
+			continue
+		}
+		if errors.Is(err, errNoInput) || errors.Is(err, io.EOF) {
 			break
+		}
+		if err != nil {
+			return keyEvent{key: KeyUnknown}, err
 		}
 		if len(buf) < maxPasteLen+len(end) {
 			buf = append(buf, b)
 		}
-		if b == '~' && len(buf) >= len(end) && string(buf[len(buf)-len(end):]) == end {
-			buf = buf[:len(buf)-len(end)]
+		window = append(window, b)
+		if len(window) > len(end) {
+			window = window[1:]
+		}
+		if string(window) == end {
+			if bytes.HasSuffix(buf, []byte(end)) {
+				buf = buf[:len(buf)-len(end)]
+			}
 			break
 		}
 	}
@@ -615,7 +636,7 @@ func functionKey(n int) Key {
 // and application cursor mode (ESC [ and ESC O), with xterm modifier
 // parameters, plus the Linux console's F1-F5. Ctrl or Alt with Left/Right
 // and Alt-b/Alt-f read as KeyWordLeft/KeyWordRight. UTF-8 characters are
-// decoded whole. A lone Esc is reported after a short pause (about 30 ms)
+// decoded whole. A lone Esc is reported after a short pause (50 ms)
 // when nothing follows it, so the next key is not swallowed. Sequences it
 // does not recognize, and Alt with other keys, return KeyUnknown with a nil
 // error, never KeyEscape; callers should ignore KeyUnknown.

@@ -92,14 +92,20 @@ func (t *Term) Write(p []byte) (int, error) {
 }
 
 // Type sends each key as a separate write, pausing between them like a
-// person typing, so the program sees one keystroke per read.
+// person typing, so the program sees one keystroke per read. After a lone
+// Esc it pauses longer than a prompt's Esc timeout, so the next key is not
+// read as Alt+key.
 func (t *Term) Type(tb testing.TB, keys ...string) {
 	tb.Helper()
 	for _, k := range keys {
 		if _, err := io.WriteString(t.master, k); err != nil {
 			tb.Fatalf("type %q: %v", k, err)
 		}
-		time.Sleep(40 * time.Millisecond)
+		if k == "\x1b" {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			time.Sleep(40 * time.Millisecond)
+		}
 	}
 }
 
