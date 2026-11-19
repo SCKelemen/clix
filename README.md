@@ -299,8 +299,11 @@ Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode:
 `clix` tolerates definition mistakes at run time: a duplicate flag name keeps the first definition, a short name that is already taken is left off the later flag, a child name that collides with another child's alias is never reached. `App.Validate` reports all of them, along with defaults that do not parse and flags that shadow an ancestor's flag of the same name. Call it in a test:
 
 ```go
+import "testing"
+
 func TestCLIDefinition(t *testing.T) {
-        if err := newApp().Validate(); err != nil {
+        app := clix.NewApp("myapp") // or the constructor your main uses
+        if err := app.Validate(); err != nil {
                 t.Fatal(err)
         }
 }
