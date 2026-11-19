@@ -20,6 +20,7 @@ import (
 // value is recorded as it is now, so the next Run can do the same.
 func (a *App) startRun() error {
 	var errs []error
+	eachFlagSetOnce(a.Root, func(fs *FlagSet) { fs.app = a })
 	eachFlagOnce(a.Root, func(fs *FlagSet, f *Flag) {
 		if f.runChanged && f.Value.String() == f.afterRun {
 			switch {
@@ -40,6 +41,7 @@ func (a *App) startRun() error {
 		}
 		f.beforeRun = f.Value.String()
 		f.undoRun = undoFunc(f.Value)
+		f.tracked = true
 	})
 	return errors.Join(errs...)
 }
@@ -47,8 +49,10 @@ func (a *App) startRun() error {
 // finishRun records which flags the Run changed.
 func (a *App) finishRun() {
 	eachFlagOnce(a.Root, func(_ *FlagSet, f *Flag) {
+		// A flag registered during the Run has no value from before it,
+		// so there is nothing to undo.
 		f.afterRun = f.Value.String()
-		f.runChanged = f.afterRun != f.beforeRun
+		f.runChanged = f.tracked && f.afterRun != f.beforeRun
 	})
 }
 

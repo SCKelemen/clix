@@ -91,16 +91,36 @@ func (a *App) validateCommand(cmd *Command, path string, inherited map[string]an
 				report("flag --%s: short name -%s is longer than one letter; -%s then means --%s instead of the cluster of -%s", f.Name, short, short, f.Name, strings.Join(strings.Split(short, ""), " -"))
 			}
 		}
-		if af, ok := inherited["--"+f.Name]; ok {
-			report("flag --%s is also defined on %q; before the command name --%s sets %q's flag, after it this command's, so the two can disagree", f.Name, af.path, f.Name, af.path)
+		// An extension's own command uses its own flags, whatever its
+		// ancestors define: not something the app can or should fix.
+		extNative := cmd.Flags.rank != 0 && f.rank == cmd.Flags.rank
+		// A flag an extension put on a command it does not own loses to a
+		// better owner's flag further out (see lookupArg).
+		intruder := f.rank != cmd.Flags.rank
+		loses := false
+		if af, ok := inherited["--"+f.Name]; ok && !extNative {
+			if intruder && af.flag.rank < f.rank {
+				loses = true
+				report("clix: %s: flag --%s is also defined by %s on %q; %s --%s is used here too, and this one is ignored", f.describe(), f.Name, af.flag.describe(), af.path, af.flag.possessive(), f.Name)
+			} else {
+				report("flag --%s is also defined on %q; before the command name --%s sets %q's flag, after it this command's, so the two can disagree", f.Name, af.path, f.Name, af.path)
+			}
 		}
 		if f.Short != "" {
-			if af, ok := inherited["-"+f.Short]; ok && af.flag.Name != f.Name {
-				report("flag --%s: -%s is also the short name of --%s on %q; before the command name -%s means --%s, after it --%s", f.Name, f.Short, af.flag.Name, af.path, f.Short, af.flag.Name, f.Name)
+			if af, ok := inherited["-"+f.Short]; ok && af.flag.Name != f.Name && !extNative {
+				if intruder && af.flag.rank < f.rank {
+					report("clix: %s: -%s is used by %s --%s on %q; %s is available as --%s only", f.describe(), f.Short, af.flag.possessive(), af.flag.Name, af.path, f.Name, f.Name)
+				} else {
+					report("flag --%s: -%s is also the short name of --%s on %q; before the command name -%s means --%s, after it --%s", f.Name, f.Short, af.flag.Name, af.path, f.Short, af.flag.Name, f.Name)
+				}
 			}
-			own["-"+f.Short] = ancestorFlag{f, path}
+			if !loses {
+				own["-"+f.Short] = ancestorFlag{f, path}
+			}
 		}
-		own["--"+f.Name] = ancestorFlag{f, path}
+		if !loses {
+			own["--"+f.Name] = ancestorFlag{f, path}
+		}
 	}
 
 	match := nameMatcher(a.CaseSensitive)

@@ -86,8 +86,8 @@ func TestAppShortNamesBeatExtensions(t *testing.T) {
 			}
 
 			wantErrs := []string{
-				"moln: clix: extension version.Extension: -v is used by the app's --verbose; version is available as --version only",
-				"moln: clix: extension format.Extension: -f is used by the app's --force; format is available as --format only",
+				"moln: clix: extension #1 (version.Extension): -v is used by the app's --verbose; version is available as --version only",
+				"moln: clix: extension #2 (format.Extension): -f is used by the app's --force; format is available as --format only",
 			}
 			assertValidate(t, app, wantErrs...)
 			before := app.Validate().Error()
@@ -143,7 +143,7 @@ func TestAppLongNamesBeatExtensions(t *testing.T) {
 			if n := strings.Count(out.String(), "--format"); n != 1 || !strings.Contains(out.String(), "Mine") {
 				t.Fatalf("help shows --format %d times:\n%s", n, out)
 			}
-			assertValidate(t, app, `moln: clix: extension format.Extension: flag --format in flag set "moln" is also defined by the app; the app's --format is used and this one is ignored`)
+			assertValidate(t, app, `moln: clix: extension #1 (format.Extension): flag --format in flag set "moln" is also defined by the app; the app's --format is used and this one is ignored`)
 		})
 	}
 }
@@ -209,7 +209,8 @@ func TestFirstAddedExtensionWins(t *testing.T) {
 					t.Fatalf("the shadowed sync is still reachable: %v", err)
 				}
 
-				loserExt := map[string]string{"alpha": "clix_test.alphaExtension", "beta": "clix_test.betaExtension"}
+				typeName := map[string]string{"alpha": "clix_test.alphaExtension", "beta": "clix_test.betaExtension"}
+				loserExt := map[string]string{first: "#1 (" + typeName[first] + ")", second: "#2 (" + typeName[second] + ")"}
 				assertValidate(t, app,
 					"moln: clix: extension "+loserExt[second]+": -x is used by extension "+loserExt[first]+"'s --"+first+"; "+second+" is available as --"+second+" only",
 					"moln: clix: extension "+loserExt[second]+": flag --mode in flag set \"moln\" is also defined by extension "+loserExt[first]+"; extension "+loserExt[first]+"'s --mode is used and this one is ignored",
@@ -240,7 +241,7 @@ func TestAppVersionCommandWithVersionExtension(t *testing.T) {
 			if order == "applied before the app" {
 				// The extension added its own version command first; the
 				// app's, added later, still wins.
-				assertValidate(t, app, `moln: extension version.Extension: command "version" is shadowed by the app's "version"; it is not reachable and is left out of help`)
+				assertValidate(t, app, `moln: extension #1 (version.Extension): command "version" is shadowed by the app's "version"; it is not reachable and is left out of help`)
 			} else {
 				assertValidate(t, app)
 			}
@@ -303,8 +304,8 @@ func TestAppCommandsBeatExtensionCommands(t *testing.T) {
 			app.Out = out
 
 			assertValidate(t, app,
-				`moln: extension clix_test.ghostExtension: command "deploy" is shadowed by the app's "deploy"; it is not reachable and is left out of help`,
-				`moln: extension clix_test.ghostExtension: alias "st" of "status" is used by the app's "stats"; "status" is available by its other names only`,
+				`moln: extension #1 (clix_test.ghostExtension): command "deploy" is shadowed by the app's "deploy"; it is not reachable and is left out of help`,
+				`moln: extension #1 (clix_test.ghostExtension): alias "st" of "status" is used by the app's "stats"; "status" is available by its other names only`,
 			)
 		})
 	}

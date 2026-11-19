@@ -83,8 +83,9 @@ type Command struct {
 	// PostRun is executed after Run. Useful for cleanup or finalization.
 	PostRun Hook
 
-	parent *Command
-	owner  // the app, or the extension whose Extend added the command
+	parent        *Command
+	owner              // the app, or the extension whose Extend added the command
+	caseSensitive bool // App.CaseSensitive, copied by the App so name matching agrees everywhere
 }
 
 // CommandOption configures a command using the functional options pattern.
@@ -236,9 +237,9 @@ func (c *Command) Path() string {
 }
 
 // findChild returns the matching child command or group by name or
-// alias, ignoring ASCII case.
+// alias, ignoring ASCII case unless the App is CaseSensitive.
 func (c *Command) findChild(name string) *Command {
-	return c.findChildMatch(name, false)
+	return c.findChildMatch(name, c.caseSensitive)
 }
 
 // findChildMatch returns the child whose name or alias matches name.
@@ -358,7 +359,7 @@ func (c *Command) match(args []string) (*Command, []string) {
 func (c *Command) VisibleChildren() []*Command {
 	var cmds []*Command
 	for _, child := range c.Children {
-		if child == nil || child.Hidden || c.shadowedBy(child, equalFoldASCII) != nil {
+		if child == nil || child.Hidden || c.shadowedBy(child, nameMatcher(c.caseSensitive)) != nil {
 			continue
 		}
 		cmds = append(cmds, child)

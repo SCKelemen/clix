@@ -749,7 +749,15 @@ if err := app.Run(context.Background(), nil); err != nil {
 
 #### Precedence
 
-Extensions never override your definitions. Everything registered while an extension's `Extend` runs belongs to that extension, and everything else belongs to your app. When a flag's long name, a short name, or a command name or alias collides, your definition wins, and between two extensions the one added first with `AddExtension` wins. The order in which you register your own flags, add extensions or call `ApplyExtensions` does not matter. A flag that loses its short name keeps its long name (your `-v` for `--verbose` leaves `ext/version` with `--version` only), a flag that loses its long name is dropped from parsing and help, and a command that loses its name is unreachable and left out of help and completion. The built-in `--help` gives `-h` up to any flag that wants it. `FlagSet.Err` and `App.Validate` report every override and name both owners, for example `extension version.Extension: -v is used by the app's --verbose; version is available as --version only`.
+Extensions never override your definitions. Everything registered while an extension's `Extend` runs belongs to that extension, and so does a flag added to an extension's command at any later time; everything else belongs to your app. When a flag's long name, a short name, or a command name or alias collides, your definition wins, and between two extensions the one added first with `AddExtension` wins. The order in which you register your own flags, add extensions or call `ApplyExtensions` does not matter.
+
+- A flag that loses its short name keeps its long name (your `-v` for `--verbose` leaves `ext/version` with `--version` only); a flag that loses its long name is dropped from parsing and help; a command that loses its name is unreachable and left out of help and completion.
+- This holds along the whole command path: if an extension adds `--project` to your `deploy` while your root defines `--project`, `deploy --project x` sets your root flag.
+- An extension's own commands keep their own flags: `config get --key k` uses ext/config's `--key` even if your root has a `--key`, and that is not reported, since there is nothing to fix.
+- A flag registered while the app is running (in a handler or hook) on a flag set no extension owns never takes a name from an existing flag.
+- The built-in `--help` gives `-h` up to any flag that wants it.
+
+`FlagSet.Err` and `App.Validate` report every override and name both owners, numbering extensions in the order they were added, for example `extension #1 (version.Extension): -v is used by the app's --verbose; version is available as --version only`. Commands and flags that extensions added to the root move along if you replace `app.Root` after `ApplyExtensions`.
 
 ### Available Extensions
 

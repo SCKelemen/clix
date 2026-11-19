@@ -160,16 +160,31 @@ func takesValue(flag *Flag) bool {
 
 // lookupArg finds the flag spelled name ("--long" or "-s") in the first set
 // that defines it.
+//
+// The nearest definition wins, with one exception that keeps extensions
+// from overriding the app: a flag that an extension added to a command it
+// does not own (such as the app's deploy) loses to a definition by a
+// better owner (the app, or an extension added earlier) further out on
+// the path. A command's own flags (the app's on the app's commands, an
+// extension's on its own commands) always win at their command.
 func lookupArg(name string, sets ...*FlagSet) *Flag {
+	var best *Flag
 	for _, fs := range sets {
 		if fs == nil {
 			continue
 		}
-		if f, ok := fs.index[name]; ok {
-			return f
+		f, ok := fs.index[name]
+		if !ok {
+			continue
+		}
+		if best == nil || f.rank < best.rank {
+			best = f
+			if f.rank == fs.rank {
+				return f
+			}
 		}
 	}
-	return nil
+	return best
 }
 
 // setFromArg applies one command-line occurrence of flag. name is the flag as

@@ -35,6 +35,8 @@ import (
 //		Value: &verbose,
 //	})
 type FlagSet struct {
+	owner          // the owner of the command the set belongs to (see App.claimDefinitions)
+	app       *App // the App whose tree holds the set, once it has run or applied extensions
 	name      string
 	all       []*Flag // every registered flag, in order, including ones that lost a name conflict
 	flags     []*Flag // the flags in effect: the winners in all
@@ -130,6 +132,7 @@ type Flag struct {
 	beforeRun  string       // Value.String() when the last Run started
 	afterRun   string       // Value.String() when the last Run ended
 	runChanged bool         // the last Run changed the value
+	tracked    bool         // beforeRun was recorded (false for a flag registered during a Run)
 	leakNoted  bool         // a carried-over value was recorded in the FlagSet's errors
 
 	yieldsShort bool // Internal: the built-in --help, which gives up -h to any other flag
@@ -144,10 +147,16 @@ type Flag struct {
 // whose Extend was running (see App.ApplyExtensions). The zero value is
 // the app.
 type owner struct {
-	rank      int    // 0 for the app, 1+i for the extension added i-th
-	ownerName string // %T of the extension, or "" for the app
+	rank      int    // 0 for the app, 1+i for the extension added i-th, runtimeRank for a flag registered during Run
+	ownerName string // "#2 (config.Extension)" for an extension, "" otherwise
 	claimed   bool   // the owner has been recorded
 }
+
+// runtimeRank is the rank of a flag registered while the App was running
+// (in a handler or hook) on a flag set no extension owns. It loses every
+// name conflict, so registering it cannot change what an existing flag
+// means.
+const runtimeRank = 1 << 30
 
 // claim records o as the owner, unless one was recorded already.
 func (w *owner) claim(rank int, name string) {
@@ -156,11 +165,14 @@ func (w *owner) claim(rank int, name string) {
 	}
 }
 
-// describe names the owner for error messages: "the app" or
-// "extension version.Extension".
+// describe names the owner for error messages: "the app",
+// "extension #2 (config.Extension)", or "a flag registered during Run".
 func (w owner) describe() string {
-	if w.rank == 0 {
+	switch {
+	case w.rank == 0:
 		return "the app"
+	case w.rank == runtimeRank:
+		return "a flag registered during Run"
 	}
 	return "extension " + w.ownerName
 }
@@ -847,6 +859,16 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 	}
 	if !flag.registered {
 		flag.wantShort, flag.registered = flag.Short, true
+	}
+	if !flag.claimed && (fs.app == nil || !fs.app.extending) {
+		switch {
+		case fs.rank != 0:
+			// A flag added to an extension's command belongs to that
+			// extension, whenever it is registered.
+			flag.claim(fs.rank, fs.ownerName)
+		case fs.app != nil && fs.app.running:
+			flag.claim(runtimeRank, "")
+		}
 	}
 	fs.all = append(fs.all, flag)
 	fs.reindex()

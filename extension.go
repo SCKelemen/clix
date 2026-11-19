@@ -70,8 +70,10 @@ func (a *App) ApplyExtensions() error {
 		// extensions, which already claimed theirs); what is new after
 		// Extend belongs to this extension.
 		a.claimDefinitions(0, "")
+		a.extending = true
 		err := ext.Extend(a)
-		a.claimDefinitions(i+1, fmt.Sprintf("%T", ext))
+		a.extending = false
+		a.claimDefinitions(i+1, fmt.Sprintf("#%d (%T)", i+1, ext))
 		if err != nil {
 			a.extErr = err
 			return err
@@ -85,26 +87,31 @@ func (a *App) ApplyExtensions() error {
 // Root) that has no owner yet, then re-resolves name conflicts.
 func (a *App) claimDefinitions(rank int, name string) {
 	if a.boundFlags != nil && a.boundFlags != a.rootFlagSet() {
-		claimFlags(a.boundFlags, rank, name)
+		claimFlags(a, a.boundFlags, rank, name)
 	}
-	claimTree(a.Root, rank, name)
+	claimTree(a, a.Root, rank, name)
 }
 
-func claimTree(cmd *Command, rank int, name string) {
+func claimTree(a *App, cmd *Command, rank int, name string) {
 	if cmd == nil {
 		return
 	}
 	cmd.claim(rank, name)
-	claimFlags(cmd.Flags, rank, name)
+	if cmd.Flags != nil {
+		// The flag set belongs to the command's owner.
+		cmd.Flags.owner = cmd.owner
+	}
+	claimFlags(a, cmd.Flags, rank, name)
 	for _, child := range cmd.Children {
-		claimTree(child, rank, name)
+		claimTree(a, child, rank, name)
 	}
 }
 
-func claimFlags(fs *FlagSet, rank int, name string) {
+func claimFlags(a *App, fs *FlagSet, rank int, name string) {
 	if fs == nil {
 		return
 	}
+	fs.app = a
 	changed := false
 	for _, f := range fs.all {
 		if !f.claimed {

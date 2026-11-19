@@ -61,6 +61,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	if err := a.startRun(); err != nil {
 		return err
 	}
+	a.running = true
+	defer func() { a.running = false }()
 	defer a.finishRun()
 
 	// Find the command first, then parse every flag exactly once: flags bind
@@ -463,6 +465,19 @@ func (a *App) prepareTree() {
 		return
 	}
 	a.Root.prepare(nil)
+	seen := map[*Command]bool{}
+	var walk func(*Command)
+	walk = func(c *Command) {
+		if c == nil || seen[c] {
+			return
+		}
+		seen[c] = true
+		c.caseSensitive = a.CaseSensitive
+		for _, child := range c.Children {
+			walk(child)
+		}
+	}
+	walk(a.Root)
 }
 
 // stdout returns Out, or os.Stdout when Out is nil (for example, in a

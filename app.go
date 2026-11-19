@@ -129,6 +129,8 @@ type App struct {
 	extensions []Extension
 	extApplied int   // extensions[:extApplied] have been applied
 	extErr     error // the first error an extension returned
+	extending  bool  // an extension's Extend is running
+	running    bool  // Run is running
 }
 
 // AppOption configures an App using the functional options pattern.
@@ -255,9 +257,9 @@ func (a *App) Flags() *FlagSet {
 // too.
 //
 // Flags registered with Flags() on the previously adopted root move to the
-// new one, so registering global flags before assigning app.Root works. A
-// flag whose long name the new root already defines stays behind, and the
-// conflict is recorded in the new root's FlagSet.Err.
+// new one, so registering global flags before assigning app.Root works,
+// and so do the commands extensions added to it. Name conflicts are
+// resolved as usual (see FlagSet.Err).
 func (a *App) bindRoot() {
 	root := a.Root
 	if root == nil {
@@ -271,6 +273,20 @@ func (a *App) bindRoot() {
 	}
 	if old := a.boundFlags; old != nil && old != root.Flags {
 		root.Flags.adoptFlags(old)
+	}
+	if old := a.boundRoot; old != nil && old != root {
+		// Commands extensions added to the previous root (when
+		// ApplyExtensions ran before Root was replaced) move along with
+		// their flags, so "version" keeps working with "--version".
+		var kept []*Command
+		for _, child := range old.Children {
+			if child != nil && child.rank != 0 {
+				root.Children = append(root.Children, child)
+				continue
+			}
+			kept = append(kept, child)
+		}
+		old.Children = kept
 	}
 	if !root.Flags.strictSet {
 		root.Flags.strict = false
@@ -400,9 +416,21 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 		flag *Flag
 	}
 	var hits []hit
-	for _, fs := range ctx.pathFlags() {
+	sets := ctx.pathFlags()
+	for _, fs := range sets {
 		if flag := fs.lookup(key); flag != nil {
 			hits = append(hits, hit{fs, flag})
+		}
+	}
+	// The flag the parser would use comes first (see lookupArg: an
+	// extension's flag on an app command does not hide the app's).
+	if winner := lookupArg("--"+key, sets...); winner != nil {
+		for i, h := range hits {
+			if h.flag == winner {
+				copy(hits[1:i+1], hits[:i])
+				hits[0] = h
+				break
+			}
 		}
 	}
 
