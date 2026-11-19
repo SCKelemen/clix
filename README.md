@@ -40,8 +40,8 @@
 5. **Configuration precedence**: Values are resolved in the following order (highest precedence first): Command flags > App flags > Environment variables > Config file > Defaults
    - Command-level flag values (flags defined on the specific command)
    - App-level flag values (flags defined on the root command, accessible via `app.Flags()`)
-   - Environment variables matching the flag's `EnvVar` or the default pattern `APP_KEY`
-   - Entries in `~/.config/<app>/config.yaml`
+   - Environment variables matching the flag's `EnvVar` (then any `EnvVars` aliases) or the default pattern `APP_KEY`; an empty variable counts as unset
+   - Entries in the config file: `App.ConfigPath` when set, otherwise `config.yaml` in `$XDG_CONFIG_HOME/<app>` (by default `~/.config/<app>`)
    - Flag defaults defined on the command or app flag set
 
 ## Goals
@@ -251,7 +251,7 @@ app.Root.AddCommand(auth)
 
 Global and command-level flags support:
 - **Environment variable defaults**: Automatically read from environment
-- **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml`
+- **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml` (or `$XDG_CONFIG_HOME/<app>/config.yaml`); set `App.ConfigPath` to use another file
 - **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`)
 - **Type support**: `StringVar`, `BoolVar`, `IntVar`, `Int64Var`, `Float64Var`, and `DurationVar` (`time.Duration`, parsed with `time.ParseDuration`)
 - **Custom validation**: Optional `Validate` function runs after parsing to reject invalid values
@@ -449,7 +449,7 @@ app.Interactive = clix.InteractiveAlways // prompt even when In is not a termina
 app.IsInteractive()                      // reports the effective decision
 ```
 
-Readers that are not file descriptors, such as `strings.Reader`, are not terminals. Tests that answer prompts from a string or a fake `Prompter` should set `clix.InteractiveAlways`.
+Readers that are not file descriptors, such as `strings.Reader`, are not terminals. Tests that answer prompts from a string or a fake `Prompter` should set `clix.InteractiveAlways`. The default prompter is created by `NewApp`, so pass test streams as options (`clix.NewApp("myapp", clix.WithAppIn(in), clix.WithAppErr(errOut))`) rather than assigning `app.In` afterwards.
 
 Other guarantees:
 
@@ -459,7 +459,20 @@ Other guarantees:
 - **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors and missing flags, 130 for cancellation, and 1 otherwise:
 
 ```go
+package main
+
+import (
+        "context"
+        "fmt"
+        "os"
+        "os/signal"
+
+        "github.com/SCKelemen/clix/v2"
+)
+
 func main() {
+        app := clix.NewApp("myapp")
+
         ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
         defer stop()
         if err := app.Run(ctx, nil); err != nil {
@@ -764,6 +777,9 @@ type App struct {
         In        io.Reader
         EnvPrefix string
 
+        Interactive InteractiveMode // InteractiveAuto, InteractiveAlways or InteractiveNever
+        ConfigPath  string          // overrides the config file location
+
         DefaultTheme PromptTheme
         Styles       Styles
 }
@@ -775,7 +791,8 @@ Key methods:
 - `Flags() *FlagSet` - App-level (root command) flags, visible to every command
 - `AddExtension(ext Extension)` - Register an extension
 - `ApplyExtensions() error` - Apply all registered extensions
-- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file
+- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does)
+- `IsInteractive() bool` - Whether a missing required flag will be prompted for (see Non-interactive use)
 - `SaveConfig() error` - Persist `Config` values to the configuration file
 
 Structured output lives outside `App`: use `clix.FormatData` together with the format extension (see [Structured Output](#structured-output)).
