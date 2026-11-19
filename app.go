@@ -71,8 +71,8 @@ type App struct {
 	// Interactive controls whether Run prompts for missing required flags.
 	// The default, InteractiveAuto, prompts only when In is a terminal, so
 	// scripts and CI get a *MissingFlagsError instead of a hung process.
-	// The <EnvPrefix>_DISABLE_PROMPTS environment variable turns prompting
-	// off in every mode. See IsInteractive.
+	// The <EnvPrefix>_DISABLE_PROMPTS environment variable and --quiet (see
+	// EnableQuiet) turn prompting off in every mode. See IsInteractive.
 	Interactive InteractiveMode
 
 	// Out is the writer for standard output (defaults to os.Stdout).
@@ -136,13 +136,15 @@ type App struct {
 	// ProgressMode controls how Context.Progress reports long-running
 	// work. The default, ProgressAuto, animates a spinner when Err is a
 	// terminal and prints one plain line otherwise; ProgressPlain always
-	// prints the plain line and ProgressQuiet prints nothing.
+	// prints the plain line and ProgressQuiet prints nothing. --quiet (see
+	// EnableQuiet) makes every mode quiet.
 	ProgressMode ProgressMode
 
 	configLoaded  bool
 	configLoadErr error
 
 	configurations   bool   // EnableConfigurations was called
+	quiet            bool   // EnableQuiet was called
 	configLoadedPath string // the file Config was loaded from
 
 	// boundRoot and boundFlags are the root command and root flag set the

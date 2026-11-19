@@ -198,6 +198,10 @@ func renderHintLine(cfg *clix.PromptConfig, baseState clix.PromptKeyState) strin
 // Otherwise prompts run in line mode: one line is read per answer, with the
 // same answer rules, and key bindings are not used. Either way prompts
 // return ctx.Err() as soon as ctx is done.
+//
+// Under --quiet (see clix.App.EnableQuiet) Prompt returns
+// clix.QuietAnswer, the prompt's default answer, without reading In or
+// writing to Out.
 type TerminalPrompter struct {
 	In  io.Reader
 	Out io.Writer
@@ -210,6 +214,10 @@ func (p TerminalPrompter) Prompt(ctx context.Context, opts ...clix.PromptOption)
 		return "", errors.New("prompter missing IO")
 	}
 	cfg, err := clix.NewPromptConfig(ctx, opts...)
+	if errors.Is(err, clix.ErrQuiet) {
+		// --quiet: the default answer, without drawing or reading.
+		return clix.QuietAnswer(cfg)
+	}
 	if err != nil {
 		return "", err
 	}
