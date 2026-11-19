@@ -163,16 +163,15 @@ type varDefaultOption string
 func (o varDefaultOption) ApplyFlag(*FlagOptions) {}
 
 // applyDefault sets flag's value from its Default at registration. A
-// Default the value rejects (such as "eighty" for an int flag) is recorded
-// in Err, and the flag is treated as having no default, so a Required flag
-// is still missing.
+// Default the value rejects (such as "eighty" for an int flag) is reported
+// by Err, and the flag is treated as having no default, so a Required flag
+// is still missing, until the Default is changed (through Lookup).
 func (fs *FlagSet) applyDefault(flag *Flag) {
 	if flag.Default == "" {
 		return
 	}
 	if err := flag.Value.Set(flag.Default); err != nil {
-		flag.badDefault = true
-		fs.errs = append(fs.errs, fmt.Errorf("clix: invalid default %q for flag --%s in flag set %q: %w", flag.Default, flag.Name, fs.name, err))
+		flag.badDefault, flag.badDefaultErr = flag.Default, err
 	}
 }
 

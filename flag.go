@@ -137,8 +137,9 @@ type Flag struct {
 	leakNoted  bool   // a carried-over value was recorded in the FlagSet's errors
 	shadowed   bool   // the Run ignores the flag: a better owner's flag of that name on its path is used (see markShadowed)
 
-	yieldsShort bool // Internal: the built-in --help, which gives up -h to any other flag
-	badDefault  bool // Internal: Default does not parse, so the flag has no default
+	yieldsShort   bool   // Internal: the built-in --help, which gives up -h to any other flag
+	badDefault    string // Internal: a Default the Value rejected at registration; while Default is still that, the flag has no default
+	badDefaultErr error  // Internal: why the Value rejected badDefault
 
 	wantShort  string // Internal: the short name requested at registration
 	registered bool   // Internal: wantShort has been recorded
@@ -185,10 +186,11 @@ func (w owner) possessive() string {
 	return w.describe() + "'s"
 }
 
-// hasDefault reports whether the flag has a Default that its Value
-// accepts.
+// hasDefault reports whether the flag has a Default, other than one its
+// Value rejected at registration. A Default changed since (through
+// Lookup) counts again.
 func (f *Flag) hasDefault() bool {
-	return f.Default != "" && !f.badDefault
+	return f.Default != "" && f.Default != f.badDefault
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.
@@ -1010,7 +1012,20 @@ func (fs *FlagSet) Err() error {
 	if fs == nil {
 		return nil
 	}
-	return errors.Join(append(append([]error(nil), fs.errs...), fs.conflicts...)...)
+	return errors.Join(fs.problems()...)
+}
+
+// problems returns what Err and App.Validate report: the problems
+// recorded while registering and running, defaults the flags rejected at
+// registration (unless changed since), and name conflicts.
+func (fs *FlagSet) problems() []error {
+	errs := append([]error(nil), fs.errs...)
+	for _, f := range fs.all {
+		if f.badDefault != "" && f.Default == f.badDefault {
+			errs = append(errs, fmt.Errorf("clix: invalid default %q for flag --%s in flag set %q: %w", f.Default, f.Name, fs.name, f.badDefaultErr))
+		}
+	}
+	return append(errs, fs.conflicts...)
 }
 
 // Flags returns the registered flags that are in effect, in registration

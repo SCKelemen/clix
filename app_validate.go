@@ -62,7 +62,7 @@ type ancestorFlag struct {
 // the flags. path is cmd's path as reached in this walk, since a command
 // shared by several groups is checked once under each.
 func (a *App) validateCommand(cmd *Command, path string, inherited map[string]ancestorFlag, errs *[]error) {
-	for _, err := range append(append([]error(nil), cmd.Flags.errs...), cmd.Flags.conflicts...) {
+	for _, err := range cmd.Flags.problems() {
 		*errs = append(*errs, fmt.Errorf("%s: %w", path, err))
 	}
 	report := func(format string, args ...any) {

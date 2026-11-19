@@ -43,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Run` panicked on a `&Command{}` appended to `Children` after a `Run`, on a `Root` replaced after a `Run`, and on `--help` in a zero-value `App` (nil `Out`).
 - The built-in `--help` took `-h` from a `--host` flag on a hand-built `Command` or a `WithAppRoot` root, and every command's own `--help` kept `-h`, so after a command name `-h` showed help instead of setting the root's or a group's `--host`; help then lists `--help` without `-h`.
 - Command names matched with Unicode case folding, so `ſtatus` (U+017F) ran `status` and a Kelvin sign matched `k`, which let argv words slip past allow and deny lists. Matching now folds ASCII letters only.
-- An unparsable `Default` (such as `"eighty"` for an int flag) was ignored silently and satisfied `Required`; it is now recorded in `FlagSet.Err` and counts as no default.
+- An unparsable `Default` (such as `"eighty"` for an int flag) was ignored silently and satisfied `Required`; it is now reported by `FlagSet.Err` and counts as no default, until it is changed (through `FlagSet.Lookup`).
 - A bare `--force` skipped `Validate`, while `--force=true` ran it.
 - For a key that is not a flag, an empty environment variable hid the config file in `Context` getters.
 - A root with no `Run` handler whose only children came from extensions failed on a bare invocation instead of showing help.

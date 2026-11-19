@@ -198,6 +198,36 @@ func TestInvalidDefaultAtRunIsAnError(t *testing.T) {
 	}
 }
 
+// A Default fixed after registration (through Lookup) was ignored: the
+// flag still counted as having no default, so Run left it at 0, and
+// Validate kept reporting the old one.
+func TestDefaultFixedThroughLookup(t *testing.T) {
+	app, _ := newTestApp(t, "app")
+	var n int
+	c := clix.NewCommand("c", clix.WithCommandRun(noop))
+	c.Flags.IntVar(clix.IntVarOptions{FlagOptions: clix.FlagOptions{Name: "n", Required: true}, Value: &n, Default: "oops"})
+	app.Root.AddCommand(c)
+	want := `invalid default "oops" for flag --n`
+	if err := app.Validate(); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("Validate() = %v, want %q", err, want)
+	}
+	var missing *clix.MissingFlagsError
+	if err := app.Run(bg, []string{"c"}); !errors.As(err, &missing) {
+		t.Fatalf("with the bad default, Run = %v; want --n missing", err)
+	}
+	c.Flags.Lookup("n").Default = "5"
+	if err := app.Run(bg, []string{"c"}); err != nil || n != 5 {
+		t.Fatalf("with the fixed default, Run = %v, n = %d", err, n)
+	}
+	if err := app.Validate(); err != nil {
+		t.Fatalf("Validate() after the fix = %v", err)
+	}
+	c.Flags.Lookup("n").Default = "oops"
+	if err := c.Flags.Err(); err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("Err() with the bad default back = %v", err)
+	}
+}
+
 // The built-in values have Reset.
 func TestBuiltinValuesReset(t *testing.T) {
 	fs := clix.NewFlagSet("x")
