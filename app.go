@@ -92,6 +92,21 @@ type App struct {
 	// Use lipgloss-compatible styles or custom TextStyle implementations.
 	Styles Styles
 
+	// AutoEnv controls whether flags read the environment variable named
+	// after them, <EnvPrefix>_<NAME> (for example, MYAPP_DRY_RUN for
+	// --dry-run), in addition to their EnvVar and EnvVars. nil (the
+	// default) and true mean yes; point it at false to read only the
+	// variables a flag names explicitly. It does not affect Context
+	// getters for keys that are not flags.
+	AutoEnv *bool
+
+	// AutoConfig controls whether flags read the config file key named
+	// after them. nil (the default) and true mean yes, so --region reads
+	// "region"; point it at false so that only flags with a
+	// FlagOptions.ConfigKey read the config file. It does not affect
+	// Context getters for keys that are not flags.
+	AutoConfig *bool
+
 	// CaseSensitive makes Run match command names and aliases exactly. By
 	// default they match ignoring ASCII case ("DELETE" runs "delete");
 	// non-ASCII letters always match exactly.
@@ -422,15 +437,25 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 		}
 	}
 
-	// Then check config
+	// Then check config: a flag's config key (see FlagOptions.ConfigKey),
+	// or the key itself for keys that are not flags.
 	for _, h := range hits {
 		if h.flag.set && h.flag.source == SourceConfigFile {
 			return h.flag.Value.String(), SourceConfigFile, true
 		}
 	}
 	if ctx.App != nil && ctx.App.Config != nil {
-		if v, ok := ctx.App.Config.Get(key); ok {
-			return v, SourceConfigFile, true
+		for _, h := range hits {
+			if k, ok := ctx.App.flagConfigKey(h.flag); ok {
+				if v, ok := ctx.App.Config.Get(k); ok {
+					return v, SourceConfigFile, true
+				}
+			}
+		}
+		if len(hits) == 0 {
+			if v, ok := ctx.App.Config.Get(key); ok {
+				return v, SourceConfigFile, true
+			}
 		}
 	}
 

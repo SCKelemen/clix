@@ -424,9 +424,11 @@ func (a *App) applyConfigToFlags(flags *FlagSet) error {
 			continue
 		}
 
-		// The built-in --help and --version switches only come from the
-		// command line; MYAPP_HELP or MYAPP_VERSION must not hijack every run.
+		// CommandLineOnly flags, and the built-in --help and --version
+		// switches, only come from the command line; MYAPP_FORCE or
+		// MYAPP_HELP must not hijack every run.
 		if isCommandLineOnly(flag) {
+			a.trySetFromDefault(flag)
 			continue
 		}
 
@@ -448,14 +450,45 @@ func (a *App) applyConfigToFlags(flags *FlagSet) error {
 	return nil
 }
 
-// isCommandLineOnly reports whether flag is a boolean --help or --version
-// switch, which are never read from the environment or the config file.
+// isCommandLineOnly reports whether flag is never read from the
+// environment or the config file: it is marked CommandLineOnly, or it is a
+// boolean --help or --version switch.
 func isCommandLineOnly(flag *Flag) bool {
+	return flag.CommandLineOnly || isBuiltinSwitch(flag)
+}
+
+// isBuiltinSwitch reports whether flag is a boolean --help or --version
+// switch.
+func isBuiltinSwitch(flag *Flag) bool {
 	if flag.Name != "help" && flag.Name != "version" {
 		return false
 	}
 	_, ok := flag.Value.(boolFlag)
 	return ok
+}
+
+// autoEnv reports whether flags read <EnvPrefix>_<NAME> (App.AutoEnv).
+func (a *App) autoEnv() bool {
+	return a.AutoEnv == nil || *a.AutoEnv
+}
+
+// autoConfig reports whether flags read the config key named after them
+// (App.AutoConfig).
+func (a *App) autoConfig() bool {
+	return a.AutoConfig == nil || *a.AutoConfig
+}
+
+// flagConfigKey returns the config file key that supplies flag, if any.
+func (a *App) flagConfigKey(flag *Flag) (string, bool) {
+	switch {
+	case isCommandLineOnly(flag) || flag.NoConfig:
+		return "", false
+	case flag.ConfigKey != "":
+		return flag.ConfigKey, true
+	case a.autoConfig():
+		return flag.Name, true
+	}
+	return "", false
 }
 
 // envVarName returns the default environment variable for a flag or key:
@@ -495,8 +528,12 @@ func setAndValidate(flag *Flag, raw string) error {
 }
 
 // flagEnvVars lists the environment variables consulted for flag, in order:
-// EnvVar, then each of EnvVars, then the APP_KEY default.
+// EnvVar, then each of EnvVars, then the APP_KEY default (unless AutoEnv is
+// off). Flags that are CommandLineOnly or NoEnv have none.
 func (a *App) flagEnvVars(flag *Flag) []string {
+	if isCommandLineOnly(flag) || flag.NoEnv {
+		return nil
+	}
 	names := make([]string, 0, len(flag.EnvVars)+2)
 	seen := make(map[string]bool, cap(names))
 	add := func(name string) {
@@ -509,7 +546,9 @@ func (a *App) flagEnvVars(flag *Flag) []string {
 	for _, name := range flag.EnvVars {
 		add(name)
 	}
-	add(a.envVarName(flag.Name))
+	if a.autoEnv() {
+		add(a.envVarName(flag.Name))
+	}
 	return names
 }
 
@@ -531,20 +570,24 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 	if a.Config == nil {
 		return false, nil
 	}
+	key, ok := a.flagConfigKey(flag)
+	if !ok {
+		return false, nil
+	}
 
-	val, ok := a.Config.Get(flag.Name)
+	val, ok := a.Config.Get(key)
 	if !ok {
 		return false, nil
 	}
 	if isNumericValue(flag.Value) {
 		// Numeric flags read YAML's numeric value: 0x1F is 31 and 0755 is
 		// 493, as in YAML; every other flag gets the text as written.
-		if n, ok := a.Config.number(flag.Name); ok {
+		if n, ok := a.Config.number(key); ok {
 			val = n
 		}
 	}
 	if err := setAndValidate(flag, val); err != nil {
-		return false, fmt.Errorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, flag.Name, err)
+		return false, fmt.Errorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, key, err)
 	}
 	flag.set = true
 	flag.source = SourceConfigFile

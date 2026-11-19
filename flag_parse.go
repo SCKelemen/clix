@@ -134,7 +134,7 @@ func resetFlagState(fs *FlagSet) {
 		f.set = false
 		f.cliSet = false
 		f.source = SourceDefault
-		if isCommandLineOnly(f) {
+		if isBuiltinSwitch(f) {
 			_ = f.Value.(boolFlag).SetBool(false)
 		}
 		if f.restore == nil {

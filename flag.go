@@ -101,6 +101,20 @@ type Flag struct {
 	// after it has been successfully parsed by Value.Set.
 	Validate func(string) error
 
+	// CommandLineOnly means the flag is read only from the command line,
+	// never from the environment or the config file.
+	CommandLineOnly bool
+
+	// NoEnv means the flag is never read from an environment variable.
+	NoEnv bool
+
+	// NoConfig means the flag is never read from the config file.
+	NoConfig bool
+
+	// ConfigKey is the config file key for this flag. If empty, the flag's
+	// Name is used (unless App.AutoConfig is false).
+	ConfigKey string
+
 	// Value is the flag value implementation.
 	Value Value
 
@@ -166,6 +180,50 @@ type FlagOptions struct {
 	// after it has been successfully parsed by Value.Set. If non-nil, it is
 	// called with the raw input string; returning a non-nil error rejects the value.
 	Validate func(string) error
+
+	// CommandLineOnly means the flag is read only from the command line
+	// (by name or position), never from an environment variable or the
+	// config file. Use it for destructive or confirming switches such as
+	// --force or --yes, so that MYAPP_FORCE=1 or "force: true" in a config
+	// file cannot turn them on for every run. It implies NoEnv and
+	// NoConfig.
+	CommandLineOnly bool
+
+	// NoEnv means the flag is never read from an environment variable,
+	// not even EnvVar or EnvVars.
+	NoEnv bool
+
+	// NoConfig means the flag is never read from the config file.
+	NoConfig bool
+
+	// ConfigKey is the config file key that supplies this flag, in dot
+	// notation, such as "delete.force" for "delete:\n  force: true". If
+	// empty, the key is the flag's Name, so the same bare key feeds every
+	// command's flag of that name; a per-command ConfigKey avoids that.
+	// When App.AutoConfig is false, only flags with a ConfigKey read the
+	// config file.
+	ConfigKey string
+}
+
+// newFlag builds a Flag from o with the given value and default text.
+func (o FlagOptions) newFlag(value Value, def string) *Flag {
+	return &Flag{
+		Name:            o.Name,
+		Short:           o.Short,
+		Usage:           o.Usage,
+		EnvVar:          o.EnvVar,
+		EnvVars:         append([]string(nil), o.EnvVars...),
+		Default:         def,
+		Required:        o.Required,
+		Prompt:          o.Prompt,
+		Positional:      o.Positional,
+		Validate:        o.Validate,
+		CommandLineOnly: o.CommandLineOnly,
+		NoEnv:           o.NoEnv,
+		NoConfig:        o.NoConfig,
+		ConfigKey:       o.ConfigKey,
+		Value:           value,
+	}
 }
 
 // ApplyFlag implements FlagOption, so a FlagOptions value (and every
@@ -198,6 +256,18 @@ func (o FlagOptions) ApplyFlag(fo *FlagOptions) {
 	}
 	if o.Validate != nil {
 		fo.Validate = o.Validate
+	}
+	if o.CommandLineOnly {
+		fo.CommandLineOnly = true
+	}
+	if o.NoEnv {
+		fo.NoEnv = true
+	}
+	if o.NoConfig {
+		fo.NoConfig = true
+	}
+	if o.ConfigKey != "" {
+		fo.ConfigKey = o.ConfigKey
 	}
 }
 
@@ -307,19 +377,7 @@ func (fs *FlagSet) StringVar(opts ...FlagOption) {
 		}
 	}
 	value := &StringValue{target: stringOpts.Value}
-	flag := &Flag{
-		Name:       stringOpts.Name,
-		Short:      stringOpts.Short,
-		Usage:      stringOpts.Usage,
-		EnvVar:     stringOpts.EnvVar,
-		EnvVars:    append([]string(nil), stringOpts.EnvVars...),
-		Default:    stringOpts.Default,
-		Required:   stringOpts.Required,
-		Prompt:     stringOpts.Prompt,
-		Positional: stringOpts.Positional,
-		Validate:   stringOpts.Validate,
-		Value:      value,
-	}
+	flag := stringOpts.FlagOptions.newFlag(value, stringOpts.Default)
 	fs.addFlag(flag)
 	if stringOpts.Default != "" {
 		_ = value.Set(stringOpts.Default)
@@ -442,18 +500,7 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 		}
 	}
 	value := &BoolValue{target: boolOpts.Value}
-	flag := &Flag{
-		Name:       boolOpts.Name,
-		Short:      boolOpts.Short,
-		Usage:      boolOpts.Usage,
-		EnvVar:     boolOpts.EnvVar,
-		EnvVars:    append([]string(nil), boolOpts.EnvVars...),
-		Required:   boolOpts.Required,
-		Prompt:     boolOpts.Prompt,
-		Positional: boolOpts.Positional,
-		Validate:   boolOpts.Validate,
-		Value:      value,
-	}
+	flag := boolOpts.FlagOptions.newFlag(value, "")
 	fs.addFlag(flag)
 }
 
@@ -480,19 +527,7 @@ func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 		}
 	}
 	value := &DurationValue{target: durationOpts.Value}
-	flag := &Flag{
-		Name:       durationOpts.Name,
-		Short:      durationOpts.Short,
-		Usage:      durationOpts.Usage,
-		EnvVar:     durationOpts.EnvVar,
-		EnvVars:    append([]string(nil), durationOpts.EnvVars...),
-		Default:    durationOpts.Default,
-		Required:   durationOpts.Required,
-		Prompt:     durationOpts.Prompt,
-		Positional: durationOpts.Positional,
-		Validate:   durationOpts.Validate,
-		Value:      value,
-	}
+	flag := durationOpts.FlagOptions.newFlag(value, durationOpts.Default)
 	fs.addFlag(flag)
 	if durationOpts.Default != "" {
 		_ = value.Set(durationOpts.Default)
@@ -565,19 +600,7 @@ func (fs *FlagSet) IntVar(opts ...FlagOption) {
 		}
 	}
 	value := &IntValue{target: intOpts.Value}
-	flag := &Flag{
-		Name:       intOpts.Name,
-		Short:      intOpts.Short,
-		Usage:      intOpts.Usage,
-		EnvVar:     intOpts.EnvVar,
-		EnvVars:    append([]string(nil), intOpts.EnvVars...),
-		Default:    intOpts.Default,
-		Required:   intOpts.Required,
-		Prompt:     intOpts.Prompt,
-		Positional: intOpts.Positional,
-		Validate:   intOpts.Validate,
-		Value:      value,
-	}
+	flag := intOpts.FlagOptions.newFlag(value, intOpts.Default)
 	fs.addFlag(flag)
 	if intOpts.Default != "" {
 		_ = value.Set(intOpts.Default)
@@ -650,19 +673,7 @@ func (fs *FlagSet) Int64Var(opts ...FlagOption) {
 		}
 	}
 	value := &Int64Value{target: int64Opts.Value}
-	flag := &Flag{
-		Name:       int64Opts.Name,
-		Short:      int64Opts.Short,
-		Usage:      int64Opts.Usage,
-		EnvVar:     int64Opts.EnvVar,
-		EnvVars:    append([]string(nil), int64Opts.EnvVars...),
-		Default:    int64Opts.Default,
-		Required:   int64Opts.Required,
-		Prompt:     int64Opts.Prompt,
-		Positional: int64Opts.Positional,
-		Validate:   int64Opts.Validate,
-		Value:      value,
-	}
+	flag := int64Opts.FlagOptions.newFlag(value, int64Opts.Default)
 	fs.addFlag(flag)
 	if int64Opts.Default != "" {
 		_ = value.Set(int64Opts.Default)
@@ -735,19 +746,7 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 		}
 	}
 	value := &Float64Value{target: float64Opts.Value}
-	flag := &Flag{
-		Name:       float64Opts.Name,
-		Short:      float64Opts.Short,
-		Usage:      float64Opts.Usage,
-		EnvVar:     float64Opts.EnvVar,
-		EnvVars:    append([]string(nil), float64Opts.EnvVars...),
-		Default:    float64Opts.Default,
-		Required:   float64Opts.Required,
-		Prompt:     float64Opts.Prompt,
-		Positional: float64Opts.Positional,
-		Validate:   float64Opts.Validate,
-		Value:      value,
-	}
+	flag := float64Opts.FlagOptions.newFlag(value, float64Opts.Default)
 	fs.addFlag(flag)
 	if float64Opts.Default != "" {
 		_ = value.Set(float64Opts.Default)
@@ -914,6 +913,29 @@ func WithFlagValidate(fn func(string) error) FlagOption {
 	return flagValidateOption{fn: fn}
 }
 
+// WithFlagCommandLineOnly makes the flag readable only from the command
+// line, never from the environment or the config file. See
+// FlagOptions.CommandLineOnly.
+func WithFlagCommandLineOnly() FlagOption {
+	return flagSourcesOption{commandLineOnly: true}
+}
+
+// WithFlagNoEnv stops the flag from being read from environment variables.
+func WithFlagNoEnv() FlagOption {
+	return flagSourcesOption{noEnv: true}
+}
+
+// WithFlagNoConfig stops the flag from being read from the config file.
+func WithFlagNoConfig() FlagOption {
+	return flagSourcesOption{noConfig: true}
+}
+
+// WithFlagConfigKey sets the config file key that supplies the flag, such
+// as "delete.force". See FlagOptions.ConfigKey.
+func WithFlagConfigKey(key string) FlagOption {
+	return flagConfigKeyOption(key)
+}
+
 // WithStringValue sets the string flag value pointer.
 func WithStringValue(value *string) FlagOption {
 	return stringValueOption{value: value}
@@ -1025,6 +1047,22 @@ type flagValidateOption struct {
 
 func (o flagValidateOption) ApplyFlag(fo *FlagOptions) {
 	fo.Validate = o.fn
+}
+
+type flagSourcesOption struct {
+	commandLineOnly, noEnv, noConfig bool
+}
+
+func (o flagSourcesOption) ApplyFlag(fo *FlagOptions) {
+	fo.CommandLineOnly = fo.CommandLineOnly || o.commandLineOnly
+	fo.NoEnv = fo.NoEnv || o.noEnv
+	fo.NoConfig = fo.NoConfig || o.noConfig
+}
+
+type flagConfigKeyOption string
+
+func (o flagConfigKeyOption) ApplyFlag(fo *FlagOptions) {
+	fo.ConfigKey = string(o)
 }
 
 type boolValueOption struct {
