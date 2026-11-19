@@ -35,3 +35,27 @@ func TestDemoGreetCommand(t *testing.T) {
 		t.Fatalf("expected post-run message in output, got %q", output)
 	}
 }
+
+func TestDemoProjectFlag(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	app := demoapp.New()
+	out := &bytes.Buffer{}
+	app.Out = out
+	app.Err = &bytes.Buffer{}
+
+	// --project is registered on the installed root, so it is accepted before
+	// and after the command name.
+	for _, args := range [][]string{
+		{"--project", "foo", "greet", "--name", "Alice"},
+		{"greet", "--name", "Alice", "--project", "foo"},
+	} {
+		out.Reset()
+		if err := app.Run(context.Background(), args); err != nil {
+			t.Fatalf("app.Run(%q) returned error: %v", args, err)
+		}
+		if !strings.Contains(out.String(), "Using project foo") {
+			t.Fatalf("app.Run(%q): expected the flag's project, got %q", args, out.String())
+		}
+	}
+}

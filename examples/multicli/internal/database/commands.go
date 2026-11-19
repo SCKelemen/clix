@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/format"
 )
 
 // NewCreateCommand creates a "create" command for databases.
@@ -43,8 +44,8 @@ func NewListCommand() *clix.Command {
 			{"name": "dev-db", "status": "inactive"},
 		}
 
-		// Use format flag to output as json/yaml/text
-		return ctx.App.FormatOutput(databases)
+		// Honor the global --format flag registered by format.Extension.
+		return clix.FormatData(ctx.App.Out, databases, format.OutputFormat(ctx.App))
 	}
 	return cmd
 }

@@ -2,6 +2,7 @@ package vulnerabilities
 
 import (
 	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/format"
 )
 
 // NewListCommand creates a "list" command for vulnerabilities.
@@ -36,7 +37,7 @@ func NewListCommand() *clix.Command {
 			vulns = filtered
 		}
 
-		return ctx.App.FormatOutput(vulns)
+		return clix.FormatData(ctx.App.Out, vulns, format.OutputFormat(ctx.App))
 	}
 	return cmd
 }
@@ -50,4 +51,3 @@ func NewVulnerabilitiesCommand() *clix.Command {
 	cmd.AddCommand(NewListCommand())
 	return cmd
 }
-

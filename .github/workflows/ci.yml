@@ -4,38 +4,100 @@ on:
   push:
     branches: [ main, v1 ]
   pull_request:
-    branches: [ main, v1 ]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
+    name: Test (root module)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
 
-      - name: Cache Go modules
-        uses: actions/cache@v5
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      # Covers every .go file in the repository, including the nested
+      # example modules.
+      - name: Check formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not gofmt-clean:"
+            echo "$unformatted"
+            echo "Run 'gofmt -w .' and commit the result."
+            exit 1
+          fi
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Verify go.mod is tidy
+        run: go mod tidy -diff
 
-      - name: Run tests
-        run: go test ./...
+      # Includes examples/basic, examples/gcloud and examples/gh, which are
+      # packages of the root module.
+      - name: Build
+        run: go build ./...
 
-      - name: Run vet
+      - name: Vet
         run: go vet ./...
 
-      - name: Verify examples build
-        run: |
-          go build ./examples/basic/cmd/demo
-          go build ./examples/gcloud/cmd/gcloud
-          go build ./examples/gh/cmd/gh
+      - name: Test
+        run: go test -race ./...
 
+  lint:
+    name: Lint (root module)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets only-new-issues read the pull request diff.
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The root module has pre-existing findings (see .golangci.yml), so only
+      # issues introduced by the pull request or push fail the job.
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+          only-new-issues: true
+
+  examples:
+    name: Example (${{ matrix.example }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Examples with their own go.mod. Each one replaces
+        # github.com/SCKelemen/clix/v2 with the working tree (../..).
+        example: [ bubbles, lipgloss, multicli, survey ]
+    defaults:
+      run:
+        working-directory: examples/${{ matrix.example }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: examples/${{ matrix.example }}/go.sum
+
+      - name: Verify go.mod is tidy
+        run: go mod tidy -diff
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test -race ./...

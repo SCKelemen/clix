@@ -40,49 +40,49 @@ func newApp() *clix.App {
 		Name:  "greet",
 		Short: "Greet someone interactively",
 		Run: func(ctx *clix.Context) error {
-		// Example 1: Text input using bubbles textinput
-		name, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
-			Label:   "What's your name?",
-			Default: "World",
-		})
-		if err != nil {
-			return fmt.Errorf("failed to get name: %w", err)
-		}
+			// Example 1: Text input using bubbles textinput
+			name, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
+				Label:   "What's your name?",
+				Default: "World",
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get name: %w", err)
+			}
 
-		// Example 2: Select from a list using bubbles list
-		options := []clix.SelectOption{
-			{Label: "Hello", Value: "hello"},
-			{Label: "Hi", Value: "hi"},
-			{Label: "Hey", Value: "hey"},
-			{Label: "Greetings", Value: "greetings"},
-		}
+			// Example 2: Select from a list using bubbles list
+			options := []clix.SelectOption{
+				{Label: "Hello", Value: "hello"},
+				{Label: "Hi", Value: "hi"},
+				{Label: "Hey", Value: "hey"},
+				{Label: "Greetings", Value: "greetings"},
+			}
 
-		greeting, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
-			Label:   "Choose a greeting",
-			Options:  options,
-			Default:  "hello",
-		})
-		if err != nil {
-			return fmt.Errorf("failed to get greeting: %w", err)
-		}
+			greeting, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
+				Label:   "Choose a greeting",
+				Options: options,
+				Default: "hello",
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get greeting: %w", err)
+			}
 
-		// Example 3: Confirm prompt
-		confirm, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
-			Label:   "Would you like to see a message?",
-			Confirm:  true,
-			Default:  "y",
-		})
-		if err != nil {
-			return fmt.Errorf("failed to get confirmation: %w", err)
-		}
+			// Example 3: Confirm prompt
+			confirm, err := app.Prompter.Prompt(ctx, clix.PromptRequest{
+				Label:   "Would you like to see a message?",
+				Confirm: true,
+				Default: "y",
+			})
+			if err != nil {
+				return fmt.Errorf("failed to get confirmation: %w", err)
+			}
 
-		if confirm == "y" || confirm == "yes" {
-			fmt.Fprintf(ctx.App.Out, "%s, %s!\n", greeting, name)
-		} else {
-			fmt.Fprintln(ctx.App.Out, "Okay, maybe next time!")
-		}
+			if confirm == "y" || confirm == "yes" {
+				fmt.Fprintf(ctx.App.Out, "%s, %s!\n", greeting, name)
+			} else {
+				fmt.Fprintln(ctx.App.Out, "Okay, maybe next time!")
+			}
 
-		return nil
+			return nil
 		},
 	}
 
@@ -416,4 +416,3 @@ type listItem struct {
 func (i listItem) FilterValue() string { return i.title }
 func (i listItem) Title() string       { return i.title }
 func (i listItem) Description() string { return i.desc }
-

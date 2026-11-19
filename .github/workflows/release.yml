@@ -5,37 +5,32 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: read
+
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
+      # Create the GitHub Release for the pushed tag.
       contents: write
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
 
-      - name: Cache Go modules
-        uses: actions/cache@v5
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      # Includes examples/basic, examples/gcloud and examples/gh, which are
+      # packages of the root module.
+      - name: Build
+        run: go build ./...
 
-      - name: Download dependencies
-        run: go mod download
+      - name: Vet
+        run: go vet ./...
 
-      - name: Run tests
+      - name: Test
         run: go test ./...
-
-      - name: Verify examples build
-        run: |
-          go build ./examples/basic/cmd/demo
-          go build ./examples/gcloud/cmd/gcloud
-          go build ./examples/gh/cmd/gh
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -45,4 +40,3 @@ jobs:
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-

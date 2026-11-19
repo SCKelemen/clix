@@ -1,0 +1,17 @@
+# golangci-lint configuration for the root module.
+# Reference: https://golangci-lint.run/docs/configuration/file/
+#
+# This file intentionally keeps golangci-lint's defaults: the "standard"
+# linter set (errcheck, govet, ineffassign, staticcheck, unused) with no
+# exclusions or exclusion presets.
+#
+# Known baseline: with golangci-lint v2.15.0 (the version pinned in
+# .github/workflows/ci.yml), `golangci-lint run --max-same-issues=0
+# --max-issues-per-linter=0 ./...` reports 273 pre-existing issues:
+# errcheck 252 (mostly unchecked fmt.Fprint* writes), staticcheck 13 and
+# unused 8. CI therefore runs with only-new-issues, so a change fails lint only
+# if it adds findings. Fix the baseline in code rather than silencing it here.
+version: "2"
+
+linters:
+  default: standard

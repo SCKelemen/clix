@@ -1,11 +1,9 @@
 module survey-demo
 
-go 1.24.0
-
-toolchain go1.24.2
+go 1.25.0
 
 require (
-	github.com/SCKelemen/clix/v2 v0.0.0
+	github.com/SCKelemen/clix/v2 v2.4.1
 	github.com/charmbracelet/lipgloss v1.1.0
 )
 
@@ -21,8 +19,9 @@ require (
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/term v0.36.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/term v0.41.0 // indirect
 )
 
 replace github.com/SCKelemen/clix/v2 => ../..

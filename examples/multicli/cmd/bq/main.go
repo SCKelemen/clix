@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/format"
 	"github.com/SCKelemen/clix/v2/ext/version"
 	"multicli/internal/bigquery"
 )
@@ -19,7 +21,7 @@ func main() {
 	// For the standalone bq CLI, we mount bigquery children directly
 	// This gives us: bq dataset list, bq v1beta dataset list, etc.
 	bqCmd := bigquery.NewBigQueryCommand()
-	
+
 	// Mount all children (dataset, v1alpha, v1beta, v1)
 	for _, child := range bqCmd.Children {
 		root.AddCommand(child)
@@ -27,7 +29,9 @@ func main() {
 
 	app.Root = root
 
-	// Add extensions
+	// Add extensions. format.Extension registers the global --format flag
+	// that the shared commands pass to clix.FormatData.
+	app.AddExtension(format.Extension{})
 	app.AddExtension(version.Extension{
 		Version: "3.0.0",
 		Commit:  "bq-main",
@@ -35,7 +39,7 @@ func main() {
 	})
 
 	if err := app.Run(context.Background(), nil); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
-

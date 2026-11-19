@@ -23,15 +23,6 @@ func New() *clix.App {
 	app.Description = "Demonstrates the clix CLI framework"
 
 	var project string
-	app.Flags().StringVar(clix.StringVarOptions{
-		FlagOptions: clix.FlagOptions{
-			Name:   "project",
-			Usage:  "Project to operate on",
-			EnvVar: "DEMO_PROJECT",
-		},
-		Value:   &project,
-		Default: "sample-project",
-	})
 
 	root := clix.NewCommand("demo")
 	root.Short = "Root of the demo application"
@@ -43,6 +34,19 @@ func New() *clix.App {
 		greet.NewCommand(&project),
 	}
 
+	// app.Flags() is the flag set of the current root command, so install
+	// the custom root before registering app-level flags on it.
 	app.Root = root
+
+	app.Flags().StringVar(clix.StringVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:   "project",
+			Usage:  "Project to operate on",
+			EnvVar: "DEMO_PROJECT",
+		},
+		Value:   &project,
+		Default: "sample-project",
+	})
+
 	return app
 }

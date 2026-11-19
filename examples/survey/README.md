@@ -9,7 +9,7 @@ This example demonstrates the `survey` extension with two different surveys:
   - Basic survey structure
   - Input validation (name, email)
   - **Default values** - Press Enter to accept default values (common CLI pattern)
-  - Undo/back functionality
+  - Going back from the end card (answer `no` to return to the previous question)
   - End card with styled summary
 
 ### Advanced Survey (`advanced` command)
@@ -21,7 +21,7 @@ This example demonstrates the `survey` extension with two different surveys:
   - **Autocomplete with defaults** (country, age, language fields)
   - **Tab completion** - Press Tab to auto-complete default values
   - **Suggestions** - Type part of a default value to see inline suggestions
-  - Undo/back functionality
+  - Undo/back functionality (Escape or F12 at any prompt)
   - End card with styled summary
   - Multiple prompt types working together
 
@@ -31,7 +31,7 @@ Both surveys demonstrate:
 - **Autocomplete features** (advanced mode only with TerminalPrompter):
   - Tab key to auto-complete default values
   - Inline suggestions that appear as you type (if your input matches the start of a default)
-- **Undo/back functionality** - Press Escape or F12 to undo previous answers
+- **Undo/back functionality** - In the advanced survey, press Escape or F12 to undo previous answers; `TextPrompter` reads whole lines, so the simple survey goes back when you answer `no` on the end card
 - **End card with styled summary** - shows a formatted summary of all answers
 - **Input validation** using the validation extension
 
@@ -62,7 +62,7 @@ Run the advanced survey (text + select + multiselect + confirm, requires Termina
    - **Advanced mode only (TerminalPrompter)**: Press **Tab** to auto-complete, or type part of a default to see inline suggestions
    - Key hints show `[ Tab ] Autocomplete` when a default is available (advanced mode only)
 
-2. **Undo Stack**: Press **Escape** or **F12** at any prompt to return to the previous question
+2. **Undo Stack**: In the advanced survey, press **Escape** or **F12** at any prompt to return to the previous question. In the simple survey, answer `no` on the end card to step back
 
 3. **End Card**: After completing all questions, you'll see a styled summary and be asked to confirm
 
@@ -101,7 +101,7 @@ Run the advanced survey (text + select + multiselect + confirm, requires Termina
 Try these features:
 - **Simple mode**: Press **Enter** to accept default values
 - **Advanced mode**: Press **Tab** to auto-complete, or type part of a default to see inline suggestions
-- Press **Escape** or **F12** at any prompt to undo and go back to previous questions
+- **Advanced mode**: Press **Escape** or **F12** at any prompt to undo and go back to previous questions
 
 ## Validation Features
 

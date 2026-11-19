@@ -23,6 +23,9 @@ on:
         default: false
         type: boolean
 
+permissions:
+  contents: read
+
 # Prevent multiple runs from committing at the same time
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -36,6 +39,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
       
       - name: Install jq
         run: |
@@ -66,17 +71,19 @@ jobs:
         tape: ${{ fromJson(needs.prepare.outputs.tapes) }}
     
     steps:
+      # This job only builds examples and renders GIFs; it never pushes, so
+      # it checks out with the default read-only token.
       - name: Checkout code
         uses: actions/checkout@v5
         with:
-          token: ${{ secrets.PERSONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
           ref: ${{ github.ref }}
           fetch-depth: 0
+          persist-credentials: false
       
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version-file: go.mod
       
       - name: Install system dependencies
         run: |
@@ -85,7 +92,8 @@ jobs:
       
       - name: Install VHS
         run: |
-          go install github.com/charmbracelet/vhs@latest
+          # Pinned so GIF rendering does not change underneath us; bump deliberately.
+          go install github.com/charmbracelet/vhs@v0.12.1
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       
       - name: Build example binaries
@@ -187,7 +195,7 @@ jobs:
           # Update tape file to use actual PATH (VHS doesn't expand variables in Env)
           # Replace $HOME and $PATH with actual values
           GO_BIN_PATH="$(go env GOPATH)/bin"
-          ACTUAL_PATH="/usr/bin:/bin:/usr/local/bin:$GO_BIN_PATH:$(echo $PATH | tr ':' '\n' | grep -v "^$GO_BIN_PATH$" | tr '\n' ':' | sed 's/:$//')"
+          ACTUAL_PATH="/usr/bin:/bin:/usr/local/bin:$GO_BIN_PATH:$(echo "$PATH" | tr ':' '\n' | grep -v "^$GO_BIN_PATH$" | tr '\n' ':' | sed 's/:$//')"
           # On Linux, sed -i requires a backup suffix; on macOS, empty string works
           # Try Linux style first (with .bak), then macOS style (empty string)
           if grep -q "Env PATH" "$TAPE_NAME"; then
@@ -217,7 +225,7 @@ jobs:
           # Upload generated GIF as artifact
           GIF_FILE="${TAPE_NAME%.tape}.gif"
           if [ -f "$GIF_FILE" ]; then
-            echo "GIF generated: $GIF_FILE ($(ls -lh "$GIF_FILE" | awk '{print $5}'))"
+            echo "GIF generated: $GIF_FILE ($(du -h "$GIF_FILE" | cut -f1))"
             mkdir -p "$GITHUB_WORKSPACE/gifs"
             cp "$GIF_FILE" "$GITHUB_WORKSPACE/gifs/"
           else
@@ -233,7 +241,7 @@ jobs:
           # Sanitize artifact name (replace / with - and remove examples- prefix)
           TAPE_FILE="${{ matrix.tape }}"
           ARTIFACT_NAME=$(echo "$TAPE_FILE" | sed 's/\//-/g' | sed 's/^examples-/gif-/' | sed 's/\.tape$//')
-          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
+          echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> "$GITHUB_ENV"
           echo "Artifact name: $ARTIFACT_NAME"
       
       - name: Upload generated GIF artifact
@@ -244,9 +252,23 @@ jobs:
           path: gifs/*.gif
           retention-days: 1
 
+  # Commits regenerated GIFs and tapes straight back to the triggering branch
+  # (main on push events, or the ref chosen for workflow_dispatch). Pull
+  # requests never push: the "Commit changes" step is skipped for them.
+  #
+  # The checkout and push use secrets.PERSONAL_GITHUB_TOKEN, a maintainer PAT,
+  # when it is set, so the commit is attributed to the maintainer's account.
+  # Without it they fall back to GITHUB_TOKEN, which needs the contents: write
+  # permission granted below. A PAT push can trigger other workflows, which is
+  # why the commit message carries [skip ci].
   commit:
     needs: generate-demos
+    # Pull requests only generate the GIFs; committing them is for main. On a
+    # PR, the token below may be unavailable (Dependabot) or unable to push.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -268,7 +290,7 @@ jobs:
           find gifs -name "*.gif" -type f || echo "No GIFs found in gifs directory"
           echo ""
           echo "Current example directories:"
-          ls -la examples/*/ | head -20
+          find examples -mindepth 1 -maxdepth 2 | sort | head -20
           echo ""
           
           # Copy each downloaded GIF to its corresponding example directory
@@ -314,8 +336,8 @@ jobs:
         if: steps.check.outputs.changed == 'true' && github.event_name != 'pull_request'
         run: |
           # Get the branch name - use HEAD_REF for PRs, otherwise extract from GITHUB_REF
-          if [ -n "${{ github.head_ref }}" ]; then
-            BRANCH_NAME="${{ github.head_ref }}"
+          if [ -n "$HEAD_REF" ]; then
+            BRANCH_NAME="$HEAD_REF"
           else
             BRANCH_NAME=${GITHUB_REF#refs/heads/}
           fi
@@ -348,4 +370,7 @@ jobs:
             echo "No changes to commit (likely already committed by another run)"
           fi
         env:
+          # Passed through the environment rather than interpolated into the
+          # script, so a branch name cannot inject shell commands.
+          HEAD_REF: ${{ github.head_ref }}
           GITHUB_TOKEN: ${{ secrets.PERSONAL_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}

@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/format"
 	"github.com/SCKelemen/clix/v2/ext/version"
 	"multicli/internal/database"
 )
@@ -25,7 +27,9 @@ func main() {
 
 	app.Root = root
 
-	// Add extensions
+	// Add extensions. format.Extension registers the global --format flag
+	// that the shared commands pass to clix.FormatData.
+	app.AddExtension(format.Extension{})
 	app.AddExtension(version.Extension{
 		Version: "2.1.0",
 		Commit:  "db-team-main",
@@ -33,7 +37,7 @@ func main() {
 	})
 
 	if err := app.Run(context.Background(), nil); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
-

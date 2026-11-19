@@ -13,8 +13,8 @@ The Survey extension enables chaining prompts together in a depth-first traversa
 
 ```go
 import (
-    "clix"
-    "clix/ext/survey"
+    "github.com/SCKelemen/clix/v2"
+    "github.com/SCKelemen/clix/v2/ext/survey"
 )
 
 // Create a survey
@@ -47,12 +47,14 @@ if err := s.Run(); err != nil {
 }
 
 // Access collected answers
-answers := s.Answers()
+for _, answer := range s.Answers() {
+    fmt.Println(answer)
+}
 ```
 
 ## Declarative Question Trees
 
-Prefer a declarative, struct-based API? Define questions up-front using `survey.Question` and wire them together with branches. This mirrors how commands and arguments are defined elsewhere in clix.
+Prefer a declarative, struct-based API? Define questions up-front using `survey.Question` and wire them together with branches. This mirrors how commands and flags are defined elsewhere in clix.
 
 ```go
 questions := []survey.Question{
@@ -88,6 +90,8 @@ if err := s.Run(); err != nil {
 ```
 
 You can still mix in dynamic questions by calling `Survey.Ask` within branch handlers—`NewFromQuestions` simply seeds the initial tree.
+
+With `survey.WithUndoStack()`, users can press Esc or F12 to return to the previous question. Those keys are read by `prompt.TerminalPrompter` (from `ext/prompt`) on an interactive terminal; with the line-based `clix.TextPrompter`, users can still go back by answering `no` on the end card (`survey.WithEndCard()`).
 
 ## Depth-First Traversal
 
@@ -135,7 +139,9 @@ s.Run()
 ```go
 var children []string
 
-addChild := func(s *survey.Survey) {
+// Declare the variable first so the closure can call itself.
+var addChild func(s *survey.Survey)
+addChild = func(s *survey.Survey) {
     s.Ask(clix.PromptRequest{Label: "Child's name"}, func(name string, s *survey.Survey) {
         children = append(children, name)
         s.Ask(clix.PromptRequest{
@@ -151,14 +157,25 @@ addChild := func(s *survey.Survey) {
 
 s := survey.New(ctx, app.Prompter)
 addChild(s)
-s.Run()
+if err := s.Run(); err != nil {
+    return err
+}
+fmt.Println("Children:", children)
 ```
 
 ## API Reference
 
-### `survey.New(ctx context.Context, prompter clix.Prompter) *Survey`
+### `survey.New(ctx context.Context, prompter clix.Prompter, options ...SurveyOption) *Survey`
 
 Creates a new survey instance.
+
+### `survey.NewFromQuestions(ctx context.Context, prompter clix.Prompter, questions []Question, startID string, options ...SurveyOption) *Survey`
+
+Creates a survey from `Question` struct literals and starts it at `startID`.
+
+### `Survey.AddQuestion(q Question)`, `Survey.AddQuestions(questions []Question)`, `Survey.Start(questionID string)`
+
+Register static questions and choose the first one to ask.
 
 ### `Survey.Ask(request clix.PromptRequest, handler func(answer string, survey *Survey))`
 
@@ -167,6 +184,14 @@ Adds a question to the survey. The handler is called with the answer and can add
 ### `Survey.Run() error`
 
 Executes all questions in the survey using depth-first traversal.
+
+### Branches: `survey.PushQuestion(id)`, `survey.End()`, `survey.Handler(fn)`
+
+Decide what happens after a question is answered. Branches are keyed by answer; the `""` key applies when no other key matches.
+
+### Options: `survey.WithUndoStack()`, `survey.WithEndCard()`, `survey.WithEndCardText(text)`, `survey.WithEndCardTheme(theme)`
+
+Enable going back to previous questions, a summary with a final confirmation, and the end card's text and styling.
 
 ### `Survey.Answers() []string`
 
