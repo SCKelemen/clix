@@ -66,12 +66,13 @@ func (a *App) startNestedRun() (end func()) {
 	type outer struct {
 		set, cliSet, touched, shadowed bool
 		source                         Source
+		groupSkip                      fillSkip
 		value                          string // Value.String() when the nested Run started
 		restore                        func()
 	}
 	saved := make(map[*Flag]outer)
 	eachFlagOnce(a.Root, func(_ *FlagSet, f *Flag) {
-		saved[f] = outer{f.set, f.cliSet, f.touched, f.shadowed, f.source, f.Value.String(), undoFunc(f.Value)}
+		saved[f] = outer{f.set, f.cliSet, f.touched, f.shadowed, f.source, f.groupSkip, f.Value.String(), undoFunc(f.Value)}
 		f.beginRun()
 	})
 	parents := make(map[*Command]*Command)
@@ -88,7 +89,7 @@ func (a *App) startNestedRun() (end func()) {
 			}
 			// A value that could not be put back counts as changed by the
 			// outer Run, so the next Run reports or undoes it.
-			f.set, f.cliSet, f.touched, f.shadowed, f.source = o.set, o.cliSet, o.touched || (changed && o.restore == nil), o.shadowed, o.source
+			f.set, f.cliSet, f.touched, f.shadowed, f.source, f.groupSkip = o.set, o.cliSet, o.touched || (changed && o.restore == nil), o.shadowed, o.source, o.groupSkip
 		})
 		for c, p := range parents {
 			c.parent = p
@@ -99,7 +100,7 @@ func (a *App) startNestedRun() (end func()) {
 // beginRun clears what a Run records about the flag: whether, where from
 // and how it was set.
 func (f *Flag) beginRun() {
-	f.set, f.cliSet, f.source, f.touched, f.shadowed = false, false, SourceDefault, false, false
+	f.set, f.cliSet, f.source, f.touched, f.shadowed, f.groupSkip = false, false, SourceDefault, false, false, 0
 	if b, ok := f.Value.(interface{ beginRun() }); ok {
 		b.beginRun()
 	}

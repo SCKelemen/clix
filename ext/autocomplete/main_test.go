@@ -55,7 +55,7 @@ func noop(*clix.Context) error { return nil }
 //	  widgets (alias w) [--all|-a]       Manage widgets
 //	    get [--watch|-w] [--output|-o <fmt>] <name>
 //	    list (alias ls)
-//	  rm [--force] <path>                 Remove files (no hook: file names)
+//	  rm [--force | --dry-run] <path>     Remove files (no hook: file names)
 //	  cp [--tag <t>]... <files>...        Copy files (repeatable, variadic)
 //	  weird                               commands with odd names
 //	  internal-debug [--secret-flag]      Hidden
@@ -93,6 +93,8 @@ func newProbeApp(out, errw io.Writer) *clix.App {
 
 	rm := clix.NewCommand("rm", clix.WithCommandShort("Remove files"), clix.WithCommandRun(noop))
 	rm.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "force", Usage: "Do not ask"}})
+	rm.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "dry-run", Usage: "Only print what would be removed"}})
+	rm.Flags.MarkMutuallyExclusive("force", "dry-run")
 	rm.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "path", Usage: "File to remove", Positional: true}})
 	app.Root.AddCommand(rm)
 

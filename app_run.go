@@ -144,13 +144,24 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.printCommandHelp(cmd)
 	}
 
+	// Flag groups (see FlagSet.MarkMutuallyExclusive): two flags of a
+	// mutually exclusive group on the command line are a usage error.
+	groups := pathGroups(path)
+	if err := checkExclusiveCommandLine(groups); err != nil {
+		return err
+	}
+
 	if configErr != nil && !a.configErrorAllowed(cmd) {
 		return configErr
 	}
 
 	// Fill in flags the command line did not set, in precedence order:
 	// environment, then config file, then defaults. Every command on the
-	// path takes part: the root, each group, and the command itself.
+	// path takes part: the root, each group, and the command itself. A
+	// mutually exclusive group is filled like one setting.
+	if err := a.planGroupFill(groups, configErrorsAllowed(cmd)); err != nil {
+		return err
+	}
 	for _, c := range path {
 		if err := a.applyConfigToFlags(c.Flags, configErrorsAllowed(cmd)); err != nil {
 			return err
@@ -176,6 +187,13 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			// Mode 3 (or nobody to ask): report what is missing.
 			return a.missingFlagsError(missing)
 		}
+	}
+	// A broken group requirement is reported before any prompt; the flags
+	// about to be prompted for count as given.
+	if err := a.checkGroupRequirements(groups, missing); err != nil {
+		return err
+	}
+	if len(missing) > 0 {
 		// Mode 1: no CLI flags → interactive prompting
 		if err := a.promptForRequiredFlags(ctx, cmd, missing); err != nil {
 			return err
@@ -445,13 +463,7 @@ func (a *App) namesMatch(word, name string) bool {
 // from that command down, so "app version" never asks for a required
 // --project on the root.
 func missingRequired(path []*Command) []*Flag {
-	from := 0
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i].IsExtensionCommand {
-			from = i
-			break
-		}
-	}
+	from := extensionFrom(path)
 	var missing []*Flag
 	for _, c := range path[from:] {
 		for _, f := range c.Flags.MissingRequired() {
@@ -599,10 +611,19 @@ func (a *App) applyConfigToFlags(flags *FlagSet, tolerate bool) error {
 			continue
 		}
 
-		// Try each source in order of precedence
+		// Try each source in order of precedence, except those a mutually
+		// exclusive group rules out (see planGroupFill).
 		undo := valueUndo(flag, tolerate)
-		if ok, err := a.trySetFromEnv(flag); ok || err != nil {
-			if err := a.valueError(flag, err, tolerate, undo); err != nil {
+		if flag.groupSkip&skipEnv == 0 {
+			if ok, err := a.trySetFromEnv(flag); ok || err != nil {
+				if err := a.valueError(flag, err, tolerate, undo); err != nil {
+					return err
+				}
+				continue
+			}
+		}
+		if flag.groupSkip&skipConfig != 0 {
+			if err := a.trySetFromDefault(flag); err != nil {
 				return err
 			}
 			continue
