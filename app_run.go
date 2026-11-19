@@ -103,6 +103,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// Undo what the previous Run set (unless the program changed it
 	// since), and record what this one changes. A nested Run (started by
 	// a handler) puts back what it changed when it ends.
+	endLogLevel := a.beginLogLevel()
+	defer endLogLevel()
 	end := a.startRun()
 	defer end()
 
@@ -202,6 +204,8 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	// The log level is known now (see EnableVerbosity).
+	a.applyVerbosity()
 
 	// Three-way mode detection for required flags:
 	// 1. No CLI flags passed + required missing → interactive prompting
