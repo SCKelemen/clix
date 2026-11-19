@@ -11,7 +11,7 @@ func TestDefaultPrompterUsesAppStreamsFromOptions(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	in := strings.NewReader("x\n")
 	out := &bytes.Buffer{}
-	app := NewApp("moln", WithAppIn(in), WithAppOut(out))
+	app := NewApp("myapp", WithAppIn(in), WithAppOut(out))
 
 	tp, ok := app.Prompter.(TextPrompter)
 	if !ok {
@@ -28,7 +28,7 @@ func TestDefaultPrompterUsesAppStreamsFromOptions(t *testing.T) {
 func TestWithAppPrompterIsKept(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	custom := prompterFunc(func(context.Context, ...PromptOption) (string, error) { return "", nil })
-	app := NewApp("moln", WithAppPrompter(custom), WithAppIn(strings.NewReader("")))
+	app := NewApp("myapp", WithAppPrompter(custom), WithAppIn(strings.NewReader("")))
 	if _, ok := app.Prompter.(prompterFunc); !ok {
 		t.Fatalf("Prompter = %T, want the prompter passed to WithAppPrompter", app.Prompter)
 	}

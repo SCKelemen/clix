@@ -21,8 +21,8 @@ func writeConfig(t *testing.T, app string, contents string) {
 
 func TestEmptyConfigFileIsIgnored(t *testing.T) {
 	for _, contents := range []string{"", "# only a comment\n", "\n\n"} {
-		app, out, _ := newIsolatedApp(t, "moln")
-		writeConfig(t, "moln", contents)
+		app, out, _ := newIsolatedApp(t, "myapp")
+		writeConfig(t, "myapp", contents)
 		ran := false
 		app.Root.AddCommand(NewCommand("ls", WithCommandRun(func(*Context) error { ran = true; return nil })))
 
@@ -39,8 +39,8 @@ func TestEmptyConfigFileIsIgnored(t *testing.T) {
 }
 
 func TestNullConfigValueIsUnset(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
-	writeConfig(t, "moln", "project:\nzone: z1\nlist: [a, null, b]\n")
+	app, _, _ := newIsolatedApp(t, "myapp")
+	writeConfig(t, "myapp", "project:\nzone: z1\nlist: [a, null, b]\n")
 	var project string
 	cmd := NewCommand("ls", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "project", Required: true}, Value: &project})
@@ -63,8 +63,8 @@ func TestNullConfigValueIsUnset(t *testing.T) {
 }
 
 func TestMalformedConfigDoesNotBlockHelp(t *testing.T) {
-	app, out, _ := newIsolatedApp(t, "moln")
-	writeConfig(t, "moln", "project: [unclosed\n")
+	app, out, _ := newIsolatedApp(t, "myapp")
+	writeConfig(t, "myapp", "project: [unclosed\n")
 	app.Root.AddCommand(NewCommand("ls", WithCommandRun(func(*Context) error { return nil })))
 
 	if err := app.Run(context.Background(), []string{"--help"}); err != nil {

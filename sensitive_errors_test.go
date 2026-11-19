@@ -16,7 +16,7 @@ func TestSensitiveValuesAreRedacted(t *testing.T) {
 	newApp := func(t *testing.T, in string) (*clix.App, *bytes.Buffer) {
 		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 		errOut := &bytes.Buffer{}
-		app := clix.NewApp("moln", clix.WithAppIn(strings.NewReader(in)), clix.WithAppOut(&bytes.Buffer{}), clix.WithAppErr(errOut))
+		app := clix.NewApp("myapp", clix.WithAppIn(strings.NewReader(in)), clix.WithAppOut(&bytes.Buffer{}), clix.WithAppErr(errOut))
 		app.Interactive = clix.InteractiveAlways
 		cmd := clix.NewCommand("login", clix.WithCommandRun(func(*clix.Context) error { return nil }))
 		cmd.Flags.IntVar(clix.IntVarOptions{FlagOptions: clix.FlagOptions{Name: "pin", Required: true, Sensitive: true}})
@@ -31,20 +31,20 @@ func TestSensitiveValuesAreRedacted(t *testing.T) {
 	}
 
 	app, _ := newApp(t, "")
-	t.Setenv("MOLN_PIN", "hunter2-SECRET")
+	t.Setenv("MYAPP_PIN", "hunter2-SECRET")
 	err := app.Run(context.Background(), []string{"login"})
 	if err == nil || strings.Contains(err.Error(), "SECRET") || !strings.Contains(err.Error(), "[redacted]") {
 		t.Fatalf("env error: %v", err)
 	}
-	t.Setenv("MOLN_PIN", "")
+	t.Setenv("MYAPP_PIN", "")
 
 	app, _ = newApp(t, "")
-	t.Setenv("MOLN_TOKEN", "hunter2-SECRET")
+	t.Setenv("MYAPP_TOKEN", "hunter2-SECRET")
 	err = app.Run(context.Background(), []string{"login", "--pin", "1"})
 	if err == nil || strings.Contains(err.Error(), "SECRET") || !strings.Contains(err.Error(), "does not start with tok_") {
 		t.Fatalf("env Validate error: %v", err)
 	}
-	t.Setenv("MOLN_TOKEN", "")
+	t.Setenv("MYAPP_TOKEN", "")
 
 	app, errOut := newApp(t, "12ab-SECRET\n1234\n")
 	if err := app.Run(context.Background(), []string{"login"}); err != nil {

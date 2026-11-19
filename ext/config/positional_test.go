@@ -12,7 +12,7 @@ import (
 func TestConfigCommandsAcceptPositionalArgs(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	out := &bytes.Buffer{}
-	app := clix.NewApp("moln", clix.WithAppOut(out), clix.WithAppErr(&bytes.Buffer{}))
+	app := clix.NewApp("myapp", clix.WithAppOut(out), clix.WithAppErr(&bytes.Buffer{}))
 	app.AddExtension(Extension{})
 
 	run := func(args ...string) string {

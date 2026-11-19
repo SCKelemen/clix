@@ -37,11 +37,11 @@ func TestChildNamedLikeAppIsReachable(t *testing.T) {
 // "app app child" still works when the repeated name cannot mean
 // anything else.
 func TestRepeatedRootNameIsSkipped(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	ran := false
 	app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(mark(&ran))))
-	if err := app.Run(bg, []string{"moln", "ls"}); err != nil || !ran {
-		t.Fatalf("Run(moln ls) = %v, ran = %v", err, ran)
+	if err := app.Run(bg, []string{"myapp", "ls"}); err != nil || !ran {
+		t.Fatalf("Run(myapp ls) = %v, ran = %v", err, ran)
 	}
 
 	// A root with Run but no positional arguments: skipping is the only

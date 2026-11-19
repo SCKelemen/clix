@@ -7,13 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Key-sequence fixtures captured in Ghostty 1.3.1, with application cursor keys and the kitty keyboard protocol on as well as off, replayed by `TestTerminalKeyFixtures`; and an opt-in live test suite (`CLIX_LIVE_TERMINALS=ghostty,cmux`, macOS) that drives prompts, a survey and shell completion in Ghostty and cmux. See "Testing in real terminals" in the README.
+
 ### Fixed
 
 - `clix/ext/prompt`: keys sent in the kitty keyboard protocol (CSI u), which Ghostty and other terminals keep sending after a program that turned the protocol on crashed, now read as their usual encoding would: Ctrl-C cancels, Esc clears or cancels, and Shift-Tab, Alt-Backspace and the Ctrl-letter editing keys work. They were ignored before, so a prompt could not be cancelled. Key release events (kitty's event types) are ignored instead of acting as presses.
 
+## [2.7.0] - 2026-11-19
+
 ### Added
 
-- Key-sequence fixtures captured in Ghostty 1.3.1, with application cursor keys and the kitty keyboard protocol on as well as off, replayed by `TestTerminalKeyFixtures`; and an opt-in live test suite (`CLIX_LIVE_TERMINALS=ghostty,cmux`, macOS) that drives prompts, a survey and shell completion in Ghostty and cmux. See "Testing in real terminals" in the README.
+- `FlagOptions.Ambient` (also on `Flag`) and `WithFlagAmbient` mark a flag that sets the context a command runs in, such as `--target`, `--token`, `--timeout` or `--format`, rather than an input. An Ambient flag on the command line does not count as a passed flag when `Run` decides whether to prompt for missing required flags, so `myapp --target X widgets create` prompts for the missing fields (when the app is interactive) instead of returning a `*MissingFlagsError`. Any other flag on the command line, by name or by position, still turns prompting off; environment variables and config values never counted. Parsing, environment and config lookup, `Required`, help and `FlagSet.AnyCLISet` are unchanged.
+
+### Changed
+
+- The format extension's `--format` is Ambient: `myapp --format json widgets create` prompts for missing required flags when the app is interactive, where 2.5.0 and 2.6.0 returned a `*MissingFlagsError`. An app's own `--format` flag, which replaces the extension's, is not changed.
 
 ## [2.6.0] - 2026-11-19
 
@@ -30,7 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `BoolVarOptions.Default` and `WithBoolDefault`.
 - `FlagSet.Lookup`, `FlagSet.Changed` (set on the command line), `Flag.Source` and `FlagSet.Duration`.
 - `Context.Int`, `Int64`, `Float64`, `Duration` and `EffectiveDuration`.
-- Short flag clusters (`-xv`), attached short values (`-fa.tar`) and negative numbers as positional arguments (`add -5 3`). A cluster written before the command that mixes the command's switches with a flag that takes a value must use `=`: `moln -fp=p1 deploy`.
+- Short flag clusters (`-xv`), attached short values (`-fa.tar`) and negative numbers as positional arguments (`add -5 3`). A cluster written before the command that mixes the command's switches with a flag that takes a value must use `=`: `myapp -fp=p1 deploy`.
 - A "Routing" section in the README that states how arguments are matched, backed by a table-driven test (`routing_test.go`).
 - Secret prompts: `WithSecret()` and `PromptRequest.Secret` read a password or token without echo (also in line mode on a terminal) and return it exactly as typed. `FlagOptions.Sensitive` (and `WithFlagSensitive`) makes a prompted required flag a secret prompt; the survey end card masks secret answers.
 - `NewPromptConfig(ctx, opts...)` builds a prompt's configuration the way the built-in prompters do (theme over `App.DefaultTheme`, option order, `ErrPromptsDisabled`, `ErrNoOptions`, `ErrInvalidDefault`), for custom prompters. Also `PromptTheme.Merge`, `ReadLine` (the context-aware line reader) and `ResolveMultiSelectDefault`.
@@ -78,7 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Root and group flags were second-class: a `Required` flag on `app.Flags()` or on a group was never enforced for subcommands, environment variables and the config file never filled a group's flags, and `Context` getters could not see them. Commands with `IsExtensionCommand` set skip the required flags of the commands above them.
 - Values leaked between runs of one `App`: `rm --force` followed by `rm` still had `force` set. Each `Run` now undoes what the previous `Run` set in every flag and its bound variable, unless the program assigned the variable since (noticed as a value different from what the previous `Run` left), so values set between runs are kept. Built-in values are put back exactly; a custom `Value` needs a `Reset` method, which is called whenever the previous `Run` called `Set` on it. `Run` never passes `String`'s text back to `Set`, so a value whose `String` is redacted or is not text `Set` accepts (`map[team:a]`) is reset too. A `Run` called from a handler (an alias command, a shell) starts from the outer `Run`'s values and puts back everything it changed when it returns, so the outer handler keeps its values, `Changed` and `Source`, flags it registers afterwards still count as registered during `Run`, and nothing leaks into later runs.
-- Flags registered with `app.Flags()` before `app.Root` was replaced were silently dropped (and `--project p1 ls` failed with `unknown command: moln p1`); they now move to the new root.
+- Flags registered with `app.Flags()` before `app.Root` was replaced were silently dropped (and `--project p1 ls` failed with `unknown command: myapp p1`); they now move to the new root.
 - `app.Flags().SetStrict(true)` was undone by every `Flags()` call, which also raced with handlers calling it concurrently.
 - A first word equal to the root's name was always skipped, so `echo Echo` lost its argument and a child named like the app was unreachable. It is now skipped only when nothing else can use it.
 - An extension error was returned only by the first `Run`, and extensions added after the first `Run` (or by another extension) were never applied.
@@ -150,6 +160,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--help` and `--version` ignore environment variables and config; empty environment variables count as unset.
 - Invalid environment or config values are errors that name their source, and they run `Validate`.
 - `Required` works for every flag type. If a long flag name is registered twice, the first registration wins.
+- `FlagSet.MissingRequired` reports a required flag only when it was never set (from any source, including a prompt) and has no default; v2.4.x reported any required flag whose value printed as an empty string. A required flag set to `""` (`--name ""`, or an empty prompt answer) no longer counts as missing, and required non-string flags are reported when unset, where their zero values (`0`, `false`) used to hide them. Code that checks for empty values after prompting should check the value itself.
 - The config directory and file are created only on save (modes 0700 and 0600).
 - YAML via `go.yaml.in/yaml/v3`, which replaces the archived `gopkg.in/yaml.v3`.
 - Lower the `go` directive from 1.25.4 to 1.25.0, so modules that depend on clix are no longer forced onto Go 1.25.4.
@@ -253,7 +264,8 @@ Prepared as 1.0.0 (commit 464e98b, "Prepare for v1.0.0 release") but tagged as t
 - `ext/survey` – Chained prompts with branching logic
 - `ext/validation` – Common validation functions
 
-[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.6.0...HEAD
+[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.7.0...HEAD
+[2.7.0]: https://github.com/SCKelemen/clix/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/SCKelemen/clix/compare/v2.5.0...v2.6.0
 [2.5.0]: https://github.com/SCKelemen/clix/compare/v2.4.1...v2.5.0
 [2.4.1]: https://github.com/SCKelemen/clix/compare/v2.4.0...v2.4.1

@@ -9,9 +9,9 @@ import (
 	"github.com/SCKelemen/clix/v2"
 )
 
-// newForceApp builds "moln delete" with a --force switch configured by fo.
+// newForceApp builds "myapp delete" with a --force switch configured by fo.
 func newForceApp(t *testing.T, fo clix.FlagOptions) (*clix.App, *bool, *clix.Source) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	force, src := new(bool), new(clix.Source)
 	fo.Name = "force"
 	cmd := clix.NewCommand("delete", clix.WithCommandRun(func(ctx *clix.Context) error {
@@ -23,14 +23,14 @@ func newForceApp(t *testing.T, fo clix.FlagOptions) (*clix.App, *bool, *clix.Sou
 	return app, force, src
 }
 
-// MOLN_FORCE=1 or "force: true" turned on "delete --force", with no way to
+// MYAPP_FORCE=1 or "force: true" turned on "delete --force", with no way to
 // opt out.
 func TestCommandLineOnlyIgnoresEnvAndConfig(t *testing.T) {
 	for _, src := range []string{"env", "config"} {
 		t.Run(src, func(t *testing.T) {
 			app, force, _ := newForceApp(t, clix.FlagOptions{CommandLineOnly: true, EnvVar: "FORCE"})
 			if src == "env" {
-				t.Setenv("MOLN_FORCE", "1")
+				t.Setenv("MYAPP_FORCE", "1")
 				t.Setenv("FORCE", "1")
 			} else {
 				writeConfigFile(t, app, "force: true\n")
@@ -51,7 +51,7 @@ func TestCommandLineOnlyIgnoresEnvAndConfig(t *testing.T) {
 func TestNoEnvAndNoConfig(t *testing.T) {
 	t.Run("NoEnv", func(t *testing.T) {
 		app, force, src := newForceApp(t, clix.FlagOptions{NoEnv: true, EnvVar: "FORCE"})
-		t.Setenv("MOLN_FORCE", "1")
+		t.Setenv("MYAPP_FORCE", "1")
 		t.Setenv("FORCE", "1")
 		writeConfigFile(t, app, "force: true\n")
 		if err := app.Run(bg, []string{"delete"}); err != nil || !*force || *src != clix.SourceConfigFile {
@@ -64,7 +64,7 @@ func TestNoEnvAndNoConfig(t *testing.T) {
 		if err := app.Run(bg, []string{"delete"}); err != nil || *force {
 			t.Fatalf("err = %v, force = %v", err, *force)
 		}
-		t.Setenv("MOLN_FORCE", "true")
+		t.Setenv("MYAPP_FORCE", "true")
 		if err := app.Run(bg, []string{"delete"}); err != nil || !*force {
 			t.Fatalf("env: err = %v, force = %v", err, *force)
 		}
@@ -105,11 +105,11 @@ func TestFunctionalSourceOptions(t *testing.T) {
 
 func TestAutoEnvAndAutoConfigOff(t *testing.T) {
 	off := false
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.AutoEnv, app.AutoConfig = &off, &off
 	writeConfigFile(t, app, "region: eu\nzone: z1\nnote: hi\n")
-	t.Setenv("MOLN_REGION", "us")
-	t.Setenv("MOLN_ZONE", "z2")
+	t.Setenv("MYAPP_REGION", "us")
+	t.Setenv("MYAPP_ZONE", "z2")
 	t.Setenv("ZONE", "z3")
 	var region, zone, note, viaCtx string
 	cmd := clix.NewCommand("ls", clix.WithCommandRun(func(ctx *clix.Context) error {

@@ -9,7 +9,7 @@ import (
 
 // A Required flag on the root was never enforced when a subcommand ran.
 func TestRootRequiredEnforcedForSubcommand(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "project", Required: true}})
 	ran := false
 	app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(mark(&ran))))
@@ -24,9 +24,9 @@ func TestRootRequiredEnforcedForSubcommand(t *testing.T) {
 	}
 }
 
-// newGroupApp builds "moln project ls" with --org on the project group.
+// newGroupApp builds "myapp project ls" with --org on the project group.
 func newGroupApp(t *testing.T, required bool) (app *clix.App, org, viaCtx *string, src *clix.Source) {
-	app, _ = newTestApp(t, "moln")
+	app, _ = newTestApp(t, "myapp")
 	org, viaCtx, src = new(string), new(string), new(clix.Source)
 	ls := clix.NewCommand("ls", clix.WithCommandRun(func(ctx *clix.Context) error {
 		*viaCtx, *src, _ = ctx.EffectiveString("org")
@@ -54,7 +54,7 @@ func TestGroupFlagVisibleToContext(t *testing.T) {
 func TestGroupFlagReadsEnvAndConfig(t *testing.T) {
 	t.Run("env", func(t *testing.T) {
 		app, org, viaCtx, src := newGroupApp(t, false)
-		t.Setenv("MOLN_ORG", "acme")
+		t.Setenv("MYAPP_ORG", "acme")
 		if err := app.Run(bg, []string{"project", "ls"}); err != nil {
 			t.Fatal(err)
 		}
@@ -90,7 +90,7 @@ func TestGroupRequiredEnforced(t *testing.T) {
 // Commands added by extensions, and their subcommands, skip the Required
 // flags of the commands above them.
 func TestExtensionCommandsSkipAncestorRequired(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "project", Required: true}})
 	ran := 0
 	version := clix.NewCommand("version", clix.WithCommandRun(func(*clix.Context) error { ran++; return nil }))

@@ -10,9 +10,9 @@ import (
 // For a key that is not a flag, an empty environment variable hid the
 // config file, while for flags it counts as unset.
 func TestEmptyEnvDoesNotHideConfigForOtherKeys(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	writeConfigFile(t, app, "region: eu\n")
-	t.Setenv("MOLN_REGION", "")
+	t.Setenv("MYAPP_REGION", "")
 	var got string
 	var src clix.Source
 	app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(func(ctx *clix.Context) error {
@@ -31,7 +31,7 @@ func TestEmptyEnvDoesNotHideConfigForOtherKeys(t *testing.T) {
 // same value on the command line exited 2.
 func TestBadEnvAndConfigValuesAreUsageErrors(t *testing.T) {
 	newServe := func(t *testing.T) *clix.App {
-		app, _ := newTestApp(t, "moln")
+		app, _ := newTestApp(t, "myapp")
 		cmd := clix.NewCommand("serve", clix.WithCommandRun(noop))
 		cmd.Flags.IntVar(clix.IntVarOptions{FlagOptions: clix.FlagOptions{Name: "port"}})
 		app.Root.AddCommand(cmd)
@@ -42,12 +42,12 @@ func TestBadEnvAndConfigValuesAreUsageErrors(t *testing.T) {
 	}
 
 	app := newServe(t)
-	t.Setenv("MOLN_PORT", "x")
+	t.Setenv("MYAPP_PORT", "x")
 	err := app.Run(bg, []string{"serve"})
-	if code := clix.ExitCode(err); code != 2 || !strings.Contains(err.Error(), "MOLN_PORT") {
+	if code := clix.ExitCode(err); code != 2 || !strings.Contains(err.Error(), "MYAPP_PORT") {
 		t.Fatalf("environment: %v, exit %d", err, code)
 	}
-	t.Setenv("MOLN_PORT", "")
+	t.Setenv("MYAPP_PORT", "")
 
 	app = newServe(t)
 	writeConfigFile(t, app, "port: x\n")
@@ -69,10 +69,10 @@ func (versionLikeExtension) Extend(app *clix.App) error {
 // A root with no Run and only extension commands errored on a bare
 // invocation instead of showing help.
 func TestExtensionOnlyRootShowsHelp(t *testing.T) {
-	app, out := newTestApp(t, "moln")
+	app, out := newTestApp(t, "myapp")
 	app.AddExtension(versionLikeExtension{})
 	if err := app.Run(bg, []string{}); err != nil {
-		t.Fatalf("bare moln = %v (exit %d)", err, clix.ExitCode(err))
+		t.Fatalf("bare myapp = %v (exit %d)", err, clix.ExitCode(err))
 	}
 	if !strings.Contains(out.String(), "USAGE") || !strings.Contains(out.String(), "version") {
 		t.Fatalf("no help printed:\n%s", out)

@@ -7,7 +7,7 @@ import (
 )
 
 func newMatchApp(t *testing.T) (*clix.App, *string) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	ran := new(string)
 	for _, n := range []string{"delete", "status", "kill"} {
 		n := n

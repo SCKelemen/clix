@@ -10,7 +10,7 @@ import (
 // A child appended to Children after a Run used to keep nil Flags, and Run
 // panicked on it.
 func TestRunPreparesChildrenAddedAfterRun(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(noop)))
 	if err := app.Run(bg, []string{"ls"}); err != nil {
 		t.Fatal(err)
@@ -24,10 +24,10 @@ func TestRunPreparesChildrenAddedAfterRun(t *testing.T) {
 
 // Replacing Root after a Run used to skip preparing the new tree.
 func TestRunPreparesRootReplacedAfterRun(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	_ = app.Run(bg, []string{})
 	ran := false
-	app.Root = &clix.Command{Name: "moln", Children: []*clix.Command{{Name: "ls", Run: mark(&ran)}}}
+	app.Root = &clix.Command{Name: "myapp", Children: []*clix.Command{{Name: "ls", Run: mark(&ran)}}}
 	if err := app.Run(bg, []string{"ls"}); err != nil || !ran {
 		t.Fatalf("Run(ls) = %v, ran = %v", err, ran)
 	}
