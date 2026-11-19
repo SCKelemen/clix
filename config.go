@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,6 +32,7 @@ import (
 //	}
 type ConfigManager struct {
 	values  map[string]string
+	numbers map[string]string // decimal form of YAML numbers written as 0x1F, 0755, 1e3, ...
 	schemas map[string]ConfigSchema
 }
 
@@ -122,6 +124,19 @@ func NewConfigManager(name string) *ConfigManager {
 // are ignored. The file format is YAML. Nested structures are flattened
 // using dot notation, and null values (for example, "project:" with nothing
 // after it) are skipped, so they never count as configured.
+//
+// Scalars keep the text written in the file: "tag: 1.10" reads "1.10",
+// "mode: 0755" reads "0755" and "date: 2024-01-02" reads "2024-01-02".
+// Only int and float flags (and the Int, Int64 and Float64 getters) see
+// YAML's numeric reading, so "mode: 0755" sets an int flag to 493 and
+// "mask: 0x1F" sets it to 31. Map keys are used as written, so "80: http"
+// under "ports" is "ports.80". A list of scalars is joined with commas; a
+// list that holds maps or lists is flattened with indexes ("hosts.0.name").
+//
+// A key that appears twice after flattening, such as "project.name" next
+// to a nested "project: {name: ...}", is an error, because the winner would
+// otherwise be arbitrary. Keys pulled in with a YAML merge key ("<<") may
+// be overridden. Errors name the file.
 func (m *ConfigManager) Load(path string) error {
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -132,52 +147,223 @@ func (m *ConfigManager) Load(path string) error {
 	}
 	defer file.Close()
 
-	var data map[string]interface{}
+	var doc yaml.Node
 	decoder := yaml.NewDecoder(file)
-	if err := decoder.Decode(&data); err != nil {
+	if err := decoder.Decode(&doc); err != nil {
 		if errors.Is(err, io.EOF) {
 			// An empty file (or one holding only comments) has no documents.
 			return nil
 		}
-		return fmt.Errorf("failed to parse config file as YAML: %w", err)
+		return fmt.Errorf("failed to parse config file %s as YAML: %w", path, err)
+	}
+
+	f := flattener{
+		values:  make(map[string]string),
+		numbers: make(map[string]string),
+		weak:    make(map[string]bool),
+	}
+	if err := f.document(&doc); err != nil {
+		return fmt.Errorf("config file %s: %w", path, err)
 	}
 
 	if m.values == nil {
 		m.values = make(map[string]string)
 	}
-	flattenYAML("", data, m.values)
+	if m.numbers == nil {
+		m.numbers = make(map[string]string)
+	}
+	for k, v := range f.values {
+		m.values[k] = v
+		if n, ok := f.numbers[k]; ok {
+			m.numbers[k] = n
+		} else {
+			delete(m.numbers, k)
+		}
+	}
 	return nil
 }
 
-// flattenYAML recursively flattens a nested YAML structure into dot-notation keys.
-func flattenYAML(prefix string, data map[string]interface{}, result map[string]string) {
-	for key, value := range data {
-		fullKey := key
-		if prefix != "" {
-			fullKey = prefix + "." + key
-		}
+// flattener turns a YAML document into dot-notation keys, keeping each
+// scalar's text as written.
+type flattener struct {
+	values  map[string]string
+	numbers map[string]string // decimal form of numeric scalars
+	weak    map[string]bool   // keys set through a merge key, which later keys may override
+}
 
-		switch v := value.(type) {
-		case nil:
-			// "key:" with no value is YAML null; treat it as unset.
+// document flattens the top-level mapping of doc.
+func (f *flattener) document(doc *yaml.Node) error {
+	n := doc
+	if n.Kind == yaml.DocumentNode {
+		if len(n.Content) == 0 {
+			return nil
+		}
+		n = n.Content[0]
+	}
+	n = resolveAlias(n)
+	if n.Kind == yaml.ScalarNode && n.ShortTag() == "!!null" {
+		return nil
+	}
+	if n.Kind != yaml.MappingNode {
+		return fmt.Errorf("line %d: the top level must be a mapping of keys to values", n.Line)
+	}
+	return f.mapping("", n, false)
+}
+
+// mapping flattens the pairs of n under prefix. Merge keys ("<<") are
+// applied first, so the mapping's own keys override what they bring in.
+func (f *flattener) mapping(prefix string, n *yaml.Node, weak bool) error {
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		key, value := n.Content[i], resolveAlias(n.Content[i+1])
+		if key.ShortTag() != "!!merge" {
 			continue
-		case map[string]interface{}:
-			// Recurse into nested maps
-			flattenYAML(fullKey, v, result)
-		case []interface{}:
-			// For arrays, convert to comma-separated string
-			parts := make([]string, len(v))
-			for i, item := range v {
-				if item != nil {
-					parts[i] = fmt.Sprintf("%v", item)
-				}
+		}
+		sources := []*yaml.Node{value}
+		if value.Kind == yaml.SequenceNode {
+			sources = value.Content
+		}
+		for _, src := range sources {
+			src = resolveAlias(src)
+			if src.Kind != yaml.MappingNode {
+				return fmt.Errorf("line %d: a merge key (<<) needs a mapping", src.Line)
 			}
-			result[fullKey] = strings.Join(parts, ",")
-		default:
-			// Convert value to string
-			result[fullKey] = fmt.Sprintf("%v", v)
+			if err := f.mapping(prefix, src, true); err != nil {
+				return err
+			}
 		}
 	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		key, value := resolveAlias(n.Content[i]), n.Content[i+1]
+		if key.ShortTag() == "!!merge" {
+			continue
+		}
+		if key.Kind != yaml.ScalarNode {
+			return fmt.Errorf("line %d: keys must be scalars", key.Line)
+		}
+		full := key.Value
+		if prefix != "" {
+			full = prefix + "." + key.Value
+		}
+		if err := f.value(full, value, weak); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// value flattens one value under key.
+func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
+	n = resolveAlias(n)
+	switch n.Kind {
+	case yaml.ScalarNode:
+		if n.ShortTag() == "!!null" {
+			// "key:" with no value is YAML null; treat it as unset.
+			return nil
+		}
+		return f.set(key, n.Value, yamlNumber(n), weak, n.Line)
+	case yaml.MappingNode:
+		return f.mapping(key, n, weak)
+	case yaml.SequenceNode:
+		scalars := true
+		for _, item := range n.Content {
+			if resolveAlias(item).Kind != yaml.ScalarNode {
+				scalars = false
+				break
+			}
+		}
+		if scalars {
+			// A list of scalars is joined with commas.
+			parts := make([]string, len(n.Content))
+			for i, item := range n.Content {
+				if item = resolveAlias(item); item.ShortTag() != "!!null" {
+					parts[i] = item.Value
+				}
+			}
+			return f.set(key, strings.Join(parts, ","), "", weak, n.Line)
+		}
+		for i, item := range n.Content {
+			if err := f.value(key+"."+strconv.Itoa(i), item, weak); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("line %d: unsupported value for %q", n.Line, key)
+	}
+}
+
+// set records a flattened value, rejecting a key that is already set
+// unless one of the two came from a merge key.
+func (f *flattener) set(key, value, number string, weak bool, line int) error {
+	if _, exists := f.values[key]; exists {
+		switch {
+		case weak:
+			// An explicit key, or an earlier merge source, wins.
+			return nil
+		case !f.weak[key]:
+			return fmt.Errorf("line %d: key %q is defined more than once", line, key)
+		}
+	}
+	f.values[key] = value
+	f.weak[key] = weak
+	if number != "" {
+		f.numbers[key] = number
+	} else {
+		delete(f.numbers, key)
+	}
+	return nil
+}
+
+// resolveAlias follows YAML aliases (*name) to the node they refer to.
+func resolveAlias(n *yaml.Node) *yaml.Node {
+	for i := 0; n.Kind == yaml.AliasNode && n.Alias != nil && i < 100; i++ {
+		n = n.Alias
+	}
+	return n
+}
+
+// yamlNumber returns the decimal form of a YAML int or float scalar, or ""
+// for any other scalar.
+func yamlNumber(n *yaml.Node) string {
+	tag := n.ShortTag()
+	if tag != "!!int" && tag != "!!float" {
+		return ""
+	}
+	var v interface{}
+	if err := n.Decode(&v); err != nil {
+		return ""
+	}
+	switch x := v.(type) {
+	case int:
+		return strconv.Itoa(x)
+	case int64:
+		return strconv.FormatInt(x, 10)
+	case uint64:
+		return strconv.FormatUint(x, 10)
+	case float64:
+		if x == math.Trunc(x) && math.Abs(x) < 1e21 {
+			return strconv.FormatFloat(x, 'f', -1, 64)
+		}
+		return strconv.FormatFloat(x, 'g', -1, 64)
+	}
+	return ""
+}
+
+// number returns the decimal form of key's value when the config file
+// wrote it as a YAML number in another notation.
+func (m *ConfigManager) number(key string) (string, bool) {
+	v, ok := m.numbers[key]
+	return v, ok
+}
+
+// numeric returns the text to parse as a number for key: YAML's numeric
+// reading when the file held a number, otherwise the stored value.
+func (m *ConfigManager) numeric(key string) (string, bool) {
+	if v, ok := m.numbers[key]; ok {
+		return v, true
+	}
+	v, ok := m.values[key]
+	return v, ok
 }
 
 // Save writes the configuration to the provided path in YAML format.
@@ -248,6 +434,7 @@ func (m *ConfigManager) Set(key, value string) {
 		m.values = make(map[string]string)
 	}
 	m.values[key] = value
+	delete(m.numbers, key)
 }
 
 // Delete removes a key from the configuration. It returns true if the key existed.
@@ -258,6 +445,7 @@ func (m *ConfigManager) Delete(key string) bool {
 	}
 	if _, ok := m.values[key]; ok {
 		delete(m.values, key)
+		delete(m.numbers, key)
 		return true
 	}
 	return false
@@ -266,6 +454,7 @@ func (m *ConfigManager) Delete(key string) bool {
 // Reset removes all values.
 func (m *ConfigManager) Reset() {
 	m.values = make(map[string]string)
+	m.numbers = nil
 }
 
 // Values returns a copy of the stored values.
@@ -431,9 +620,10 @@ func (m *ConfigManager) Bool(key string) (bool, bool) {
 	return parsed, true
 }
 
-// Int retrieves an int value from persisted config.
+// Int retrieves an int value from persisted config. A YAML number in
+// another notation, such as 0x1F, reads as its value (31).
 func (m *ConfigManager) Int(key string) (int, bool) {
-	value, ok := m.values[key]
+	value, ok := m.numeric(key)
 	if !ok {
 		return 0, false
 	}
@@ -446,7 +636,7 @@ func (m *ConfigManager) Int(key string) (int, bool) {
 
 // Int64 retrieves an int64 value from persisted config.
 func (m *ConfigManager) Int64(key string) (int64, bool) {
-	value, ok := m.values[key]
+	value, ok := m.numeric(key)
 	if !ok {
 		return 0, false
 	}
@@ -459,7 +649,7 @@ func (m *ConfigManager) Int64(key string) (int64, bool) {
 
 // Float64 retrieves a float64 value from persisted config.
 func (m *ConfigManager) Float64(key string) (float64, bool) {
-	value, ok := m.values[key]
+	value, ok := m.numeric(key)
 	if !ok {
 		return 0, false
 	}

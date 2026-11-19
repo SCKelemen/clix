@@ -536,12 +536,29 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 	if !ok {
 		return false, nil
 	}
+	if isNumericValue(flag.Value) {
+		// Numeric flags read YAML's numeric value: 0x1F is 31 and 0755 is
+		// 493, as in YAML; every other flag gets the text as written.
+		if n, ok := a.Config.number(flag.Name); ok {
+			val = n
+		}
+	}
 	if err := setAndValidate(flag, val); err != nil {
 		return false, fmt.Errorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, flag.Name, err)
 	}
 	flag.set = true
 	flag.source = SourceConfigFile
 	return true, nil
+}
+
+// isNumericValue reports whether v is one of the built-in int or float
+// values.
+func isNumericValue(v Value) bool {
+	switch v.(type) {
+	case *IntValue, *Int64Value, *Float64Value:
+		return true
+	}
+	return false
 }
 
 // trySetFromDefault sets a flag value from its default if available.

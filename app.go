@@ -445,6 +445,29 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	return "", 0, false
 }
 
+// numericValue is resolveValue for the numeric getters. A key that is not
+// a flag and comes from the config file reads YAML's numeric value, so
+// "mask: 0x1F" is 31, as it was before config values kept their text.
+func (ctx *Context) numericValue(key string) (string, Source, bool) {
+	value, source, found := ctx.resolveValue(key)
+	if found && source == SourceConfigFile && ctx.App != nil && ctx.App.Config != nil && !ctx.isFlag(key) {
+		if n, ok := ctx.App.Config.number(key); ok {
+			return n, source, true
+		}
+	}
+	return value, source, found
+}
+
+// isFlag reports whether key names a flag on the executing command's path.
+func (ctx *Context) isFlag(key string) bool {
+	for _, fs := range ctx.pathFlags() {
+		if fs.lookup(key) != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // pathFlags returns the flag sets of the executing command and each of its
 // ancestors, innermost first, ending with the root flag set.
 func (ctx *Context) pathFlags() []*FlagSet {
@@ -536,7 +559,7 @@ func (ctx *Context) EffectiveBool(key string) (bool, Source, bool) {
 // and its source. This is useful for debugging and understanding where values come from.
 // Precedence: command flags > app flags > env > config > defaults
 func (ctx *Context) EffectiveInt(key string) (int, Source, bool) {
-	value, source, found := ctx.resolveValue(key)
+	value, source, found := ctx.numericValue(key)
 	if !found {
 		return 0, 0, false
 	}
@@ -551,7 +574,7 @@ func (ctx *Context) EffectiveInt(key string) (int, Source, bool) {
 // and its source. This is useful for debugging and understanding where values come from.
 // Precedence: command flags > app flags > env > config > defaults
 func (ctx *Context) EffectiveInt64(key string) (int64, Source, bool) {
-	value, source, found := ctx.resolveValue(key)
+	value, source, found := ctx.numericValue(key)
 	if !found {
 		return 0, 0, false
 	}
@@ -566,7 +589,7 @@ func (ctx *Context) EffectiveInt64(key string) (int64, Source, bool) {
 // and its source. This is useful for debugging and understanding where values come from.
 // Precedence: command flags > app flags > env > config > defaults
 func (ctx *Context) EffectiveFloat64(key string) (float64, Source, bool) {
-	value, source, found := ctx.resolveValue(key)
+	value, source, found := ctx.numericValue(key)
 	if !found {
 		return 0, 0, false
 	}
