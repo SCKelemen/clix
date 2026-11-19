@@ -483,25 +483,34 @@ func helpRequested(path []*Command) bool {
 }
 
 // prepareTree links every command to its parent and gives each one a flag
-// set and a --help flag. It is idempotent, so Run calls it every time.
+// set and a --help flag. It is idempotent, so Run calls it every time. A
+// command shared by several groups keeps the parent it was last reached
+// through (by Run or ResolvePath) while that group still lists it, so
+// preparing never changes what Path reports.
 func (a *App) prepareTree() {
 	if a.Root == nil {
 		return
 	}
-	a.Root.prepare(nil)
-	seen := map[*Command]bool{}
-	var walk func(*Command)
-	walk = func(c *Command) {
-		if c == nil || seen[c] {
-			return
-		}
-		seen[c] = true
+	a.Root.parent = nil
+	listedBy := map[*Command][]*Command{}
+	eachCommandOnce(a.Root, func(c *Command) {
 		c.caseSensitive = a.CaseSensitive
+		c.prepareFlags()
 		for _, child := range c.Children {
-			walk(child)
+			if child != nil && child != a.Root {
+				listedBy[child] = append(listedBy[child], c)
+			}
+		}
+	})
+	for child, parents := range listedBy {
+		listed := false
+		for _, p := range parents {
+			listed = listed || p == child.parent
+		}
+		if !listed {
+			child.parent = parents[len(parents)-1]
 		}
 	}
-	walk(a.Root)
 }
 
 // stdout returns Out, or os.Stdout when Out is nil (for example, in a

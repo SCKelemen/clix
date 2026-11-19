@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A root with no `Run` handler whose only children came from extensions failed on a bare invocation instead of showing help.
 - `ctx.String` on a duration returned `90s` from the default but `1m30s` from the command line; getters now return the parsed value from every source.
 - Config file parse errors did not name the file.
+- A command listed by several groups had the path of the group that listed it last outside the `Run` that routed to it: `help "alpha status"` (ext/help) printed `sh beta status`, and so did `ResolvePath` followed by `Path`. `ResolvePath` now links the command to the group it went through, and each `Run` keeps the path a command was last reached through instead of resetting it.
 - `ConfigManager.Save` replaced a symbolic link with a regular file; it now writes the file the link points to (resolving relative targets from the link's real directory, as the kernel and so `Load` do), atomically, with mode 0600.
 - Documented that `Run(ctx, nil)` reads `os.Args` (tests should pass explicit arguments) and that `Run` is not safe for concurrent use on one `App`.
 - Doc comment examples for `App`, `Command`, `NewApp`, `NewGroup` and `FlagOption` did not compile.
