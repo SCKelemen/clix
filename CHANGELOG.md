@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Aliases, like gh's: the new `clix/ext/alias` extension adds `alias set NAME EXPANSION [--clobber]`, `alias list` and `alias delete NAME|--all`, stored in the config file under `aliases.<name>`, and sets the new `App.ExpandAliases`, which makes `Run` expand an alias given as the first argument. `$1`, `$2`, ... take the arguments after the alias and the rest are appended, as in gh. There are no shell aliases: `--shell` does not exist and `!` expansions are refused; the expansion is split with shell-like quoting but nothing in it is evaluated, and arguments are substituted as whole words that are never split again. Aliases never shadow built-in or extension commands (setting one that would is an error, and a command added later wins), must expand into a root command, and expand once. Root help lists them under ALIAS COMMANDS and shell completion offers them, completing after one as for its expansion. Core API: `App.ExpandAliases`, `Aliases`, `AliasNames`, `CheckAlias`, `SetAlias`, `DeleteAlias`, `ExpandAlias` and `AliasConfigPrefix`.
 - Key-sequence fixtures captured in Ghostty 1.3.1, with application cursor keys and the kitty keyboard protocol on as well as off, replayed by `TestTerminalKeyFixtures`; and an opt-in live test suite (`CLIX_LIVE_TERMINALS=ghostty,cmux`, macOS) that drives prompts, a survey and shell completion in Ghostty and cmux. See "Testing in real terminals" in the README.
 
 ### Fixed

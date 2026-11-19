@@ -66,6 +66,18 @@ func (e *engine) complete(words []string, cur string) result {
 	if e.app == nil || e.app.Root == nil {
 		return result{}
 	}
+	if e.app.ExpandAliases && len(words) > 0 {
+		// An alias completes like the command line it stands for. Until
+		// the arguments its $1, $2, ... need are typed, there is nothing
+		// to offer for them.
+		expanded, isAlias, err := e.app.ExpandAlias(words)
+		if isAlias {
+			if err != nil {
+				return result{}
+			}
+			words = expanded
+		}
+	}
 	st := e.walk(words)
 	cmd := st.path[len(st.path)-1]
 
@@ -88,6 +100,10 @@ func (e *engine) complete(words []string, cur string) result {
 	var out result
 	if !st.strayed {
 		out.candidates = e.children(cmd, cur)
+		if len(words) == 0 {
+			// Run expands an alias only as the first word.
+			out.candidates = append(out.candidates, e.userAliases(cur)...)
+		}
 	}
 	pos := e.positional(st, cur)
 	out.candidates = append(out.candidates, pos.candidates...)
@@ -241,6 +257,28 @@ func (e *engine) children(cmd *clix.Command, cur string) []clix.Completion {
 				out = append(out, clix.Completion{Value: name, Description: child.Short})
 			}
 		}
+	}
+	return out
+}
+
+// userAliases returns the aliases users defined (see
+// clix.App.ExpandAliases) that start with cur and that Run would expand:
+// not those a command shadows, and none when the root takes positional
+// arguments.
+func (e *engine) userAliases(cur string) []clix.Completion {
+	if !e.app.ExpandAliases {
+		return nil
+	}
+	aliases := e.app.Aliases()
+	var out []clix.Completion
+	for _, name := range e.app.AliasNames() {
+		if !e.hasNamePrefix(name, cur) {
+			continue
+		}
+		if _, isAlias, _ := e.app.ExpandAlias([]string{name}); !isAlias {
+			continue
+		}
+		out = append(out, clix.Completion{Value: name, Description: "Alias for " + strconv.Quote(aliases[name])})
 	}
 	return out
 }
