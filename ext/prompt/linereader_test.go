@@ -3,7 +3,6 @@ package prompt
 import (
 	"bytes"
 	"context"
-	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -32,15 +31,5 @@ func TestLineBasedPromptsShareInput(t *testing.T) {
 	rest, _ := io.ReadAll(in)
 	if string(rest) != "leftover" {
 		t.Fatalf("prompts consumed input meant for later: rest = %q", rest)
-	}
-}
-
-func TestLineReaderPartialFinalLine(t *testing.T) {
-	lr := newLineReader(strings.NewReader("last"))
-	if got, err := lr.ReadString('\n'); err != nil || got != "last" {
-		t.Fatalf("ReadString = %q, %v; want the partial line", got, err)
-	}
-	if _, err := lr.ReadString('\n'); !errors.Is(err, io.EOF) {
-		t.Fatalf("second ReadString error = %v, want io.EOF", err)
 	}
 }

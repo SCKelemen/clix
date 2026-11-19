@@ -1,7 +1,6 @@
 package survey
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -11,10 +10,14 @@ import (
 
 	"github.com/SCKelemen/clix/v2"
 	"github.com/SCKelemen/clix/v2/ext/prompt"
+	"github.com/SCKelemen/clix/v2/internal/answer"
+	"github.com/SCKelemen/clix/v2/internal/tty"
 )
 
-// NoDefaultPlaceholder is the message shown when a survey question has no default value.
-// It prompts users that pressing enter will keep the current value.
+// NoDefaultPlaceholder is a placeholder a question can set
+// (PromptRequest.NoDefaultPlaceholder) to tell users that pressing Enter
+// keeps the current value. The survey no longer adds it to every
+// question: on a question without a default, Enter gives an empty answer.
 const NoDefaultPlaceholder = "press enter for default"
 
 // ErrGoBack signals the survey should return to the previous question.
@@ -88,12 +91,15 @@ func (b QuestionBranch) Execute(answer string, s *Survey) {
 // HandlerBranch calls a handler function for dynamic question flows.
 // Use Handler(fn) to create a HandlerBranch.
 //
-// Example:
+// Questions form a stack: the question pushed last is asked first. To ask
+// several questions in order, push them in reverse.
+//
+// Example (asks "Child's name", then "Child's age"):
 //
 //	Branches: map[string]survey.Branch{
 //		"yes": survey.Handler(func(answer string, s *survey.Survey) {
-//			s.Ask(clix.PromptRequest{Label: "Child's name"}, nil)
 //			s.Ask(clix.PromptRequest{Label: "Child's age"}, nil)
+//			s.Ask(clix.PromptRequest{Label: "Child's name"}, nil)
 //		}),
 //	}
 type HandlerBranch struct {
@@ -157,15 +163,12 @@ func Handler(fn func(answer string, s *Survey)) Branch {
 //	)
 //	s.Run()
 type Survey struct {
-	prompter       clix.Prompter
-	ctx            context.Context
-	stack          []*Question
-	answers        []string
-	questionIDs    []string             // Track question IDs in order for end card summary
-	questions      map[string]*Question // Static question registry
-	reader         *bufio.Reader        // Shared reader to avoid bufio buffering issues
-	originalFile   *os.File             // Original *os.File if available (for TerminalPrompter raw mode)
-	isTextPrompter bool                 // Whether we're using TextPrompter (needs shared reader)
+	prompter    clix.Prompter
+	ctx         context.Context
+	stack       []*Question
+	answers     []string
+	questionIDs []string             // Track question IDs in order for end card summary
+	questions   map[string]*Question // Static question registry
 
 	// Undo/back functionality
 	withUndoStack bool
@@ -177,10 +180,14 @@ type Survey struct {
 	endCardTheme clix.PromptTheme // Theme for end card display
 }
 
-// historyEntry tracks a question and its answer for undo functionality.
+// historyEntry tracks a question and its answer for undo functionality,
+// with the question stack as it was just before the question was asked,
+// so going back restores exactly that point: questions its branch pushed
+// are dropped, and questions not yet asked are asked again.
 type historyEntry struct {
 	question *Question
 	answer   string
+	stack    []*Question
 }
 
 // SurveyOption configures survey behavior.
@@ -272,34 +279,9 @@ func New(ctx context.Context, prompter clix.Prompter, options ...SurveyOption) *
 		opt.Apply(s)
 	}
 
-	// Extract the reader from the prompter if possible
-	// This avoids bufio.Reader buffering issues when making multiple Prompt calls
-	// Also save the original *os.File if available, as TerminalPrompter needs it for raw mode
-	var reader io.Reader
-	var originalFile *os.File
-
-	// Try TextPrompter first
-	if tp, ok := prompter.(clix.TextPrompter); ok && tp.In != nil {
-		reader = tp.In
-		s.isTextPrompter = true
-		// Try to extract underlying *os.File
-		if file, ok := tp.In.(*os.File); ok {
-			originalFile = file
-		}
-	} else if tp, ok := prompter.(prompt.TerminalPrompter); ok {
-		// TerminalPrompter has exported In field
-		reader = tp.In
-		// Try to extract underlying *os.File
-		if file, ok := tp.In.(*os.File); ok {
-			originalFile = file
-		}
-	}
-
-	if reader != nil {
-		s.reader = bufio.NewReader(reader)
-		s.originalFile = originalFile // Store for TerminalPrompter to use
-	}
-
+	// The prompter's input is used as is: the built-in prompters read one
+	// line (or key) at a time and never buffer ahead, so input meant for
+	// code that runs after the survey stays unread.
 	return s
 }
 
@@ -403,15 +385,20 @@ func (s *Survey) pushQuestion(q *Question) {
 	s.stack = append(s.stack, q)
 }
 
-// handleGoBack restores the previous question when triggered by Escape/F12 key bindings.
-// The optional current question is re-queued if no history exists.
+// handleGoBack returns to the previous question when the user asks to go
+// back (Escape or F12 in a terminal, or typing "back"). The stack is
+// restored to the snapshot taken before that question was asked, so the
+// question is asked again, then everything after it, and nothing its
+// branch pushed is left over. The optional current question is re-queued
+// if no history exists.
 func (s *Survey) handleGoBack(current *Question) {
 	if len(s.history) > 0 {
 		lastEntry := s.history[len(s.history)-1]
 		s.history = s.history[:len(s.history)-1]
 
-		// Re-ask the previous question next
-		s.pushQuestion(lastEntry.question)
+		// Re-ask the previous question next, with the questions that were
+		// waiting at that point.
+		s.stack = append(s.stack[:0], lastEntry.stack...)
 
 		// Remove the last saved answer/question id
 		if len(s.answers) > 0 {
@@ -445,19 +432,13 @@ func (s *Survey) Run() error {
 		}
 
 		// Pop the last question (depth-first: process most recently added first)
+		snapshot := append([]*Question(nil), s.stack...)
 		idx := len(s.stack) - 1
 		question = s.stack[idx]
 		s.stack = s.stack[:idx]
 
-		// Ensure theme is set if not already provided
 		req := question.Request
-		if req.NoDefaultPlaceholder == "" {
-			req.NoDefaultPlaceholder = NoDefaultPlaceholder
-		}
-
-		if req.Theme.Prefix == "" && req.Theme.Error == "" && req.Theme.PrefixStyle == nil {
-			req.Theme = clix.DefaultPromptTheme
-		}
+		req.Theme = s.theme(req.Theme)
 
 		// Determine if this is the last question (stack will be empty after this)
 		// Check if there are more questions in the stack or if branches will add more
@@ -541,32 +522,26 @@ func (s *Survey) Run() error {
 			req.KeyMap = clix.PromptKeyMap{Bindings: keyBindings}
 		}
 
+		// Without raw mode (TextPrompter, or input that is not a terminal)
+		// there are no key bindings, so typing "back" goes back. A confirm
+		// question is then asked as a text question that accepts it.
+		typedBack := canGoBack && s.lineMode()
+		confirmAsText := typedBack && req.Confirm
+		if confirmAsText {
+			req = confirmTextRequest(req)
+		}
 		options = []clix.PromptOption{req}
 
-		// Use shared reader wrapper to avoid bufio.Reader buffering issues
-		if s.reader != nil {
-			if tp, ok := s.prompter.(clix.TextPrompter); ok {
-				wrapper := sharedTextPrompter{base: tp, reader: s.reader, out: tp.Out}
-				answer, err = wrapper.Prompt(s.ctx, options...)
-			} else if tp, ok := s.prompter.(prompt.TerminalPrompter); ok {
-				// For TerminalPrompter, use original file if available (for raw mode), otherwise use shared reader
-				var inReader io.Reader = s.reader
-				if s.originalFile != nil {
-					// Use original file for raw terminal mode support
-					inReader = s.originalFile
-				}
-				sharedPrompter := prompt.TerminalPrompter{In: inReader, Out: tp.Out}
-				answer, err = sharedPrompter.Prompt(s.ctx, options...)
-			} else {
-				answer, err = s.prompter.Prompt(s.ctx, options...)
-			}
-		} else {
-			// No shared reader available, use prompter directly
-			answer, err = s.prompter.Prompt(s.ctx, options...)
+		answer, err = s.prompter.Prompt(s.ctx, options...)
+		if err == nil && typedBack && strings.EqualFold(strings.TrimSpace(answer), "back") {
+			err = ErrGoBack
+		}
+		if err == nil && confirmAsText {
+			answer = confirmAnswer(question.Request, answer)
 		}
 		if err != nil {
 			// Check if error is "go back" signal
-			if s.withUndoStack && err == ErrGoBack {
+			if s.withUndoStack && errors.Is(err, ErrGoBack) {
 				s.handleGoBack(question)
 				continue
 			}
@@ -583,6 +558,7 @@ func (s *Survey) Run() error {
 			s.history = append(s.history, historyEntry{
 				question: question,
 				answer:   answer,
+				stack:    snapshot,
 			})
 		}
 
@@ -621,11 +597,8 @@ func (s *Survey) showEndCard() error {
 		label = "Are you satisfied with your answers?"
 	}
 
-	// Use the end card theme if provided, otherwise use default
-	theme := s.endCardTheme
-	if theme.Prefix == "" && theme.Error == "" && theme.PrefixStyle == nil {
-		theme = clix.DefaultPromptTheme
-	}
+	// The end card theme, merged over the defaults
+	theme := s.theme(s.endCardTheme)
 
 	// Set up key bindings for end card prompt
 	keyBindings := []clix.PromptKeyBinding{}
@@ -674,28 +647,10 @@ func (s *Survey) showEndCard() error {
 		promptReq.NoDefaultPlaceholder = NoDefaultPlaceholder
 	}
 
-	var answer string
-	var err error
-	if s.reader != nil {
-		if tp, ok := s.prompter.(clix.TextPrompter); ok {
-			wrapper := sharedTextPrompter{base: tp, reader: s.reader, out: tp.Out}
-			answer, err = wrapper.Prompt(s.ctx, promptReq)
-		} else if tp, ok := s.prompter.(prompt.TerminalPrompter); ok {
-			// Use original file if available (for raw mode), otherwise use shared reader
-			var inReader io.Reader = s.reader
-			if s.originalFile != nil {
-				inReader = s.originalFile
-			}
-			sharedPrompter := prompt.TerminalPrompter{In: inReader, Out: tp.Out}
-			answer, err = sharedPrompter.Prompt(s.ctx, promptReq)
-		}
-	} else {
-		answer, err = s.prompter.Prompt(s.ctx, promptReq)
-	}
-
+	answer, err := s.prompter.Prompt(s.ctx, promptReq)
 	if err != nil {
 		// Check if error is "go back" signal (from key binding)
-		if err == ErrGoBack {
+		if errors.Is(err, ErrGoBack) {
 			s.handleGoBack(nil)
 			return s.Run()
 		}
@@ -704,8 +659,9 @@ func (s *Survey) showEndCard() error {
 
 	answer = strings.ToLower(strings.TrimSpace(answer))
 
-	// If user said no (not satisfied), go back if undo is enabled
-	if (answer == "n" || answer == "no") && s.withUndoStack && len(s.history) > 0 {
+	// If user said no (not satisfied) or typed "back", go back if undo is
+	// enabled
+	if (answer == "n" || answer == "no" || answer == "back") && s.withUndoStack && len(s.history) > 0 {
 		s.handleGoBack(nil)
 		return s.Run()
 	}
@@ -721,10 +677,8 @@ func (s *Survey) renderSummary(out io.Writer) {
 		return
 	}
 
-	theme := s.endCardTheme
-	if theme.Prefix == "" && theme.Error == "" && theme.PrefixStyle == nil {
-		theme = clix.DefaultPromptTheme
-	}
+	theme := s.theme(s.endCardTheme)
+	bullet := tty.Symbol("•", "*")
 
 	// Render summary title with styling
 	title := "Summary of your answers:"
@@ -748,7 +702,7 @@ func (s *Survey) renderSummary(out io.Writer) {
 				if theme.DefaultStyle != nil {
 					styledAnswer = renderText(theme.DefaultStyle, answer)
 				}
-				fmt.Fprintf(out, "  • %s\n", styledAnswer)
+				_, _ = fmt.Fprintf(out, "  %s %s\n", bullet, styledAnswer)
 			}
 			continue
 		}
@@ -757,6 +711,9 @@ func (s *Survey) renderSummary(out io.Writer) {
 		label := question.Request.Label
 		if label == "" {
 			label = questionID
+		}
+		if question.Request.Secret {
+			answer = secretMask
 		}
 
 		// Render with styles (compatible with lipgloss.Style)
@@ -834,19 +791,88 @@ func (s *Survey) Clear() {
 	s.stack = s.stack[:0]
 }
 
-// sharedTextPrompter wraps TextPrompter to reuse a shared bufio.Reader.
-// This avoids issues where each Prompt call creates a new bufio.Reader,
-// which can buffer data and leave the underlying io.Reader empty.
-type sharedTextPrompter struct {
-	base   clix.TextPrompter
-	reader *bufio.Reader
-	out    io.Writer
+// secretMask replaces the answer to a secret question in the end card.
+const secretMask = "********"
+
+// theme returns the theme for a question or the end card. The built-in
+// prompters merge a partial theme over their defaults themselves (and over
+// the App's DefaultTheme); other prompters get it merged over
+// DefaultPromptTheme here, as before.
+func (s *Survey) theme(t clix.PromptTheme) clix.PromptTheme {
+	switch s.prompter.(type) {
+	case clix.TextPrompter, *clix.TextPrompter, prompt.TerminalPrompter, *prompt.TerminalPrompter:
+		return t
+	}
+	return clix.DefaultPromptTheme.Merge(t)
 }
 
-func (p sharedTextPrompter) Prompt(ctx context.Context, opts ...clix.PromptOption) (string, error) {
-	// Create a new TextPrompter that uses the shared reader
-	tp := clix.TextPrompter{In: p.reader, Out: p.out}
-	return tp.Prompt(ctx, opts...)
+// lineMode reports whether the survey's prompts read whole lines, so key
+// bindings such as Escape are not available and "back" has to be typed.
+func (s *Survey) lineMode() bool {
+	switch p := s.prompter.(type) {
+	case clix.TextPrompter:
+		return true
+	case *clix.TextPrompter:
+		return true
+	case prompt.TerminalPrompter:
+		return !rawCapable(p.In, p.Out)
+	case *prompt.TerminalPrompter:
+		return p == nil || !rawCapable(p.In, p.Out)
+	}
+	return false
+}
+
+func rawCapable(in io.Reader, out io.Writer) bool {
+	f, ok := in.(*os.File)
+	if !ok {
+		return false
+	}
+	o, ok := out.(*os.File)
+	return ok && tty.Interactive(f, o)
+}
+
+// confirmTextRequest turns a confirm question into a text question that
+// looks the same ("Label (Y/n): ") but also accepts "back".
+func confirmTextRequest(req clix.PromptRequest) clix.PromptRequest {
+	yes := answer.DefaultYes(req.Default)
+	suffix := " (Y/n)"
+	if !yes {
+		suffix = " (y/N)"
+	}
+	validate := req.Validate
+	text := req
+	text.Confirm = false
+	text.Default = ""
+	text.NoDefaultPlaceholder = ""
+	text.Label = req.Label + suffix
+	text.Validate = func(v string) error {
+		if strings.EqualFold(strings.TrimSpace(v), "back") {
+			return nil
+		}
+		reply := answer.Normalize(yes)
+		if strings.TrimSpace(v) != "" {
+			y, ok := answer.Answer(v)
+			if !ok {
+				return errors.New("please enter 'y' or 'n'")
+			}
+			reply = answer.Normalize(y)
+		}
+		if validate != nil {
+			return validate(reply)
+		}
+		return nil
+	}
+	return text
+}
+
+// confirmAnswer normalizes the text answer of a confirm question asked by
+// confirmTextRequest to "y" or "n".
+func confirmAnswer(req clix.PromptRequest, v string) string {
+	if strings.TrimSpace(v) == "" {
+		return answer.Normalize(answer.DefaultYes(req.Default))
+	}
+	y, _ := answer.Answer(v)
+	return answer.Normalize(y)
 }
 
 // Extension adds survey functionality to a clix app.

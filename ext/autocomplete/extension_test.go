@@ -66,8 +66,10 @@ func TestAutocompleteExtension(t *testing.T) {
 		if !strings.Contains(outputStr, "_test_completions") {
 			t.Errorf("bash completion should contain '_test_completions', got: %s", outputStr)
 		}
-		if !strings.Contains(outputStr, "sub") {
-			t.Errorf("bash completion should contain 'sub', got: %s", outputStr)
+		// The script asks the program for candidates instead of listing
+		// the command tree.
+		if !strings.Contains(outputStr, "__complete") {
+			t.Errorf("bash completion should call __complete, got: %s", outputStr)
 		}
 	})
 
@@ -106,7 +108,7 @@ func TestAutocompleteExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		shells := []string{"bash", "zsh", "fish"}
+		shells := []string{"bash", "zsh", "fish", "powershell", "pwsh"}
 		for _, shell := range shells {
 			var output bytes.Buffer
 			app.Out = &output
@@ -133,7 +135,7 @@ func TestAutocompleteExtension(t *testing.T) {
 			t.Fatalf("failed to apply extensions: %v", err)
 		}
 
-		err := app.Run(context.Background(), []string{"autocomplete", "--shell", "powershell"})
+		err := app.Run(context.Background(), []string{"autocomplete", "--shell", "tcsh"})
 		if err == nil {
 			t.Fatal("autocomplete should fail for unsupported shell")
 		}

@@ -293,13 +293,13 @@ func TestAppCommandsBeatExtensionCommands(t *testing.T) {
 			if strings.Contains(out.String(), "Ghost deploy") || !strings.Contains(out.String(), "Ghost status") {
 				t.Fatalf("help:\n%s", out)
 			}
-			var script bytes.Buffer
-			app.Out = &script
-			if err := app.Run(bg, []string{"autocomplete", "--shell", "bash"}); err != nil {
+			var candidates bytes.Buffer
+			app.Out = &candidates
+			if err := app.Run(bg, []string{"__complete", "--cur=", "--", "moln"}); err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(script.String(), "dp") || !strings.Contains(script.String(), "deploy") {
-				t.Fatalf("completion still offers the shadowed command:\n%s", script.String())
+			if hasCandidate(candidates.String(), "dp") || !hasCandidate(candidates.String(), "deploy") {
+				t.Fatalf("completion still offers the shadowed command:\n%s", candidates.String())
 			}
 			app.Out = out
 

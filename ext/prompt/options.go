@@ -2,7 +2,9 @@ package prompt
 
 import "github.com/SCKelemen/clix/v2"
 
-// Select creates a select prompt option.
+// Select creates a select prompt option. It makes the prompt a single
+// select even after MultiSelect. An empty (or nil) list is an error
+// (clix.ErrNoOptions) rather than a free-text prompt.
 // This option is only valid when using the prompt extension (TerminalPrompter).
 // Usage:
 //
@@ -11,7 +13,8 @@ func Select(options []clix.SelectOption) clix.PromptOption {
 	return selectOption{options: options}
 }
 
-// MultiSelect creates a multi-select prompt option.
+// MultiSelect creates a multi-select prompt option. An empty (or nil) list
+// is an error (clix.ErrNoOptions).
 // This option is only valid when using the prompt extension (TerminalPrompter).
 // Usage:
 //
@@ -45,7 +48,16 @@ type selectOption struct {
 }
 
 func (o selectOption) Apply(cfg *clix.PromptConfig) {
-	cfg.Options = o.options
+	cfg.Options = nonNil(o.options)
+	cfg.MultiSelect = false
+}
+
+// nonNil keeps an empty option list distinguishable from no list at all.
+func nonNil(options []clix.SelectOption) []clix.SelectOption {
+	if options == nil {
+		return []clix.SelectOption{}
+	}
+	return options
 }
 
 // multiSelectOption implements PromptOption for multi-select prompts.
@@ -54,7 +66,7 @@ type multiSelectOption struct {
 }
 
 func (o multiSelectOption) Apply(cfg *clix.PromptConfig) {
-	cfg.Options = o.options
+	cfg.Options = nonNil(o.options)
 	cfg.MultiSelect = true
 }
 

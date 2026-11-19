@@ -120,6 +120,9 @@ type Flag struct {
 	// Name is used (unless App.AutoConfig is false).
 	ConfigKey string
 
+	// Sensitive marks a secret; it is prompted for with a secret prompt.
+	Sensitive bool
+
 	// Value is the flag value implementation.
 	Value Value
 
@@ -144,6 +147,8 @@ type Flag struct {
 	wantShort  string // Internal: the short name requested at registration
 	registered bool   // Internal: wantShort has been recorded
 	owner             // Internal: the app or the extension that registered the flag
+
+	completion CompletionFunc // Internal: shell completion for values (see FlagSet.SetCompletion)
 }
 
 // owner records who defined a flag or command: the app, or the extension
@@ -288,6 +293,11 @@ type FlagOptions struct {
 	// When App.AutoConfig is false, only flags with a ConfigKey read the
 	// config file.
 	ConfigKey string
+
+	// Sensitive marks a secret such as a password or token. When the flag
+	// is prompted for, the prompt is a secret prompt (WithSecret): the value
+	// is not echoed, not shown, and not trimmed.
+	Sensitive bool
 }
 
 // newFlag builds a Flag from o with the given value and default text.
@@ -307,6 +317,7 @@ func (o FlagOptions) newFlag(value Value, def string) *Flag {
 		NoEnv:           o.NoEnv,
 		NoConfig:        o.NoConfig,
 		ConfigKey:       o.ConfigKey,
+		Sensitive:       o.Sensitive,
 		Value:           value,
 	}
 }
@@ -353,6 +364,9 @@ func (o FlagOptions) ApplyFlag(fo *FlagOptions) {
 	}
 	if o.ConfigKey != "" {
 		fo.ConfigKey = o.ConfigKey
+	}
+	if o.Sensitive {
+		fo.Sensitive = true
 	}
 }
 

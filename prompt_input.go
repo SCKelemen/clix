@@ -5,6 +5,8 @@ import (
 	"io"
 	"reflect"
 	"sync"
+
+	"github.com/SCKelemen/clix/v2/internal/inputq"
 )
 
 // lineResult is the outcome of reading one line of prompt input.
@@ -91,6 +93,17 @@ func readLineFrom(r io.Reader) (string, error) {
 			return string(buf), nil
 		}
 		return string(buf), err
+	}
+
+	// Bytes the prompt extension read but did not use come first, so a
+	// keystroke it was waiting for when its prompt ended is not lost.
+	head, done, err := inputq.Drain(r)
+	buf = append(buf, head...)
+	if err != nil {
+		return finish(err)
+	}
+	if done {
+		return string(buf), nil
 	}
 
 	if br, ok := r.(io.ByteReader); ok {

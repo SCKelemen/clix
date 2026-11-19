@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/SCKelemen/clix/v2/internal/answer"
 )
 
 // Prompter encapsulates interactive prompting.
@@ -75,12 +77,14 @@ type PromptRequest struct {
 	// Return an error if the value is invalid.
 	Validate func(string) error
 
-	// Theme configures the styling for this prompt.
-	// If not set, uses app.DefaultTheme.
+	// Theme configures the styling for this prompt. It is merged field by
+	// field over the base theme (DefaultPromptTheme overlaid with the
+	// running App's DefaultTheme), so fields left unset keep their defaults.
 	Theme PromptTheme
 
 	// Options are the choices for select/multi-select prompts.
 	// Requires the prompt extension for advanced prompt types.
+	// A non-nil empty slice is an error (ErrNoOptions), not a text prompt.
 	Options []SelectOption
 
 	// MultiSelect enables multi-select mode (user can choose multiple options).
@@ -88,8 +92,15 @@ type PromptRequest struct {
 	MultiSelect bool
 
 	// Confirm enables confirm mode (yes/no prompt).
-	// Returns "y" or "n" (or "yes"/"no").
+	// Returns "y" or "n". A Default of "n", "no", "false", "f", "0" or
+	// "off" (any case) makes No the answer for an empty reply; any other
+	// Default, or none, makes it Yes.
 	Confirm bool
+
+	// Secret reads a secret such as a password or token: the answer is
+	// never echoed or shown and is returned exactly as typed, without
+	// trimming spaces. See WithSecret.
+	Secret bool
 
 	// ContinueText is the text shown for the continue button in select prompts.
 	ContinueText string
@@ -103,6 +114,10 @@ type PromptRequest struct {
 }
 
 // Apply implements PromptOption so PromptRequest can be used directly.
+// Fields that are set (non-empty strings and slices, non-nil functions,
+// true booleans) override earlier options; the theme is merged field by
+// field. A field left at its zero value keeps the earlier value, so a
+// later PromptRequest cannot turn Confirm or MultiSelect back off.
 func (r PromptRequest) Apply(cfg *PromptConfig) {
 	if r.Label != "" {
 		cfg.Label = r.Label
@@ -117,9 +132,9 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 		cfg.Validate = r.Validate
 	}
 	if r.Theme.isConfigured() {
-		cfg.Theme = r.Theme
+		cfg.Theme = cfg.Theme.Merge(r.Theme)
 	}
-	if len(r.Options) > 0 {
+	if r.Options != nil {
 		cfg.Options = r.Options
 	}
 	if r.MultiSelect {
@@ -127,6 +142,9 @@ func (r PromptRequest) Apply(cfg *PromptConfig) {
 	}
 	if r.Confirm {
 		cfg.Confirm = true
+	}
+	if r.Secret {
+		cfg.Secret = true
 	}
 	if r.ContinueText != "" {
 		cfg.ContinueText = r.ContinueText
@@ -150,6 +168,7 @@ type PromptConfig struct {
 	Options              []SelectOption
 	MultiSelect          bool
 	Confirm              bool
+	Secret               bool
 	ContinueText         string
 	CommandHandler       PromptCommandHandler
 	KeyMap               PromptKeyMap
@@ -183,7 +202,8 @@ type PromptCommandAction struct {
 	// Handled indicates the command was consumed and default handling should be skipped.
 	Handled bool
 	// Exit requests the prompter to exit immediately.
-	// If ExitErr is non-nil it will be returned from the prompt.
+	// The prompt returns ExitErr, or ErrCancelled when ExitErr is nil: an
+	// exit never produces an answer, so it cannot bypass Validate.
 	Exit bool
 	// ExitErr is returned from the prompt when Exit is true.
 	ExitErr error
@@ -306,7 +326,7 @@ func WithCommandHandler(handler PromptCommandHandler) PromptOption {
 //				Command:     clix.PromptCommand{Type: clix.PromptCommandEscape},
 //				Description: "Cancel",
 //				Handler: func(ctx clix.PromptCommandContext) clix.PromptCommandAction {
-//					return clix.PromptCommandAction{Exit: true}
+//					return clix.PromptCommandAction{Exit: true, ExitErr: clix.ErrCancelled}
 //				},
 //			},
 //		},
@@ -324,6 +344,8 @@ func WithKeyMap(m PromptKeyMap) PromptOption {
 }
 
 // WithNoDefaultPlaceholder sets the placeholder text shown when no default exists.
+// It is shown as " [text]" in line mode and as dim ghost text in raw mode,
+// only while there is no Default, and it is never returned as an answer.
 // This is typically used by higher-level workflows (like surveys) to prompt the
 // user that pressing enter will keep their existing value.
 //
@@ -362,7 +384,9 @@ func WithValidate(validate func(string) error) PromptOption {
 
 // WithTheme sets the prompt theme (functional option).
 // Themes control the visual appearance of prompts (prefix, hint, error indicators, styling).
-// If not set, uses app.DefaultTheme.
+// The theme is merged field by field over the base theme (DefaultPromptTheme
+// overlaid with the running App's DefaultTheme), so fields left unset keep
+// their defaults; see PromptTheme.Merge.
 //
 // Example:
 //
@@ -376,13 +400,13 @@ func WithValidate(validate func(string) error) PromptOption {
 //	)
 func WithTheme(theme PromptTheme) PromptOption {
 	return TextPromptOption(func(cfg *PromptConfig) {
-		cfg.Theme = theme
+		cfg.Theme = cfg.Theme.Merge(theme)
 	})
 }
 
 // WithConfirm enables yes/no confirmation prompt mode (functional option).
 // Works with TextPrompter - it's just a text prompt with y/n validation.
-// Returns "y" or "n" (or "yes"/"no").
+// Returns "y" or "n"; see PromptRequest.Confirm for how Default is read.
 //
 // Example:
 //
@@ -537,6 +561,12 @@ var DefaultPromptTheme = PromptTheme{
 // is delivered to the next prompt on the same reader. Prompts on one reader
 // must not run concurrently.
 //
+// Confirm prompts accept y, yes, n and no (any case) and return "y" or "n".
+// Secret prompts (WithSecret) turn echo off when In is a terminal and keep
+// the answer exactly as typed. Theme styles are written without their ANSI
+// escapes when Out should not get color (NO_COLOR, a pipe or file,
+// TERM=dumb).
+//
 // Example:
 //
 //	app.Prompter = clix.TextPrompter{
@@ -559,14 +589,9 @@ func (p TextPrompter) Prompt(ctx context.Context, opts ...PromptOption) (string,
 		return "", errors.New("prompter missing IO")
 	}
 
-	cfg := &PromptConfig{Theme: DefaultPromptTheme}
-
-	// Check if first argument is a PromptRequest struct (backward compatibility check)
-	// In practice, we'll support both: functional options and direct PromptRequest
-	// For now, we only support functional options, but the interface allows for struct support later
-
-	for _, opt := range opts {
-		opt.Apply(cfg)
+	cfg, err := NewPromptConfig(ctx, opts...)
+	if err != nil {
+		return "", err
 	}
 
 	// Handle confirm prompt (works with TextPrompter)
@@ -587,41 +612,54 @@ func (p TextPrompter) Prompt(ctx context.Context, opts ...PromptOption) (string,
 
 // promptText handles regular text input prompts.
 func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string, error) {
+	st := newPromptStyler(p.Out)
+	var invalid error
 	for {
-		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
-		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
+		prefix := st.render(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+		label := st.render(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
-		if cfg.Default != "" {
-			def := renderText(cfg.Theme.DefaultStyle, cfg.Default)
+		if cfg.Default != "" && !cfg.Secret {
+			def := st.render(cfg.Theme.DefaultStyle, cfg.Default)
 			fmt.Fprintf(p.Out, " [%s]", def)
+		} else if cfg.Default == "" && cfg.NoDefaultPlaceholder != "" {
+			style := cfg.Theme.PlaceholderStyle
+			if style == nil {
+				style = cfg.Theme.DefaultStyle
+			}
+			_, _ = fmt.Fprintf(p.Out, " [%s]", st.render(style, cfg.NoDefaultPlaceholder))
 		}
 
 		if cfg.Theme.Hint != "" {
-			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
+			hint := st.render(cfg.Theme.HintStyle, cfg.Theme.Hint)
 			fmt.Fprintf(p.Out, " %s", hint)
 		}
 
 		fmt.Fprint(p.Out, ": ")
 
-		line, err := readLine(ctx, p.In)
+		var value string
+		var err error
+		if cfg.Secret {
+			value, err = ReadSecretLine(ctx, p.In, p.Out)
+		} else {
+			value, err = readLine(ctx, p.In)
+			value = strings.TrimSpace(value)
+		}
 		if err != nil {
-			return "", err
+			return "", answer.Finish(err, invalid)
 		}
 
-		value := strings.TrimSpace(line)
 		if value == "" {
 			value = cfg.Default
 		}
 
 		if cfg.Validate != nil {
 			if err := cfg.Validate(value); err != nil {
-				errPrefix := renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error)
-				errMsg := err.Error()
-				if errMsg != "" {
-					errMsg = renderText(cfg.Theme.ErrorStyle, errMsg)
+				if cfg.Secret {
+					err = errors.New(answer.RedactSecret(err.Error(), value))
 				}
-				fmt.Fprintf(p.Out, "%s%s\n", errPrefix, errMsg)
+				invalid = err
+				p.printError(st, cfg, err.Error())
 				continue
 			}
 		}
@@ -630,32 +668,38 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 	}
 }
 
+// printError writes a validation message using the theme's error marker.
+func (p TextPrompter) printError(st promptStyler, cfg *PromptConfig, msg string) {
+	errPrefix := st.render(cfg.Theme.ErrorStyle, cfg.Theme.Error)
+	if msg != "" {
+		msg = st.render(cfg.Theme.ErrorStyle, msg)
+	}
+	_, _ = fmt.Fprintf(p.Out, "%s%s\n", errPrefix, msg)
+}
+
 // promptConfirm handles yes/no confirmation prompts.
 // This works with TextPrompter since it's just a text prompt with validation.
+// It returns "y" or "n" and nothing else.
 func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (string, error) {
-	// Determine default (Y/n or y/N)
-	defaultYes := true
-	defaultText := "Y"
-	if cfg.Default == "n" || cfg.Default == "N" || strings.ToLower(cfg.Default) == "no" {
-		defaultYes = false
-		defaultText = "N"
-	}
+	st := newPromptStyler(p.Out)
+	defaultYes := answer.DefaultYes(cfg.Default)
+	var invalid error
 
 	for {
-		prefix := renderText(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
-		label := renderText(cfg.Theme.LabelStyle, cfg.Label)
+		prefix := st.render(cfg.Theme.PrefixStyle, cfg.Theme.Prefix)
+		label := st.render(cfg.Theme.LabelStyle, cfg.Label)
 		fmt.Fprintf(p.Out, "%s%s", prefix, label)
 
 		// Show default in prompt
 		if defaultYes {
-			fmt.Fprintf(p.Out, " (%s/n)", defaultText)
+			_, _ = fmt.Fprint(p.Out, " (Y/n)")
 		} else {
-			fmt.Fprintf(p.Out, " (y/%s)", defaultText)
+			_, _ = fmt.Fprint(p.Out, " (y/N)")
 		}
 
 		// Show hint if provided (may include "back" instruction from survey)
 		if cfg.Theme.Hint != "" {
-			hint := renderText(cfg.Theme.HintStyle, cfg.Theme.Hint)
+			hint := st.render(cfg.Theme.HintStyle, cfg.Theme.Hint)
 			fmt.Fprintf(p.Out, " %s", hint)
 		}
 
@@ -663,38 +707,27 @@ func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (str
 
 		line, err := readLine(ctx, p.In)
 		if err != nil {
-			return "", err
+			return "", answer.Finish(err, invalid)
 		}
 
-		value := strings.TrimSpace(line)
-		if value == "" {
-			// Return default
-			if defaultYes {
-				return "y", nil
+		yes := defaultYes
+		if value := strings.TrimSpace(line); value != "" {
+			var ok bool
+			if yes, ok = answer.Answer(value); !ok {
+				invalid = errors.New("please enter 'y' or 'n'")
+				p.printError(st, cfg, invalid.Error())
+				continue
 			}
-			return "n", nil
 		}
 
-		// Normalize response (but preserve case for special commands like "back")
-		lowerValue := strings.ToLower(value)
-		if lowerValue == "y" || lowerValue == "yes" {
-			return "y", nil
+		reply := answer.Normalize(yes)
+		if cfg.Validate != nil {
+			if err := cfg.Validate(reply); err != nil {
+				invalid = err
+				p.printError(st, cfg, err.Error())
+				continue
+			}
 		}
-		if lowerValue == "n" || lowerValue == "no" {
-			return "n", nil
-		}
-
-		// Allow "back" to pass through for undo functionality (survey will handle it)
-		if lowerValue == "back" {
-			return value, nil // Return original case
-		}
-
-		// Invalid input
-		errPrefix := renderText(cfg.Theme.ErrorStyle, cfg.Theme.Error)
-		errMsg := "please enter 'y' or 'n'"
-		if cfg.Theme.ErrorStyle != nil {
-			errMsg = renderText(cfg.Theme.ErrorStyle, errMsg)
-		}
-		fmt.Fprintf(p.Out, "%s%s\n", errPrefix, errMsg)
+		return reply, nil
 	}
 }

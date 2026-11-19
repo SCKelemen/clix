@@ -22,6 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Context.Int`, `Int64`, `Float64`, `Duration` and `EffectiveDuration`.
 - Short flag clusters (`-xv`), attached short values (`-fa.tar`) and negative numbers as positional arguments (`add -5 3`). A cluster written before the command that mixes the command's switches with a flag that takes a value must use `=`: `moln -fp=p1 deploy`.
 - A "Routing" section in the README that states how arguments are matched, backed by a table-driven test (`routing_test.go`).
+- Secret prompts: `WithSecret()` and `PromptRequest.Secret` read a password or token without echo (also in line mode on a terminal) and return it exactly as typed. `FlagOptions.Sensitive` (and `WithFlagSensitive`) makes a prompted required flag a secret prompt; the survey end card masks secret answers.
+- `NewPromptConfig(ctx, opts...)` builds a prompt's configuration the way the built-in prompters do (theme over `App.DefaultTheme`, option order, `ErrPromptsDisabled`, `ErrNoOptions`, `ErrInvalidDefault`), for custom prompters. Also `PromptTheme.Merge`, `ReadLine` (the context-aware line reader) and `ResolveMultiSelectDefault`.
+- `ErrPromptsDisabled`, `ErrNoOptions` and `ErrInvalidDefault`.
+- `ReadSecretLine`: the secret prompt's reader (echo off on a terminal, ctx-aware, restores echo on SIGINT or SIGTERM), for custom prompters.
+- `Flag.CheckValue` (a value's type check and `Validate`, without setting the flag), `App.FlagConfigKey` and `App.ConfigLoadError`, used by the config extension.
+- `FlagSet.ArgsVar` (`ArgsVarOptions`, `Flag.IsVariadic`): a positional argument that collects all remaining arguments (values given as `--name` first, then the positional words).
+- `FlagSet.SetCompletion`, `Flag.Completer`, `CompletionFunc`, `CompletionRequest`, `Completion`, `CompleteValues` and `CompleteOptions`: value completion for flags and positional arguments.
+- `AllowConfigErrors(cmd)` lets a command run when its configuration is broken: a config file that does not load, or a value from the config file or the environment that a flag rejects (ignored with a warning on `App.Err`; the flag keeps its default). The config, help, version and completion commands use it.
+- `autocomplete powershell`, and `autocomplete.NewCompleteCommand`.
+- `validation.ISO8601Time` (RFC 3339) and `validation.ISO8601Duration`.
+- Help suggests close matches for an unknown command and lists INHERITED FLAGS (from groups) and GLOBAL FLAGS (from the root) in subcommand help, and shows aliases.
+- `clix/ext/prompt`: `KeyDelete`, `KeyInsert`, `KeyPageUp`, `KeyPageDown`, `KeyShiftTab`, `KeyWordLeft`, `KeyWordRight` and `KeyWordBackspace`. Raw-mode prompts support word movement and the usual line-editing keys, j/k and Page Up/Down in lists, and bracketed paste.
 - Package `iso8601` (stdlib only): `ParseTime` for ISO 8601-1:2019 calendar, ordinal and week dates and date-times in the basic or extended format, `FormatTime` for the RFC 3339 profile, and `Duration` with `ParseDuration`, `FormatDuration`, `FromStd`, `Exact`, `AddTo` and text marshaling. Errors are `*iso8601.ParseError` values with the input and byte offset.
 
 ### Changed
@@ -32,6 +44,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Config file values keep the text written in the file (`1.10`, `0755`, `1e3`, `2024-01-02`) instead of being re-printed from a decoded Go value. Int and float flags, `ConfigManager.Int`/`Int64`/`Float64` and the numeric `Context` getters still read YAML's number (`0755` is 493, `0x1F` is 31). Non-string keys (`ports: {80: http}`) flatten to `ports.80`, lists of maps flatten with indexes, and a key defined twice after flattening is an error. YAML merge keys (`<<`) are applied shallowly, as the merge-key spec says: an explicit key, even a null one, replaces the merged value as a whole. `ConfigManager.Save` (and so `config set`) never changes what a key reads: a key loaded from the file and not changed since is written back with its YAML type, tag and quoting (`0x1F` stays a number, `[a, "b,c"]` a list of two items), and a value given to `Set` is written plain when YAML reads it back as the same text and number (`retries: 5`, `debug: true`) and quoted otherwise (`mode: "0755"`).
 - A flag is looked up on the command in effect, then on each of its ancestors, then on the root; before, groups were skipped, so a group's flag written after the leaf was an unknown flag.
 - A bad value from an environment variable or the config file is a usage error (exit status 2), like the same value on the command line.
+- Prompt themes merge field by field: a theme that sets only some fields keeps the defaults for the rest, and prompts made with a command's `*Context` start from `App.DefaultTheme`.
+- Prompts made from command code fail with `ErrPromptsDisabled` when `App.Interactive` is `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` is set. With `InteractiveAuto` they still read from pipes.
+- Confirm prompts return only `"y"` or `"n"`: `back` is no longer returned, a `Default` of `false`, `0`, `off` (or `n`, `no`, `f`) means No, and `Validate` runs on the answer.
+- When input ends right after an invalid answer, prompts return the validation error (which also matches `io.EOF`) instead of a bare `io.EOF`.
+- A select or multi-select with an empty option list (including `prompt.Select(nil)`) is `ErrNoOptions` instead of a free-text prompt, and a `Default` that names no option is `ErrInvalidDefault`. A multi-select `Default` is read as values or labels first, then as option numbers.
+- `prompt.TerminalPrompter` uses raw mode only when both `In` and `Out` are terminals and `TERM` is not `dumb`; otherwise it uses line mode. On Windows it enables virtual terminal processing and input, and uses line mode on legacy consoles.
+- Line-mode select answers are matched exactly first, then by number (whole answer only), then by a unique prefix; an answer that matches nothing is asked again instead of returned.
+- Prompt styles lose their ANSI escapes when color should not be used (`NO_COLOR`, a non-terminal, `TERM=dumb`; `CLICOLOR_FORCE=1` forces color).
+- `TextPrompter` shows `NoDefaultPlaceholder` (as `" [text]"`) when there is no default.
+- The survey no longer adds the "press enter for default" placeholder to questions without a default, and passes the prompter's input through unbuffered.
+- JSON output (`FormatData`, `config list --format json`) uses `encoding/json/v2` with `encoding/json`'s semantics (`DefaultOptionsV1`), so names, `omitempty`, `,string`, `MarshalJSON`, embedded fields, `[N]byte`, sorted keys and U+FFFD for invalid UTF-8 match v1. The remaining visible differences from v1: `time.Duration` is an ISO 8601 string (`"PT1M30S"`) instead of integer nanoseconds, also for fields tagged `,string`; nil slices and maps are `[]` and `{}` instead of `null`, and a nil `[]byte` is `""`; `<`, `>`, `&`, U+2028 and U+2029 are not escaped; `time.Time` is RFC 3339 for any year (v1 failed outside 0-9999).
+- YAML output writes durations as ISO 8601 at the top level and in maps, slices, arrays and pointers (struct fields keep `1m30s`), and decodes `json.RawMessage` instead of listing its bytes.
+- `FormatData` text output renders structs, maps of any type, nested values and nil readably (`key = value` lines with dotted keys) instead of Go syntax; flat maps and lists of scalars print as before. The `version` command's text output follows.
+- An unknown `--format` value (also from `<PREFIX>_FORMAT` or the `format` config key) is a usage error listing json, yaml and text, instead of silently printing text.
+- Help writes no ANSI escapes when `NO_COLOR` is set, `CLICOLOR=0`, `TERM=dumb` or the output is not a terminal (`CLICOLOR_FORCE=1` overrides).
+- With `Version` empty, `version` and `--version` agree, using `App.Version`, then the build info (module version, VCS revision and time, `modified` for dirty builds), then `dev`.
+- The `config` and `help` extension arguments are read only from the command line: before, `MYAPP_KEY=<secret> app config get` looked the secret up and printed it in the not-found error.
+- `autocomplete` scripts are thin, eval-free wrappers around a hidden `__complete` command that completes from the live command tree: commands and aliases where they are valid (never hidden ones), the flags in scope, values from `SetCompletion` hooks, `--flag=value`, `--` and file names. `autocomplete <shell>` prints only the script; installation steps are in its help. bash 3.2 and later, zsh, fish and PowerShell are supported.
 
 ### Fixed
 
@@ -54,6 +84,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ConfigManager.Save` replaced a symbolic link with a regular file; it now writes the file the link points to (resolving relative targets from the link's real directory, as the kernel and so `Load` do), atomically, with mode 0600.
 - Documented that `Run(ctx, nil)` reads `os.Args` (tests should pass explicit arguments) and that `Run` is not safe for concurrent use on one `App`.
 - Doc comment examples for `App`, `Command`, `NewApp`, `NewGroup` and `FlagOption` did not compile.
+- `prompt.ReadKey` returned `KeyEscape` for keys it did not know (Delete, Page Up/Down, Shift-Tab, Ctrl/Alt-arrows, application-cursor `ESC O` sequences from tmux and screen, Alt+key), which cleared text input and cancelled selects; a lone Esc waited for, and swallowed, the next key; F5-F10 were misread. Keys are now parsed per ECMA-48 with xterm modifiers, unknown sequences return `KeyUnknown`, and a lone Esc is reported after 50 ms.
+- Raw-mode text input dropped non-ASCII characters, Backspace split multi-byte characters, and the cursor was placed by rune count rather than display width.
+- Unbound function keys cancelled select prompts, and a key binding that exited without `ExitErr` returned `("", nil)`, skipping `Validate`; it now returns `ErrCancelled`.
+- The prompt extension's line-mode prompts ignored the context, and confirm read lines even on a terminal, so Ctrl-C (with `signal.NotifyContext`) did not end them.
+- A pasted CRLF answered the next prompt with its default.
+- Option lists taller than the terminal corrupted the screen; they now scroll, and redraw on resize.
+- Multi-select returned `""` after an option was toggled on and off, and never called `Validate`.
+- `prompt.Select` after `prompt.MultiSelect` stayed a multi-select.
+- The survey dropped input meant for code after it, skipped or duplicated questions when going back, saved a typed `back` as an answer with `TextPrompter`, and dropped partial question themes. Its `Handler` example asked its questions in reverse.
+- A malformed config file blocked even `config reset`.
+- A value a flag rejects, in the config file (`config set format xml`, `verbose: notabool`) or the environment (`DEMO_VERBOSE=zzz`), made every command fail, including the config commands that could fix it.
+- A `Sensitive` flag's value appeared in error messages: parse errors at the prompt quote the input, and errors about values from the environment or the config file quoted them. They now show `[redacted]`. Secret prompts also redact the typed value from `Validate` messages.
+- Line-mode secret prompts (TextPrompter, `TERM=dumb`, output that is not a terminal, Sensitive required flags) left the terminal without echo when interrupted by Ctrl-C.
+- A raw prompt inside another prompt's `Validate` function, followed by SIGINT or SIGTERM, could leave the terminal in raw mode; it also turned bracketed paste off for the outer prompt.
+- On Windows and other inputs read in a goroutine, Esc or a cancelled context left a one-byte read waiting that took the first byte of the next `ReadLine`; the byte read after a CR was kept from the next reader too.
+- A bracketed paste that stalled for 500 ms stopped being a paste (its newline submitted the prompt), and a paste over 1 MiB never found its end marker.
+- `config set` stored values a flag rejects; it now checks them against every flag that reads the key. On a config file that is not valid YAML, `list`, `get`, `set` and `unset` fail with a hint to run `config reset` instead of showing nothing or overwriting the file.
+- `config set`, `list` and `get` printed the values of `Sensitive` flags; `set` now asks for them with echo off and prints "key set", `list` shows `[redacted]`, and `get` needs `--reveal`.
+- `config reset` removed whatever a symlinked config pointed to, and an empty directory at the config path; it now removes only a regular file.
+- After the switch to `encoding/json/v2`, JSON output failed (printing nothing) for values `encoding/json` encodes: a `,string` tag on a bool, structs with an error, `*url.URL` or `sync.Mutex` field or no exported fields, embedded non-struct or interface fields, `json:"-,"`, duplicate names and duplicate keys from `MarshalJSON`; and text output then printed `json:"-"` fields. It now follows `encoding/json`'s rules, and text output never prints `json:"-"` fields.
+- `help` and `version` failed on a config file that did not load or held a bad value.
+- `--format` had no shell completion.
+- Shell completion and `autocomplete <shell>` stopped working on a malformed config file or a rejected config or environment value (`eval "$(app autocomplete bash)"` broke rc files).
+- bash completion of file names inside `"` let names containing `$(...)` or backquotes run commands (bash 3.2, and bash 5's own readline completion); the script now quotes file names itself after `"` and `'`.
+- bash 3.2 completed the wrong word after non-ASCII text on the line (its `COMP_POINT` counts bytes) and ended the word after a completed directory; zsh, fish and PowerShell did not complete file names after `--flag=`.
+- Shell completion offered the app's own name and every command and flag at every position (bash), never reached flags (zsh), completed nothing after the first subcommand (fish), and broke on a `"` in a command name.
+- `help widgets get` failed with "unexpected arguments"; help takes the rest of the words as the command path.
+- Help columns collapsed once styles were set (`%-20s` padded the escapes); Long was printed twice when Short was empty.
+- JSON output escaped `&`, `<` and `>`.
+- `FloatRange` accepted NaN, `MinLength`, `MaxLength` and `Length` counted bytes instead of characters, and `Hostname` rejected a fully qualified name with its trailing dot (RFC 1034).
+- `config list` dropped `a` when `a.b` also existed, wrote invalid YAML for values like `- x`, changed the type of `yes`, `0123` or `null`, and ignored `--format JSON` (uppercase).
+- `config unset` of a missing key wrote, and could create, the config file.
+- `config reset` replaced a symlinked config file's link.
+- The format and version extensions' flags carried their value from one `Run` of an `App` into the next.
 
 ## [2.5.0] - 2026-11-19
 

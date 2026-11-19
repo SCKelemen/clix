@@ -65,22 +65,24 @@ func (Extension) Extend(app *clix.App) error {
 	return nil
 }
 
-// AsTerminalPrompter safely casts a Prompter to TerminalPrompter.
-// Returns nil if the prompter is not a TerminalPrompter (e.g., it's a TextPrompter).
-// This allows you to access advanced prompt methods with compile-time safety.
+// AsTerminalPrompter returns p as a *TerminalPrompter, or nil if it is not
+// one (for example, a clix.TextPrompter). Both TerminalPrompter and
+// *TerminalPrompter are recognized.
 //
 // Example:
 //
 //	if tp := prompt.AsTerminalPrompter(app.Prompter); tp != nil {
-//		result, err := tp.PromptWithOptions(ctx, clix.PromptRequest{
-//			TextPromptRequest: clix.TextPromptRequest{Label: "Choose"},
+//		env, err := tp.Prompt(ctx, clix.PromptRequest{
+//			Label:   "Choose",
 //			Options: []clix.SelectOption{{Label: "A", Value: "a"}},
 //		})
 //	}
 func AsTerminalPrompter(p clix.Prompter) *TerminalPrompter {
-	tp, ok := p.(TerminalPrompter)
-	if !ok {
-		return nil
+	switch tp := p.(type) {
+	case TerminalPrompter:
+		return &tp
+	case *TerminalPrompter:
+		return tp
 	}
-	return &tp
+	return nil
 }

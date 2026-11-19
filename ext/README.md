@@ -125,10 +125,10 @@ Without this extension there is no `--format` flag; `config list` prints YAML an
 ### Prompt Extension (`clix/ext/prompt`)
 
 Replaces the default `TextPrompter` with `TerminalPrompter`, enabling:
-- Select prompts (navigable lists with arrow keys)
+- Select prompts (navigable lists: arrows, j/k, Page Up/Down, Home/End, 1-9; long lists scroll)
 - Multi-select prompts (select multiple options)
 - Confirm prompts (yes/no with defaults)
-- Raw terminal mode for interactive navigation, including key bindings such as Esc, Tab, and F1-F12
+- Raw terminal mode when both input and output are terminals (and `TERM` is not `dumb`): line editing by display width, bracketed paste, and key bindings for Esc, Tab, Enter and F1-F12. Otherwise prompts read one line per answer; see "Interactive Prompting" in the main README for both modes.
 
 Without this extension, advanced prompt types return errors directing users to add the extension.
 
@@ -244,7 +244,7 @@ if err := s.Run(); err != nil {
 }
 ```
 
-**WithUndoStack()**: Lets users press Esc or F12 at a prompt to return to the previous question and change their answer. These key bindings are handled by `TerminalPrompter` (from `ext/prompt`) when input is an interactive terminal; the line-based `TextPrompter` does not read special keys.
+**WithUndoStack()**: Lets users return to the previous question and change their answer. In raw mode (`TerminalPrompter` on a terminal) they press Esc or F12. In line mode (`TextPrompter`, or input that is not a terminal) they type `back` at a text or confirm question. Going back restores the questions exactly as they were before that question was asked.
 
 **WithEndCard()**: Shows a formatted summary of all answers (with styling support) and asks for confirmation. If undo is enabled, users can answer `no` (or press Esc or F12 with `TerminalPrompter`) to go back and edit answers.
 
@@ -261,6 +261,9 @@ s.Ask(clix.PromptRequest{
 	Confirm: true,
 }, func(answer string, s *survey.Survey) {
 	if answer == "y" {
+		// The stack is last-in, first-out: push in reverse to ask
+		// "Child's name" before "Child's age".
+		s.Ask(clix.PromptRequest{Label: "Child's age"}, nil)
 		s.Ask(clix.PromptRequest{Label: "Child's name"}, nil)
 	}
 })

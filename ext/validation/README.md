@@ -52,7 +52,7 @@ prompter.Prompt(ctx, clix.PromptRequest{
 - `IPv6(value string) error` - Validates IPv6 addresses
 - `IP(value string) error` - Validates IPv4 or IPv6 addresses
 - `Port(value string) error` - Validates TCP/UDP port numbers (1-65535)
-- `Hostname(value string) error` - Validates hostnames according to RFC 1123
+- `Hostname(value string) error` - Validates hostnames according to RFC 1123; a fully qualified name with one trailing dot (`example.com.`) is accepted
 
 ### Phone Numbers
 - `E164(value string) error` - Validates E.164 phone numbers (e.g., "+1234567890")
@@ -60,18 +60,22 @@ prompter.Prompt(ctx, clix.PromptRequest{
 ### Identifiers
 - `UUID(value string) error` - Validates UUID strings (e.g., "550e8400-e29b-41d4-a716-446655440000")
 
+### Times and Durations
+- `ISO8601Time(value string) error` - Validates an RFC 3339 (ISO 8601) timestamp with a time zone, such as "2026-11-19T08:30:00Z"
+- `ISO8601Duration(value string) error` - Validates an ISO 8601 duration of days, hours, minutes and seconds (PnDTnHnMnS, optional sign, fractional seconds), such as "PT1M30S" or "P1DT12H"; years, months and weeks are rejected
+
 ### Numeric
 - `Integer(value string) error` - Validates that a string can be parsed as an integer (int)
 - `Int64(value string) error` - Validates that a string can be parsed as an int64
 - `Float64(value string) error` - Validates that a string can be parsed as a float64
 - `IntRange(min, max int) Validator` - Validates integer within range [min, max]
-- `FloatRange(min, max float64) Validator` - Validates float64 within range [min, max]
+- `FloatRange(min, max float64) Validator` - Validates float64 within range [min, max] (NaN is rejected)
 
 ### String Constraints
 - `NotEmpty(value string) error` - Ensures string is not empty (after trimming)
-- `MinLength(min int) Validator` - Ensures minimum string length
-- `MaxLength(max int) Validator` - Ensures maximum string length
-- `Length(exact int) Validator` - Ensures exact string length
+- `MinLength(min int) Validator` - Ensures minimum string length, in characters (Unicode code points, not bytes)
+- `MaxLength(max int) Validator` - Ensures maximum string length, in characters
+- `Length(exact int) Validator` - Ensures exact string length, in characters
 - `Regex(pattern string) Validator` - Validates against a regular expression
 
 ### Combinators

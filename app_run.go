@@ -121,7 +121,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 					return usageErrorf("unknown flag: %s", name)
 				}
 			}
-			return usageErrorf("unexpected arguments: %s", strings.Join(excess, " "))
+			if !cmd.Flags.takeRest(excess) {
+				return usageErrorf("unexpected arguments: %s", strings.Join(excess, " "))
+			}
 		}
 	}
 
@@ -134,7 +136,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return a.printCommandHelp(cmd)
 	}
 
-	if configErr != nil {
+	if configErr != nil && !a.configErrorAllowed(cmd) {
 		return configErr
 	}
 
@@ -142,7 +144,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// environment, then config file, then defaults. Every command on the
 	// path takes part: the root, each group, and the command itself.
 	for _, c := range path {
-		if err := a.applyConfigToFlags(c.Flags); err != nil {
+		if err := a.applyConfigToFlags(c.Flags, configErrorsAllowed(cmd)); err != nil {
 			return err
 		}
 	}
@@ -550,7 +552,7 @@ func (a *App) ensureConfigLoaded(ctx context.Context) error {
 // default. It must run after parsing so command-line values keep the highest
 // precedence. A value that the flag rejects is reported as an error naming
 // its source. Flags the Run ignores (see markShadowed) are left alone.
-func (a *App) applyConfigToFlags(flags *FlagSet) error {
+func (a *App) applyConfigToFlags(flags *FlagSet, tolerate bool) error {
 	if flags == nil {
 		return nil
 	}
@@ -571,14 +573,15 @@ func (a *App) applyConfigToFlags(flags *FlagSet) error {
 		}
 
 		// Try each source in order of precedence
+		undo := valueUndo(flag, tolerate)
 		if ok, err := a.trySetFromEnv(flag); ok || err != nil {
-			if err != nil {
+			if err := a.valueError(flag, err, tolerate, undo); err != nil {
 				return err
 			}
 			continue
 		}
 		if ok, err := a.trySetFromConfig(flag); ok || err != nil {
-			if err != nil {
+			if err := a.valueError(flag, err, tolerate, undo); err != nil {
 				return err
 			}
 			continue
@@ -648,7 +651,7 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 	}
 	if err := setAndValidate(flag, val); err != nil {
 		// A usage error, like the same value on the command line.
-		return false, usageErrorf("invalid value %q for --%s from environment variable %s: %w", val, flag.Name, name, err)
+		return false, usageErrorf("invalid value %s for --%s from environment variable %s: %w", shownValue(flag, val), flag.Name, name, redactErr(flag, err, val))
 	}
 	flag.set = true
 	flag.source = SourceEnvVar
@@ -726,7 +729,7 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 			slice.setItems(items)
 			if flag.Validate != nil {
 				if err := flag.Validate(slice.String()); err != nil {
-					return false, usageErrorf("invalid value %q for --%s from config file key %q: %w", slice.String(), flag.Name, key, err)
+					return false, usageErrorf("invalid value %s for --%s from config file key %q: %w", shownValue(flag, slice.String()), flag.Name, key, redactErr(flag, err, slice.String()))
 				}
 			}
 			flag.set = true
@@ -742,7 +745,7 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 		}
 	}
 	if err := setAndValidate(flag, val); err != nil {
-		return false, usageErrorf("invalid value %q for --%s from config file key %q: %w", val, flag.Name, key, err)
+		return false, usageErrorf("invalid value %s for --%s from config file key %q: %w", shownValue(flag, val), flag.Name, key, redactErr(flag, err, val))
 	}
 	flag.set = true
 	flag.source = SourceConfigFile
@@ -807,6 +810,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 			Label:    label,
 			Theme:    a.DefaultTheme,
 			Validate: promptValidator(flag),
+			Secret:   flag.Sensitive,
 		})
 		if err != nil {
 			if errors.Is(err, io.EOF) {
@@ -827,15 +831,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 // answers flag would accept: the value must parse for the flag's type and
 // then pass the flag's own Validate function.
 func promptValidator(flag *Flag) func(string) error {
-	return func(value string) error {
-		if err := checkValue(flag.Value, value); err != nil {
-			return err
-		}
-		if flag.Validate != nil {
-			return flag.Validate(value)
-		}
-		return nil
-	}
+	return flag.CheckValue
 }
 
 // checkValue reports whether raw parses for the built-in value types,

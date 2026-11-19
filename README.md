@@ -455,13 +455,57 @@ Some of these rules are kept only for compatibility with earlier v2 releases and
 
 `clix` provides several prompt types:
 - **Text input**: Standard text prompts with validation
+- **Secret**: Text input that is never echoed or shown, for passwords and tokens (`clix.WithSecret()`, `PromptRequest.Secret`, or `FlagOptions.Sensitive` on a required flag)
 - **Select**: Navigable single-selection lists (requires prompt extension)
 - **Multi-select**: Multiple selection lists (requires prompt extension)
-- **Confirm**: Yes/no confirmation prompts
+- **Confirm**: Yes/no confirmation prompts that return `"y"` or `"n"`
 
-Prompts automatically use raw terminal mode when available (for arrow key navigation) and fall back to line-based input otherwise.
+#### Raw mode and line mode
 
-The prompt API supports both struct-based and functional options patterns. The struct-based API (using `PromptRequest`) is the primary API and is consistent with the rest of the codebase.
+With the prompt extension (`clix/ext/prompt`), prompts run in **raw mode** when `App.In` and the prompt's output (`App.Err`) are both terminals and `TERM` is not `dumb`. Keys are read one at a time and the prompt is redrawn in place. On Windows, raw mode turns on virtual terminal processing and input for the console first and restores the previous modes afterwards; a legacy console without virtual terminal support uses line mode. In every other case (a pipe or file on either side, `app 2>log`, `TERM=dumb`, or the core `TextPrompter`) prompts run in **line mode**: one line is read per answer, with the same answer rules, so scripts can pipe answers in.
+
+Raw mode keys:
+
+| Keys | Text, secret and confirm | Select and multi-select |
+| --- | --- | --- |
+| Enter | submit | choose (select), toggle or press Continue (multi-select) |
+| Space | insert a space | toggle (multi-select) |
+| Up/Down, Ctrl-P/Ctrl-N, k/j | – | move (wrapping around) |
+| Page Up/Page Down, Home/End | Home/End move the cursor | move by a page, to the first/last entry (End selects Continue) |
+| 1–9 | insert the digit | choose (select) or toggle (multi-select) that entry |
+| Left/Right, Ctrl-B/Ctrl-F | move by character | – |
+| Ctrl/Alt-Left/Right, Alt-b/Alt-f | move by word | – |
+| Backspace, Delete, Ctrl-D | delete before/after the cursor | – |
+| Ctrl-A/Ctrl-E, Ctrl-U/Ctrl-K, Ctrl-W, Alt-Backspace | start/end of line, delete to start/end, delete word | – |
+| Tab | accept the default | – |
+| Esc | clear the input | cancel (`clix.ErrCancelled`) |
+| Ctrl-C | cancel (`clix.ErrCancelled`), always | cancel, always |
+
+Text is edited by user-perceived character: `José 日本`, combining accents and emoji sequences are never split, and the cursor is placed by display width (East Asian wide characters take two columns). Pasted text is inserted without acting on it (bracketed paste is on while a prompt is open); a single-line prompt keeps the first line of a multi-line paste. Esc is told apart from Alt+key and from escape sequences by a 50 ms pause (as in Neovim); a paste stays a paste even when it stalls. A prompt opened inside another prompt (for example from `Validate`) shares its raw mode, and SIGINT or SIGTERM always puts the terminal back as it was before the outermost prompt. Keys a prompt does not use, such as unbound function keys, are ignored. Option lists taller than the terminal scroll in a window and redraw when the terminal is resized. Outside UTF-8 locales (decided by `LC_ALL`, `LC_CTYPE` and `LANG`), symbols fall back to ASCII. There is no type-to-filter in select prompts.
+
+Line mode answers:
+
+- **Text**: the line, trimmed of surrounding spaces (secrets are not trimmed). An empty line gives the default.
+- **Secret**: read with echo off when the input is a terminal; SIGINT or SIGTERM turns echo back on and returns `clix.ErrCancelled`. `clix.ReadSecretLine` does the same for custom prompters.
+- **Confirm**: `y`, `yes`, `n` or `no` in any case; an empty line gives the default. Anything else is reported and asked again.
+- **Select**: an option's value or label (exact, ignoring case), then its number when the whole answer is a number, then a prefix of exactly one label or value. `3rd-party` is not option 3. An answer that matches nothing, or more than one option, is reported and asked again. An empty line gives the default (or the first option).
+- **Multi-select**: each line toggles options by number (`1,3` or `1 3`) or by exact value or label; `done`, `finish`, `q` or an empty line finishes.
+- When the input ends right after an invalid answer, the prompt returns that validation error (which also matches `io.EOF`) instead of a bare `io.EOF`.
+
+#### Themes, defaults and errors
+
+- A theme set with `WithTheme` or `PromptRequest.Theme` is merged field by field over `clix.DefaultPromptTheme` and the running App's `DefaultTheme` (`PromptTheme.Merge`), so setting only `LabelStyle` keeps the `"? "` prefix. Prompts made with the command's `*clix.Context` (or a context derived from it) use `App.DefaultTheme`.
+- Theme styles lose their ANSI escapes when color should not be used: `NO_COLOR` is set, the output is not a terminal, or `TERM=dumb`; `CLICOLOR_FORCE=1` forces color. Plain-text styling (padding, markers) is kept.
+- `Validate` runs on every answer, including the default, the chosen option of a select, the comma-joined values of a multi-select, and the `"y"`/`"n"` of a confirm. A rejected answer is shown with the theme's error marker and asked again.
+- A confirm `Default` of `n`, `no`, `false`, `f`, `0` or `off` (any case) makes Enter mean No; anything else, or no default, means Yes.
+- A select or multi-select with an empty option list returns `clix.ErrNoOptions`, and a `Default` that names no option returns `clix.ErrInvalidDefault`. A multi-select `Default` is a comma-separated list of values or labels (or, when none of the parts is one, of 1-based option numbers).
+- A prompt made from command code returns `clix.ErrPromptsDisabled` when `App.Interactive` is `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` is set. With `InteractiveAuto` it still answers from a pipe.
+- A secret is never shown: not while typing, not in the finished prompt, and not in validation messages, where the typed value is replaced with `[redacted]`. The value of a `Sensitive` flag is also redacted in errors about it, whether it came from a prompt, an environment variable or the config file.
+- On Windows, and for inputs that cannot be polled (descriptors above `FD_SETSIZE` on macOS, readers that are not files), keys are read in a goroutine. A byte it reads after a prompt ended (for example after Esc) goes to the next prompt or `clix.ReadLine` on the same input, in order; code that reads that input directly, not through clix, can miss it.
+
+#### Key bindings
+
+`WithKeyMap` and `WithCommandHandler` work in raw mode only. The bindable keys are Esc (`PromptCommandEscape`), Tab (`PromptCommandTab`), Enter (`PromptCommandEnter`) and F1–F12 (`PromptCommandFunction`), in every prompt type. For a key, the first binding in the key map for that command wins; a binding whose `Active` returns false still consumes the key; the `CommandHandler` runs only when no binding handled the key. An action with `Exit` returns `ExitErr`, or `clix.ErrCancelled` when `ExitErr` is nil, so an exit never bypasses `Validate`. Ctrl-C cannot be bound. In line mode, bindings and handlers are not used and every line is an answer, including `?` and `back` (a survey with `survey.WithUndoStack()` recognizes `back` itself).
 
 **Struct-based API (recommended):**
 ```go
@@ -534,7 +578,7 @@ if err != nil {
 fmt.Fprintln(ctx.App.Out, name, choice, confirmed)
 ```
 
-Both APIs can be mixed - functional options can be combined with `PromptRequest` structs, with later options overriding earlier values.
+Both APIs can be mixed. Options apply in order, so later options override earlier values; a `PromptRequest` overrides only the fields it sets (non-empty strings and slices, non-nil functions, `true` booleans) and merges its theme. A later `PromptRequest` therefore cannot turn `Confirm` or `MultiSelect` back off, but `prompt.Select` after `prompt.MultiSelect` makes a single select.
 
 ### Non-interactive use
 
@@ -557,7 +601,8 @@ Readers that are not file descriptors, such as `strings.Reader`, are not termina
 Other guarantees:
 
 - **Prompts go to `App.Err`**, never `App.Out`, so `myapp get --format json | jq` stays clean.
-- **Cancellation**: `TextPrompter` returns `ctx.Err()` as soon as the context is done, even while waiting on an idle pipe. With `clix/ext/prompt`, Ctrl-C or Escape returns `clix.ErrCancelled`, and SIGINT or SIGTERM during a raw-mode prompt restores the terminal and returns `clix.ErrCancelled` instead of exiting the process. The extension only replaces the default `TextPrompter`; a `Prompter` you set yourself is kept.
+- **Cancellation**: every prompt returns `ctx.Err()` as soon as the context is done, in raw and line mode, even while waiting on an idle pipe. In raw mode Ctrl-C returns `clix.ErrCancelled` (Esc does too in select prompts), and SIGINT or SIGTERM restores the terminal and returns `clix.ErrCancelled` instead of exiting the process. In line mode Ctrl-C is the terminal's interrupt signal; with `signal.NotifyContext` as below it cancels the context. The extension only replaces the default `TextPrompter`; a `Prompter` you set yourself is kept.
+- **Prompts from command code** follow the same rules: with `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` they fail with `clix.ErrPromptsDisabled` instead of reading stdin.
 - **Piped answers**: each prompt reads exactly one line, so `printf 'a\nb\n' | myapp mk` (with `InteractiveAlways`) answers two prompts in turn.
 - **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors and missing flags, 130 for cancellation, and 1 otherwise:
 
@@ -595,16 +640,22 @@ import (
         "github.com/SCKelemen/clix/v2/ext/format"
 )
 
-app.AddExtension(format.Extension{}) // registers --format / -f on the root command
+app.AddExtension(format.Extension{}) // registers --format / -f (-f unless your app uses it)
 
 cmd.Run = func(ctx *clix.Context) error {
         data := map[string]any{"name": "demo", "replicas": 3}
-        // format.OutputFormat returns "text" when the flag is unset or invalid.
+        // format.OutputFormat returns "text" when the flag is unset.
         return clix.FormatData(ctx.App.Out, data, format.OutputFormat(ctx.App))
 }
 ```
 
-`clix.FormatData(w, data, format)` writes indented JSON, YAML, or plain text: `key = value` lines (sorted by key) for `map[string]any` and `map[string]string`, one line per element for `[]any` and `[]string`, and `fmt`'s `%v` for anything else. Without the extension there is no `--format` flag, so call `clix.FormatData` with a fixed format such as `clix.FormatJSON`. The `version` and `config list` extension commands also read `--format` when the extension is registered.
+`clix.FormatData(w, data, format)` writes deterministic output in each format:
+
+- **JSON**: `encoding/json/v2` with `encoding/json`'s rules (field names, `omitempty`, `,string`, `MarshalJSON`, embedded fields), plus two-space indentation and a trailing newline, sorted map keys, `<`, `>` and `&` not escaped, durations as ISO 8601 (`"PT1M30S"`), times as RFC 3339 (fractional seconds only when non-zero), and `[]` and `{}` for nil slices and maps.
+- **YAML** (`go.yaml.in/yaml/v3`): `json.RawMessage` is decoded first; durations are ISO 8601 at the top level and in maps, slices, arrays and pointers, while struct fields keep YAML's own names and `1m30s`.
+- **Text**: sorted `key = value` lines with nested keys flattened as `a.b`, one line per element of a list, a blank line between objects in a list, structs through their JSON field names (fields tagged `json:"-"` never print), durations as `1m30s`, `fmt.Stringer` values through `String`, and nothing for nil. Flat maps and lists of scalars print exactly as before.
+
+Without the extension there is no `--format` flag, so call `clix.FormatData` with a fixed format such as `clix.FormatJSON`. The `version` and `config list` extension commands also read `--format` when the extension is registered.
 
 ### Styling
 
@@ -627,6 +678,8 @@ Key style hooks:
 - `CommandFlagName` / `CommandFlagUsage` – command-level flags defined on `cmd.Flags`
 - `FlagName` / `FlagUsage` – base styles applied when the more specific hooks are unset
 - `ChildName` / `ChildDesc` – section entries under **GROUPS** and **COMMANDS**
+
+Styles apply only where color belongs: help and prompts render them, then remove their ANSI escapes when `NO_COLOR` is set (https://no-color.org), the output is not a terminal, `CLICOLOR=0` or `TERM=dumb`; `CLICOLOR_FORCE=1` keeps them (https://bixense.com/clicolors). Help columns are aligned by visible width, so styled names line up.
 
 Styling is optional—applications without styling still work perfectly.
 
@@ -736,14 +789,14 @@ app := clix.NewApp("myapp")
 app.Root = clix.NewCommand("myapp")
 
 // Add extensions for optional features
-app.AddExtension(help.Extension{})         // Adds: myapp help [command]
-app.AddExtension(config.Extension{})       // Adds: myapp config, myapp config list, etc.
-app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [shell]
-app.AddExtension(format.Extension{})       // Adds: --format / -f (json|yaml|text)
-app.AddExtension(version.Extension{        // Adds: myapp version, --version / -v
-        Version: "1.0.0",
-        Commit:  "abc123",     // optional
-        Date:    "2024-01-01", // optional
+app.AddExtension(help.Extension{})         // Adds: myapp help [command...]
+app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset
+app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [bash|zsh|fish|powershell]
+app.AddExtension(format.Extension{})       // Adds: --format / -f (-f unless your app uses it): json|yaml|text, default text
+app.AddExtension(version.Extension{        // Adds: myapp version, --version / -v (-v unless your app uses it)
+        Version: "1.0.0",      // optional; defaults to App.Version, then the build info, then "dev"
+        Commit:  "abc123",     // optional; omitted when empty
+        Date:    "2024-01-01", // optional; omitted when empty
 })
 
 // Flag-based help works without extensions: myapp -h, myapp --help
@@ -771,7 +824,11 @@ Extensions never override your definitions. Everything registered while an exten
 
 Adds command-based help similar to man pages:
 - `cli help` - Show help for the root command
-- `cli help [command]` - Show help for a specific command
+- `cli help <command>...` - Show help for a command, by name or alias; `cli help widgets get`, `cli help "widgets get"` and `cli help --command "widgets get"` are the same, and shell completion offers command names at each level
+- Hidden commands are listed nowhere, but `cli help <hidden>` still shows their help
+- An unknown name fails with `unknown command "x" for "cli"; did you mean "y"?` (exit status 1)
+
+Help (from this command and from `-h`/`--help`) shows FLAGS, INHERITED FLAGS (from groups on the path) and GLOBAL FLAGS (from the root), leaving out any flag a closer command shadows, the way the parser resolves names; it shows aliases and variadic arguments as `<name>...`. It goes to `App.Out`. Styles apply only when the output is a terminal and `NO_COLOR` is not set (`CLICOLOR=0` and `TERM=dumb` also turn color off; `CLICOLOR_FORCE=1` turns it on); without color, styles' ANSI escapes are removed and columns stay aligned. An app `help` command replaces the extension's.
 
 **Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
 
@@ -779,11 +836,15 @@ Adds command-based help similar to man pages:
 
 Adds configuration management commands using dot-separated key paths (e.g. `project.default`):
 - `cli config` - Show help for config commands (group)
-- `cli config list` - List persisted configuration as YAML (or JSON with `--format=json` when the format extension is registered)
-- `cli config get <key_path>` - Print the persisted value at `key_path`
-- `cli config set <key_path> <value>` - Persist a new value
-- `cli config unset <key_path>` - Remove the persisted value (no-op if missing)
-- `cli config reset` - Remove all persisted configuration from disk (flags/env/defaults still apply)
+- `cli config list` - List persisted configuration as sorted, nested YAML whose values read back as the same strings (or JSON with `--format json`, in any case, when the format extension is registered). A key that is also the prefix of other keys (`a` and `a.b`) is listed flat at that level, so nothing is dropped.
+- `cli config get <key_path>` - Print the persisted value at `key_path`; a missing key is an error (exit status 1)
+- `cli config set <key_path> <value>` - Persist a new value, checked against the schema
+- `cli config unset <key_path>` - Remove the persisted value; a missing key changes nothing and writes nothing
+- `cli config reset` - Remove the config file, even a malformed one (through a symbolic link it removes the target and keeps the link); flags, environment variables and defaults still apply
+
+The file is `App.ConfigPath`, or `$XDG_CONFIG_HOME/<app>/config.yaml`, written with mode 0600 in a 0700 directory, through symbolic links. `set` and `unset` rewrite the whole file as flat, sorted `dotted.key: "string"` lines: comments, nesting and anchors are dropped, lists become `a,b`, and keys with null values are removed. The key and value arguments are read only from the command line, never from environment variables or the config file.
+
+`set` checks the value against the schema and against every flag that reads the key, so `config set format xml` is refused instead of breaking later runs. The config commands, `help`, `version` and shell completion still run when the file or the environment holds a value a flag rejects: they print a warning and use the flag's default (see `clix.AllowConfigErrors`). On a file that is not valid YAML, `list`, `get`, `set` and `unset` fail with a hint to run `config reset`, which removes it. `reset` removes only a regular file (through a symbolic link it removes the target and keeps the link) and never a directory. Keys of `Sensitive` flags are asked for with echo off; `set` then prints `key set`, `list` shows `[redacted]`, and `get` needs `--reveal`.
 
 Optional schemas can enforce types when setting values:
 
@@ -798,19 +859,34 @@ With a schema, `config set project.retries 5` succeeds while `config set project
 
 #### Autocomplete Extension (`clix/ext/autocomplete`)
 
-Adds shell completion script generation:
-- `cli autocomplete [bash|zsh|fish]` - Generate completion script for the specified shell
-- If no shell is provided, shows help
+Adds `myapp autocomplete [bash|zsh|fish|powershell]`, which prints a completion script on stdout (and nothing else, so it can be redirected to a file); without a shell it shows help, including installation steps. To load it:
+
+- **bash:** `eval "$(myapp autocomplete bash)"` in `~/.bashrc`. This works in bash 3.2 and 5; `source <(...)` does nothing in bash 3.2, the macOS `/bin/bash`.
+- **zsh:** `source <(myapp autocomplete zsh)` after `compinit`, or save the output as `_myapp` in a directory on `$fpath`.
+- **fish:** `myapp autocomplete fish | source`.
+- **PowerShell:** save the output to a file and dot-source it from `$PROFILE`.
+
+The scripts are thin wrappers that ask the program itself through a hidden `__complete` command, so completion always matches the installed version and no command name or description ever becomes shell code. Completion follows the parser:
+
+- commands and aliases where they are valid, never hidden or shadowed ones;
+- the flags in scope (the command's, its ancestors' and the root's; long and short), leaving out flags already given, except repeatable ones;
+- values for flags and positional arguments registered with `cmd.Flags.SetCompletion(name, fn)`, for example `clix.CompleteValues("eu", "us")` or `clix.CompleteOptions(options...)` (the same `SelectOption` list a select prompt uses); `true`/`false` for `--switch=`;
+- `--flag=value` forms (including file names after `--file=`), nothing but arguments after `--`, and file names when nothing else is known, quoted so that names containing `$(...)` or backquotes are inserted literally, also inside `"` and `'`.
+
+bash 3.2 (macOS) and later work with or without bash-completion; zsh shows descriptions. A broken config file, or a config or environment value a flag rejects, never breaks completion or `autocomplete <shell>`. In bash 3.2 a directory with exactly one entry completes straight to that entry, and an empty directory still gets a trailing space.
 
 #### Version Extension (`clix/ext/version`)
 
 Adds version information:
-- `cli version` - Show version information, including Go version and build info (honors `--format=json|yaml|text` when the format extension is registered)
-- Global `--version`/`-v` flag - Show simple version string (e.g., `cli --version` shows "cli version 1.0.0")
+- `cli version` - Show the name, version, commit, date, and Go version, OS and architecture, in text, JSON or YAML (`--format` when the format extension is registered); empty fields are left out
+- Global `--version`/`-v` flag (`-v` unless your app uses it) - Print `cli version 1.0.0` and exit with status 0
+- `cli version --help` - Show the command's help
+- When `Version` is empty, the version comes from `App.Version`, else from the build info (`go install ...@v1.2.3`), with the VCS revision and time and `modified = true` for a dirty build; otherwise it is `dev`. `version` and `--version` always agree.
+- An app `version` command replaces the extension's.
 
 ```go
 app.AddExtension(version.Extension{
-        Version: "1.0.0",
+        Version: "1.0.0",      // optional; see above
         Commit:  "abc123",     // optional
         Date:    "2024-01-01", // optional
 })
@@ -818,7 +894,7 @@ app.AddExtension(version.Extension{
 
 #### Format Extension (`clix/ext/format`)
 
-Adds a global `--format`/`-f` flag (`json`, `yaml`, or `text`, defaulting to `text`). Read the selected value with `format.OutputFormat(app)` and pass it to `clix.FormatData`; see [Structured Output](#structured-output).
+Adds a global `--format` / `-f` flag (`-f` unless your app uses it) that takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. An app flag named `--format` replaces the extension's. Shell completion offers `json`, `yaml` and `text`. Read the selected value with `format.OutputFormat(app)` and pass it to `clix.FormatData`; see [Structured Output](#structured-output).
 
 #### Prompt, Survey, and Validation Extensions
 
@@ -974,13 +1050,16 @@ type PromptRequest struct {
         // MultiSelect enables multi-selection mode
         MultiSelect bool
 
-        // Confirm is for yes/no confirmation prompts
+        // Confirm is for yes/no confirmation prompts ("y" or "n")
         Confirm bool
+
+        // Secret reads a password or token: never echoed, not trimmed
+        Secret bool
 
         // ContinueText for multi-select prompts
         ContinueText string
 
-        // CommandHandler and KeyMap handle special keys (Esc, Tab, F1-F12)
+        // CommandHandler and KeyMap handle Esc, Tab, Enter and F1-F12 (raw mode)
         CommandHandler PromptCommandHandler
         KeyMap         PromptKeyMap
 }
@@ -990,21 +1069,22 @@ type PromptRequest struct {
 
 For convenience, `clix` also provides functional options that can be used instead of or alongside `PromptRequest`:
 
-**Core options (available in `clix` package):**
-- `WithLabel(label string)` - Set the prompt label
-- `WithDefault(def string)` - Set the default value
-- `WithValidate(validate func(string) error)` - Set validation function
-- `WithTheme(theme PromptTheme)` - Set the prompt theme
-- `WithConfirm()` - Enable yes/no confirmation prompt
-- `WithCommandHandler(handler PromptCommandHandler)` - Register handler for special key commands
-- `WithKeyMap(keyMap PromptKeyMap)` - Configure keyboard shortcuts and bindings
-- `WithNoDefaultPlaceholder(text string)` - Set placeholder text when no default exists
+**Core options (available in `clix` package).** "Line" means `TextPrompter` and the prompt extension's line mode; "raw" means the prompt extension on a terminal.
+- `WithLabel(label string)` - The prompt text, rendered as `"? Label: "` (theme prefix, label, then `": "`).
+- `WithDefault(def string)` - The answer for an empty reply, returned exactly as given. Line mode shows it as `" [default]"` (never for secrets); raw mode shows it as ghost text after the cursor and Tab accepts it.
+- `WithValidate(validate func(string) error)` - Called with every answer, including the default; an error is shown and the prompt asks again. Applies to text, secret, confirm, select and multi-select prompts. In line mode, input that ends right after a rejected answer returns that error.
+- `WithTheme(theme PromptTheme)` - Merged field by field over the defaults and `App.DefaultTheme`. Styles render in both modes; their ANSI escapes are removed with `NO_COLOR`, on non-terminals and with `TERM=dumb`.
+- `WithConfirm()` - A yes/no prompt returning `"y"` or `"n"`; see the Default rule above. Raw and line mode.
+- `WithSecret()` - Never echoed or shown, returned as typed (not trimmed); on a terminal, echo is off even in line mode. Raw and line mode.
+- `WithCommandHandler(handler PromptCommandHandler)` - Handles Esc, Tab, Enter and F1-F12 that no binding handled. Raw mode only; not called in line mode.
+- `WithKeyMap(keyMap PromptKeyMap)` - Bindings for those keys, shown as a hint line. Raw mode only; ignored in line mode.
+- `WithNoDefaultPlaceholder(text string)` - Shown only while there is no default: `" [text]"` in line mode, ghost text in raw mode. Never returned as an answer.
 
-**Advanced options (require `clix/ext/prompt` extension):**
-- `prompt.Select(options []SelectOption)` - Create a select prompt
-- `prompt.MultiSelect(options []SelectOption)` - Create a multi-select prompt
-- `prompt.WithContinueText(text string)` - Set continue button text for multi-select
-- `prompt.Confirm()` - Alias for `WithConfirm()` (for convenience)
+**Advanced options (require `clix/ext/prompt` extension; `TextPrompter` returns an error for selects):**
+- `prompt.Select(options []SelectOption)` - A single select, even after `MultiSelect`. Raw: arrows, j/k, Page Up/Down, Home/End, wrap-around and 1-9 shortcuts; long lists scroll. Line: matching as described above. An empty list is `clix.ErrNoOptions`; a `Default` that is not an option is `clix.ErrInvalidDefault`.
+- `prompt.MultiSelect(options []SelectOption)` - Returns the selected values joined with commas, in option order. Raw: Space or Enter toggles, the Continue button finishes. Line: numbers or values toggle, `done` or an empty line finishes. Finishing with nothing selected is refused unless `Validate` accepts `""`.
+- `prompt.WithContinueText(text string)` - The Continue button's text (default "Continue"). Raw mode only: line mode has no button and finishes with `done` or an empty line.
+- `prompt.Confirm()` - Same as `WithConfirm()`.
 
 Both APIs can be mixed. For example:
 ```go

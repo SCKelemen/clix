@@ -79,8 +79,12 @@ func TestShadowedExtensionFlagIsIgnored(t *testing.T) {
 		t.Fatalf("deploy with a config file: %v, root token %q, extension's %q", err, token, extToken)
 	}
 	out.Reset()
-	if err := app.Run(bg, []string{"deploy", "--help"}); err != nil || strings.Contains(out.String(), "--token") {
-		t.Fatalf("deploy --help = %v, lists the ignored --token:\n%s", err, out)
+	// Help lists the app's --token, the one in use, under GLOBAL FLAGS, and
+	// not the ignored one among deploy's own flags.
+	err := app.Run(bg, []string{"deploy", "--help"})
+	own, global, _ := strings.Cut(out.String(), "GLOBAL FLAGS")
+	if err != nil || strings.Contains(own, "--token") || strings.Contains(out.String(), "(required)") || !strings.Contains(global, "--token") {
+		t.Fatalf("deploy --help = %v, want the app's --token under GLOBAL FLAGS only:\n%s", err, out)
 	}
 	assertValidate(t, app,
 		`lx deploy: clix: extension #1 (clix_test.extensionFunc): flag --token is also defined by the app on "lx"; the app's --token is used here too, and this one is ignored`,
@@ -253,13 +257,15 @@ func TestCaseSensitiveCommandsAreVisible(t *testing.T) {
 	if !strings.Contains(out.String(), "App status") || !strings.Contains(out.String(), "Extension status") {
 		t.Fatalf("help:\n%s", out)
 	}
-	var script bytes.Buffer
-	app.Out = &script
-	if err := app.Run(bg, []string{"autocomplete", "--shell", "bash"}); err != nil {
+	// The completion script asks the program (its hidden __complete
+	// command), so check the candidates it gets.
+	var candidates bytes.Buffer
+	app.Out = &candidates
+	if err := app.Run(bg, []string{"__complete", "--cur=", "--", "o"}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(script.String(), "Status") || !strings.Contains(script.String(), " status") {
-		t.Fatalf("completion:\n%s", script.String())
+	if !hasCandidate(candidates.String(), "Status") || !hasCandidate(candidates.String(), "status") {
+		t.Fatalf("completion:\n%s", candidates.String())
 	}
 	assertValidate(t, app)
 }
@@ -284,4 +290,15 @@ func TestReplacedRootKeepsExtensionCommands(t *testing.T) {
 		t.Fatalf("deploy: %v", err)
 	}
 	assertValidate(t, app)
+}
+
+// hasCandidate reports whether the output of the autocomplete extension's
+// __complete command offers name.
+func hasCandidate(out, name string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if line == name || strings.HasPrefix(line, name+"\t") {
+			return true
+		}
+	}
+	return false
 }

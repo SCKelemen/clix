@@ -90,12 +90,10 @@ func TestPromptMultiSelect(t *testing.T) {
 		},
 			MultiSelect: true,
 		})
-		if err != nil {
-			t.Fatalf("Prompt returned error: %v", err)
-		}
-		// Option 1 should be toggled off, so value should be empty
-		if value != "" {
-			t.Fatalf("expected empty value after toggle, got %q", value)
+		// Option 1 is toggled off again, so "done" finds nothing selected:
+		// that is refused, and the input then ends.
+		if err == nil || value != "" || !strings.Contains(out.String(), "Please select at least one option") {
+			t.Fatalf("value %q, err %v, output %q", value, err, out.String())
 		}
 	})
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"github.com/SCKelemen/clix/v2"
+	"io"
 	"strings"
 	"testing"
 )
@@ -21,11 +22,9 @@ func TestPromptEdgeCases(t *testing.T) {
 			Theme:   clix.DefaultPromptTheme,
 			Options: []clix.SelectOption{}, // Empty list
 		})
-		if err != nil {
-			t.Fatalf("Prompt should handle empty options, got error: %v", err)
-		}
-		if value != "" {
-			t.Fatalf("expected empty value for empty options, got %q", value)
+		// An empty option list is an error, not a free-text prompt.
+		if !errors.Is(err, clix.ErrNoOptions) || value != "" {
+			t.Fatalf("empty options: value %q, err %v; want ErrNoOptions", value, err)
 		}
 	})
 
@@ -40,15 +39,12 @@ func TestPromptEdgeCases(t *testing.T) {
 			Options:     []clix.SelectOption{}, // Empty list
 			MultiSelect: true,
 		})
-		if err != nil {
-			t.Fatalf("Prompt should handle empty options, got error: %v", err)
+		if !errors.Is(err, clix.ErrNoOptions) || value != "" {
+			t.Fatalf("empty options: value %q, err %v; want ErrNoOptions", value, err)
 		}
-		// Line-based mode with empty options will treat "done" as input
-		// This is expected behavior - empty options list is edge case
-		_ = value // Accept any value for empty options edge case
 	})
 
-	t.Run("select prompt with invalid number input returns as-is", func(t *testing.T) {
+	t.Run("select prompt with an out-of-range number is rejected", func(t *testing.T) {
 		in := bytes.NewBufferString("999\n")
 		out := &bytes.Buffer{}
 
@@ -61,16 +57,14 @@ func TestPromptEdgeCases(t *testing.T) {
 				{Label: "Option B", Value: "b"},
 			},
 		})
-		if err != nil {
-			t.Fatalf("Prompt returned error: %v", err)
-		}
-		// Invalid number (999 > len(options)) doesn't match, so returns as-is without validator
-		if value != "999" {
-			t.Fatalf("expected invalid number to be returned as-is, got %q", value)
+		// 999 is not an option: it is reported, and since the input then
+		// ends, the prompt returns that error (which also matches io.EOF).
+		if err == nil || !errors.Is(err, io.EOF) || value != "" || !strings.Contains(out.String(), "no option 999") {
+			t.Fatalf("value %q, err %v, output %q", value, err, out.String())
 		}
 	})
 
-	t.Run("select prompt with non-matching text input returns as-is without validator", func(t *testing.T) {
+	t.Run("select prompt rejects input that matches no option", func(t *testing.T) {
 		in := bytes.NewBufferString("nonexistent\n")
 		out := &bytes.Buffer{}
 
@@ -83,12 +77,8 @@ func TestPromptEdgeCases(t *testing.T) {
 				{Label: "Option B", Value: "b"},
 			},
 		})
-		if err != nil {
-			t.Fatalf("Prompt returned error: %v", err)
-		}
-		// Line-based mode returns non-matching input as-is if no validator
-		if value != "nonexistent" {
-			t.Fatalf("expected non-matching input to be returned as-is, got %q", value)
+		if err == nil || value != "" || !strings.Contains(out.String(), "matches no option") {
+			t.Fatalf("value %q, err %v, output %q", value, err, out.String())
 		}
 	})
 
