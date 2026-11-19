@@ -224,3 +224,22 @@ func TestConfigE2E_SequentialRuns(t *testing.T) {
 		}
 	}
 }
+
+// The key and value arguments come only from the command line: an
+// environment variable such as PROBE_KEY (often an API key) must neither
+// become the key nor appear in an error.
+func TestConfigE2E_ArgumentsIgnoreEnvironment(t *testing.T) {
+	app, out, _ := e2eApp(t, "")
+	run(t, app, out, "config", "set", "a", "1")
+	t.Setenv("PROBE_KEY", "s3cret")
+	t.Setenv("PROBE_VALUE", "s3cret")
+	for _, args := range [][]string{{"config", "get"}, {"config", "set", "b"}, {"config", "unset"}} {
+		got, err := tryRun(app, out, args...)
+		if err == nil || strings.Contains(err.Error(), "s3cret") || strings.Contains(got, "s3cret") || clix.ExitCode(err) != 2 {
+			t.Errorf("%q with PROBE_KEY and PROBE_VALUE set: out %q, err %v", args, got, err)
+		}
+	}
+	if got := run(t, app, out, "config", "get", "a"); got != "1\n" {
+		t.Errorf("config get a printed %q", got)
+	}
+}

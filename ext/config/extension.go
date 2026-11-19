@@ -133,6 +133,9 @@ func configGetCommand(app *clix.App) *clix.Command {
 			Required:   true,
 			Prompt:     "Configuration key (dot-separated)",
 			Positional: true,
+			// Only the command line: MYAPP_KEY or MYAPP_VALUE (often a
+			// secret) must not become the argument.
+			CommandLineOnly: true,
 		},
 		Value: &key,
 	})
@@ -163,6 +166,9 @@ func configSetCommand(app *clix.App) *clix.Command {
 			Required:   true,
 			Prompt:     "Configuration key (dot-separated)",
 			Positional: true,
+			// Only the command line: MYAPP_KEY or MYAPP_VALUE (often a
+			// secret) must not become the argument.
+			CommandLineOnly: true,
 		},
 		Value: &key,
 	})
@@ -173,6 +179,9 @@ func configSetCommand(app *clix.App) *clix.Command {
 			Required:   true,
 			Prompt:     "Value",
 			Positional: true,
+			// Only the command line: MYAPP_KEY or MYAPP_VALUE (often a
+			// secret) must not become the argument.
+			CommandLineOnly: true,
 		},
 		Value: &value,
 	})
@@ -216,6 +225,9 @@ func configUnsetCommand(app *clix.App) *clix.Command {
 			Required:   true,
 			Prompt:     "Configuration key (dot-separated)",
 			Positional: true,
+			// Only the command line: MYAPP_KEY or MYAPP_VALUE (often a
+			// secret) must not become the argument.
+			CommandLineOnly: true,
 		},
 		Value: &key,
 	})

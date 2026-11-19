@@ -95,6 +95,9 @@ func NewHelpCommand(app *clix.App) *clix.Command {
 		Usage: "Command to show help for, such as: group command",
 		Value: &command,
 	})
+	// Only the command line names the command: MYAPP_COMMAND or a
+	// "command" config key must not.
+	cmd.Flags.Lookup("command").CommandLineOnly = true
 	cmd.Flags.SetCompletion("command", completeCommandPath(app))
 
 	cmd.Run = func(ctx *clix.Context) error {

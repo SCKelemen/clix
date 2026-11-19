@@ -232,3 +232,12 @@ func TestHelpE2E_SequentialRuns(t *testing.T) {
 		t.Errorf("help after help widgets get:\n%s", got)
 	}
 }
+
+// The command argument comes only from the command line.
+func TestHelpE2E_IgnoresEnvironment(t *testing.T) {
+	app, out, _ := e2eHelpApp(t)
+	t.Setenv("PROBE_COMMAND", "widgets")
+	if got := helpRun(t, app, out, "help"); !strings.HasPrefix(got, "PROBE\n") {
+		t.Errorf("help with PROBE_COMMAND=widgets:\n%s", got)
+	}
+}
