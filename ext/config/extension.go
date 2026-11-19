@@ -213,8 +213,12 @@ func configUnsetCommand(app *clix.App) *clix.Command {
 			return err
 		}
 		removed := app.Config.Delete(keyPath)
-		if err := app.SaveConfig(); err != nil {
-			return err
+		if removed {
+			// Write only when something changed, so unsetting a missing
+			// key never creates or rewrites the file.
+			if err := app.SaveConfig(); err != nil {
+				return err
+			}
 		}
 		if removed {
 			fmt.Fprintf(app.Out, "%s removed\n", keyPath)
