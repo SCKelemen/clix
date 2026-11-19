@@ -211,6 +211,23 @@ func shownShort(cmd *Command, flag *Flag) string {
 	return flag.Short
 }
 
+// markShadowed records which flags on path this Run ignores: flags that
+// an extension added to a command it does not own, where a better owner
+// defines a flag of the same name further out on the path (see
+// lookupArg). The parser never sets them, so they are neither filled from
+// the environment or the config file nor required.
+func markShadowed(path []*Command) {
+	for i, c := range path {
+		if c.Flags == nil {
+			continue
+		}
+		chain := flagChain(path[:i+1])
+		for _, f := range c.Flags.flags {
+			f.shadowed = lookupArg("--"+f.Name, chain...) != f
+		}
+	}
+}
+
 // shadowedOn reports whether flag, one of cmd's flags, is ignored on cmd's
 // path because a better owner's flag of the same name further out is used
 // (see markShadowed).

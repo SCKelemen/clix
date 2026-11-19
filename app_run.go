@@ -426,23 +426,6 @@ func (a *App) namesMatch(word, name string) bool {
 	return equalFoldASCII(word, name)
 }
 
-// markShadowed records which flags on path this Run ignores: flags that
-// an extension added to a command it does not own, where a better owner
-// defines a flag of the same name further out on the path (see
-// lookupArg). The parser never sets them, so they are neither filled from
-// the environment or the config file nor required.
-func markShadowed(path []*Command) {
-	for i, c := range path {
-		if c.Flags == nil {
-			continue
-		}
-		chain := flagChain(path[:i+1])
-		for _, f := range c.Flags.flags {
-			f.shadowed = lookupArg("--"+f.Name, chain...) != f
-		}
-	}
-}
-
 // missingRequired returns the required flags without a value on path
 // (root first), outermost command first, leaving out the flags the Run
 // ignores (see markShadowed). A command added by an extension
@@ -563,10 +546,10 @@ func (a *App) ensureConfigLoaded(ctx context.Context) error {
 }
 
 // applyConfigToFlags fills in every flag the command line did not set,
-// except those the Run ignores (see markShadowed), trying environment
-// variables, then the config file, then the flag's default. It must run after parsing so command-line values keep the highest
+// trying environment variables, then the config file, then the flag's
+// default. It must run after parsing so command-line values keep the highest
 // precedence. A value that the flag rejects is reported as an error naming
-// its source.
+// its source. Flags the Run ignores (see markShadowed) are left alone.
 func (a *App) applyConfigToFlags(flags *FlagSet) error {
 	if flags == nil {
 		return nil
