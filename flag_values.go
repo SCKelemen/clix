@@ -238,10 +238,24 @@ func (fs *FlagSet) Int64(name string) (int64, bool) {
 
 // AnyCLISet reports whether any flag was explicitly set via CLI arguments.
 // This distinguishes "user passed flags on the command line" from
-// "flags were resolved from env/config/defaults only".
+// "flags were resolved from env/config/defaults only". It includes Ambient
+// flags, which Run leaves out when it decides whether to prompt for
+// missing required flags (see FlagOptions.Ambient).
 func (fs *FlagSet) AnyCLISet() bool {
 	for _, flag := range fs.flags {
 		if flag.cliSet {
+			return true
+		}
+	}
+	return false
+}
+
+// anyInputSet reports whether a flag that is not Ambient was set on the
+// command line, by name or by position: whether, for Run, flags were
+// passed (see FlagOptions.Required).
+func (fs *FlagSet) anyInputSet() bool {
+	for _, flag := range fs.flags {
+		if flag.cliSet && !flag.Ambient {
 			return true
 		}
 	}

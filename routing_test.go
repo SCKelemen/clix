@@ -13,6 +13,7 @@ import (
 // routingApp builds the command tree the routing matrix runs against:
 //
 //	moln [--project/-p] [--verbose/-v] [--env]           group, no Run
+//	     [--output/-o] (Ambient)
 //	├── deploy (alias ship) [--force/-f] [--region/-r] [--tag/-t ...]
 //	│                       [--count/-n] [--name] [target]
 //	├── project (alias proj) --org (required)           group
@@ -46,6 +47,7 @@ func newRoutingApp(t *testing.T) *routingApp {
 	str(app.Flags(), clix.FlagOptions{Name: "project", Short: "p"})
 	boolean(app.Flags(), clix.FlagOptions{Name: "verbose", Short: "v"})
 	str(app.Flags(), clix.FlagOptions{Name: "env"})
+	str(app.Flags(), clix.FlagOptions{Name: "output", Short: "o", Ambient: true})
 
 	deploy := clix.NewCommand("deploy", clix.WithCommandAliases("ship"), clix.WithCommandRun(run))
 	boolean(deploy.Flags, clix.FlagOptions{Name: "force", Short: "f"})
@@ -207,6 +209,7 @@ func TestRoutingMatrix(t *testing.T) {
 		{name: "cluster with =", args: []string{"deploy", "-fr=us"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
 		{name: "cluster with an unknown letter", args: []string{"deploy", "-fz"}, err: "unknown flag: -z (in -fz)", kind: "usage"},
 		{name: "cluster with an unknown first letter", args: []string{"deploy", "-zf"}, err: "unknown flag: -zf", kind: "usage"},
+		{name: "Ambient flag in a cluster", args: []string{"deploy", "-fojson"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "moln --output": "json" + appFlag}},
 
 		// Unknown flags and excess positionals.
 		{name: "unknown flag on a command", args: []string{"deploy", "--bogus"}, err: "unknown flag: --bogus", kind: "usage"},
@@ -232,6 +235,8 @@ func TestRoutingMatrix(t *testing.T) {
 		// Required flags and extension commands.
 		{name: "required flag missing", args: []string{"mk"}, err: "missing required flags: --name", kind: "missing"},
 		{name: "required flag given", args: []string{"mk", "--name", "n"}, ran: "moln mk", set: map[string]string{"moln mk --name": "n" + cmdFlag}},
+		{name: "required flag missing, Ambient flag given", args: []string{"-o", "json", "mk"}, err: "missing required flags: --name", kind: "missing"},
+		{name: "required flag given with an Ambient flag", args: []string{"mk", "--name", "n", "--output=json"}, ran: "moln mk", set: map[string]string{"moln mk --name": "n" + cmdFlag, "moln --output": "json" + appFlag}},
 		{name: "group's required flag missing", args: []string{"project", "ls"}, err: "missing required flags: --org", kind: "missing"},
 		{name: "extension command skips ancestors' required", args: []string{"project", "doctor"}, ran: "moln project doctor"},
 		{name: "extension command at the root", args: []string{"version"}, ran: "moln version"},
@@ -292,6 +297,42 @@ func TestRoutingMatrix(t *testing.T) {
 			sort.Strings(problems)
 			for _, p := range problems {
 				t.Error(p)
+			}
+		})
+	}
+}
+
+// Run prompts for missing required flags only when no flag was passed on
+// the command line, and Ambient flags (--output here) do not count. The
+// matrix above runs without prompts, so these cases answer them.
+func TestRoutingAmbientFlagsKeepPrompting(t *testing.T) {
+	cases := []struct {
+		name   string
+		args   []string
+		prompt bool // Run prompted for --name; otherwise it returned a *MissingFlagsError
+	}{
+		{name: "no flags", args: []string{"mk"}, prompt: true},
+		{name: "Ambient flag before the command", args: []string{"-o", "json", "mk"}, prompt: true},
+		{name: "Ambient flag after the command, =", args: []string{"mk", "--output=json"}, prompt: true},
+		{name: "Ambient flag attached", args: []string{"mk", "-ojson"}, prompt: true},
+		{name: "Ambient and input switches in a cluster", args: []string{"mk", "-vo", "json"}},
+		{name: "input flag next to an Ambient flag", args: []string{"--env", "e", "mk", "-o", "json"}},
+		{name: "Ambient flag on a group's subcommand", args: []string{"project", "ls", "-o", "json"}, prompt: true},
+		{name: "input switch on a group's subcommand", args: []string{"project", "ls", "-o", "json", "-a"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := newRoutingApp(t)
+			t.Setenv("MOLN_DISABLE_PROMPTS", "")
+			p := &askPrompter{answers: map[string]string{"Name": "n", "Org": "o"}}
+			r.app.Interactive, r.app.Prompter = clix.InteractiveAlways, p
+			err := r.app.Run(bg, c.args)
+			var missing *clix.MissingFlagsError
+			switch {
+			case c.prompt && (err != nil || len(p.asked) != 1 || r.ran == ""):
+				t.Errorf("err = %v, asked for %q, ran %q; want one prompt and a run", err, p.asked, r.ran)
+			case !c.prompt && (!errors.As(err, &missing) || len(p.asked) != 0):
+				t.Errorf("err = %v, asked for %q; want a *MissingFlagsError and no prompt", err, p.asked)
 			}
 		})
 	}

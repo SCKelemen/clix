@@ -17,6 +17,11 @@ import (
 // environment variable or under the "format" config key, is a usage error
 // that lists the valid formats.
 //
+// The flag is Ambient (see clix.FlagOptions.Ambient): it chooses how the
+// result is printed, not what the command does, so "myapp --format json
+// widgets create" still prompts for the command's missing required flags
+// when the app is interactive.
+//
 // The app's own flags win over the extension's: when the app defines -f
 // (for example, for --force), the extension's flag is --format only, and
 // an app flag named --format replaces the extension's. App.Validate
@@ -45,6 +50,9 @@ func (Extension) Extend(app *clix.App) error {
 			Short:    "f",
 			Usage:    "Output format (json, yaml, text)",
 			Validate: validateFormat,
+			// An output setting, not an input: passing it does not stop
+			// Run from prompting for missing required flags.
+			Ambient: true,
 		},
 		Default: clix.FormatText,
 		Value:   &formatValue{},

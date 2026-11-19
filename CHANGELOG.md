@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `FlagOptions.Ambient` (also on `Flag`) and `WithFlagAmbient` mark a flag that sets the context a command runs in, such as `--target`, `--token`, `--timeout` or `--format`, rather than an input. An Ambient flag on the command line does not count as a passed flag when `Run` decides whether to prompt for missing required flags, so `moln --target X widgets create` prompts for the missing fields (when the app is interactive) instead of returning a `*MissingFlagsError`. Any other flag on the command line, by name or by position, still turns prompting off; environment variables and config values never counted. Parsing, environment and config lookup, `Required`, help and `FlagSet.AnyCLISet` are unchanged.
+
+### Changed
+
+- The format extension's `--format` is Ambient: `myapp --format json widgets create` prompts for missing required flags when the app is interactive, where 2.5.0 and 2.6.0 returned a `*MissingFlagsError`. An app's own `--format` flag, which replaces the extension's, is not changed.
+
 ## [2.6.0] - 2026-11-19
 
 ### Added

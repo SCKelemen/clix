@@ -14,9 +14,10 @@ var ErrCancelled = errors.New("cancelled")
 
 // MissingFlagsError reports required flags that were neither provided nor
 // prompted for. Run returns a *MissingFlagsError when a required flag is
-// missing and either other flags were passed on the command line, or the
-// app is not interactive (see App.IsInteractive), so prompting would block
-// or surprise a script.
+// missing and either other flags were passed on the command line (Ambient
+// flags do not count; see FlagOptions.Required), or the app is not
+// interactive (see App.IsInteractive), so prompting would block or
+// surprise a script.
 //
 // Use errors.As to inspect it:
 //

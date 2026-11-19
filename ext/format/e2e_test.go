@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -223,6 +224,61 @@ func TestFormatE2E_AppLongFlagWins(t *testing.T) {
 	app.Root.AddCommand(clix.NewCommand("get", clix.WithCommandRun(func(*clix.Context) error { return nil })))
 	if _, err := run(t, app, out, "get", "--format", "table"); err != nil || mine != "table" {
 		t.Errorf("--format table with the app's own --format: mine %q, err %v", mine, err)
+	}
+	// The app's flag keeps its own options: it is not made Ambient.
+	if app.Flags().Lookup("format").Ambient {
+		t.Error("the app's own --format became Ambient")
+	}
+}
+
+// --format is Ambient: it chooses how the result is printed, so passing it
+// does not stop Run from prompting for missing required flags. Any other
+// flag still does.
+func TestFormatE2E_FormatIsAmbient(t *testing.T) {
+	newApp := func(t *testing.T) (*clix.App, *bytes.Buffer, *string) {
+		t.Helper()
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("PROBE_FORMAT", "")
+		t.Setenv("PROBE_DISABLE_PROMPTS", "")
+		out := &bytes.Buffer{}
+		app := clix.NewApp("probe",
+			clix.WithAppOut(out),
+			clix.WithAppErr(&bytes.Buffer{}),
+			clix.WithAppIn(strings.NewReader("w1\n")),
+			clix.WithAppInteractive(clix.InteractiveAlways))
+		app.AddExtension(format.Extension{})
+		name := new(string)
+		mk := clix.NewCommand("mk", clix.WithCommandRun(func(ctx *clix.Context) error {
+			return clix.FormatData(ctx.App.Out, map[string]string{"name": *name}, format.OutputFormat(ctx.App))
+		}))
+		mk.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "name", Required: true}, Value: name})
+		mk.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "dry-run"}})
+		app.Root.AddCommand(mk)
+		return app, out, name
+	}
+
+	for _, args := range [][]string{
+		{"--format", "json", "mk"},
+		{"--format=json", "mk"},
+		{"mk", "--format", "json"},
+		{"-f", "json", "mk"},
+		{"mk", "-fjson"},
+	} {
+		app, out, name := newApp(t)
+		got, err := run(t, app, out, args...)
+		if err != nil || *name != "w1" || !strings.Contains(got, `"name": "w1"`) {
+			t.Errorf("%q: err %v, name %q, output %q; want the prompted name printed as JSON", args, err, *name, got)
+		}
+	}
+
+	app, out, name := newApp(t)
+	_, err := run(t, app, out, "--format", "json", "mk", "--dry-run")
+	var missing *clix.MissingFlagsError
+	if !errors.As(err, &missing) || len(missing.Flags) != 1 || missing.Flags[0] != "name" || *name != "" {
+		t.Errorf("--format json mk --dry-run: err %v, name %q; want a *MissingFlagsError for --name", err, *name)
+	}
+	if f := app.Flags().Lookup("format"); f == nil || !f.Ambient {
+		t.Errorf("--format = %+v, want Ambient", f)
 	}
 }
 
