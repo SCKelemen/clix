@@ -32,8 +32,8 @@ import (
 //	}
 type ConfigManager struct {
 	values  map[string]string
-	numbers map[string]string   // decimal form of YAML numbers written as 0x1F, 0755, 1e3, ...
-	lists   map[string][]string // the items of YAML lists of scalars, for slice flags
+	numbers map[string]string     // decimal form of YAML numbers written as 0x1F, 0755, 1e3, ...
+	lists   map[string][]string   // the items of YAML lists of scalars, for slice flags
 	nodes   map[string]*yaml.Node // the YAML node each loaded key came from, which Save writes back
 	schemas map[string]ConfigSchema
 }
