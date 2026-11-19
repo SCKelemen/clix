@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"unicode"
 
+	"github.com/SCKelemen/clix/v2/internal/inputq"
 	"golang.org/x/term"
 )
 
@@ -191,7 +192,7 @@ func (ts *TerminalState) readEvent(ctx context.Context, in *os.File, resized <-c
 	if err := ctx.Err(); err != nil {
 		return keyEvent{key: KeyUnknown}, err
 	}
-	st, release := acquireReader(in)
+	st, release := inputq.Acquire(in)
 	defer release()
 	r := newKeyReader(in, st)
 	r.ctx = ctx

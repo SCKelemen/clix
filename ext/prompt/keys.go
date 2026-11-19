@@ -5,12 +5,11 @@ import (
 	"errors"
 	"io"
 	"os"
-	"reflect"
-	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/internal/inputq"
 )
 
 // Timing used to split the input byte stream into keys.
@@ -46,49 +45,6 @@ type keyEvent struct {
 	isPaste bool
 }
 
-// byteResult is the outcome of one background read of a single byte.
-type byteResult struct {
-	b   byte
-	err error
-}
-
-// readerState is what is remembered about an input between key reads:
-// bytes read ahead but not used (for example the byte after a CR that was
-// not LF), and a read still in flight from a goroutine.
-type readerState struct {
-	pending  []byte
-	inflight chan byteResult
-}
-
-func (s *readerState) idle() bool { return len(s.pending) == 0 && s.inflight == nil }
-
-// readers maps each input (when its dynamic value is comparable) to its
-// state. Entries are removed once they hold nothing.
-var readers = struct {
-	sync.Mutex
-	m map[any]*readerState
-}{m: make(map[any]*readerState)}
-
-func acquireReader(in io.Reader) (*readerState, func()) {
-	if in == nil || !reflect.ValueOf(in).Comparable() {
-		return &readerState{}, func() {}
-	}
-	readers.Lock()
-	st := readers.m[in]
-	if st == nil {
-		st = &readerState{}
-		readers.m[in] = st
-	}
-	readers.Unlock()
-	return st, func() {
-		readers.Lock()
-		if st.idle() {
-			delete(readers.m, in)
-		}
-		readers.Unlock()
-	}
-}
-
 // keyReader decodes keys from an input stream.
 //
 // Escape sequences are parsed per ECMA-48 (control sequences, section
@@ -99,7 +55,7 @@ func acquireReader(in io.Reader) (*readerState, func()) {
 // Esc.
 type keyReader struct {
 	in io.Reader
-	st *readerState
+	st *inputq.State
 
 	// fd is the descriptor to poll when the input supports it (a file on
 	// Unix); otherwise reads happen in a goroutine.
@@ -115,7 +71,7 @@ type keyReader struct {
 	collectPaste bool
 }
 
-func newKeyReader(in io.Reader, st *readerState) *keyReader {
+func newKeyReader(in io.Reader, st *inputq.State) *keyReader {
 	r := &keyReader{in: in, st: st}
 	if f, ok := in.(*os.File); ok && f != nil {
 		r.fd, r.pollable = pollFd(f)
@@ -124,19 +80,17 @@ func newKeyReader(in io.Reader, st *readerState) *keyReader {
 }
 
 func (r *keyReader) unread(b ...byte) {
-	r.st.pending = append(append([]byte(nil), b...), r.st.pending...)
+	r.st.Unread(b...)
 }
 
 // fetch returns the next byte. A negative wait blocks until a byte arrives;
 // otherwise errNoInput is returned after wait. When interruptible is set,
 // the wait also ends on ctx, a signal, or a resize.
 func (r *keyReader) fetch(wait time.Duration, interruptible bool) (byte, error) {
-	if len(r.st.pending) > 0 {
-		b := r.st.pending[0]
-		r.st.pending = r.st.pending[1:]
+	if b, ok := r.st.Pop(); ok {
 		return b, nil
 	}
-	if r.pollable && r.st.inflight == nil {
+	if r.pollable && r.st.Inflight() == nil {
 		return r.fetchPolled(wait, interruptible)
 	}
 	return r.fetchAsync(wait, interruptible)
@@ -213,23 +167,24 @@ func (r *keyReader) fetchPolled(wait time.Duration, interruptible bool) (byte, e
 // polled. If the wait ends first, the read stays in flight and its byte is
 // delivered to the next read on the same input.
 func (r *keyReader) fetchAsync(wait time.Duration, interruptible bool) (byte, error) {
-	if r.st.inflight == nil {
-		ch := make(chan byteResult, 1)
-		r.st.inflight = ch
+	ch := r.st.Inflight()
+	if ch == nil {
+		ch = make(chan inputq.Result, 1)
+		r.st.SetInflight(ch)
 		go func(in io.Reader) {
 			var b [1]byte
 			for empty := 0; ; {
 				n, err := in.Read(b[:])
 				if n == 1 {
-					ch <- byteResult{b: b[0]}
+					ch <- inputq.Result{B: b[0]}
 					return
 				}
 				if err != nil {
-					ch <- byteResult{err: err}
+					ch <- inputq.Result{Err: err}
 					return
 				}
 				if empty++; empty >= maxEmptyReads {
-					ch <- byteResult{err: io.ErrNoProgress}
+					ch <- inputq.Result{Err: io.ErrNoProgress}
 					return
 				}
 			}
@@ -251,9 +206,9 @@ func (r *keyReader) fetchAsync(wait time.Duration, interruptible bool) (byte, er
 		interrupted, resized = r.interrupted, r.resized
 	}
 	select {
-	case res := <-r.st.inflight:
-		r.st.inflight = nil
-		return res.b, res.err
+	case res := <-ch:
+		r.st.SetInflight(nil)
+		return res.B, res.Err
 	case <-timeout:
 		return 0, errNoInput
 	case <-done:
@@ -267,12 +222,10 @@ func (r *keyReader) fetchAsync(wait time.Duration, interruptible bool) (byte, er
 
 // available returns the next byte only if it can be had without waiting.
 func (r *keyReader) available() (byte, bool) {
-	if len(r.st.pending) > 0 {
-		b := r.st.pending[0]
-		r.st.pending = r.st.pending[1:]
+	if b, ok := r.st.Pop(); ok {
 		return b, true
 	}
-	if !r.pollable || r.st.inflight != nil {
+	if !r.pollable || r.st.Inflight() != nil {
 		return 0, false
 	}
 	b, err := r.fetchPolled(0, false)
@@ -667,12 +620,15 @@ func functionKey(n int) Key {
 // does not recognize, and Alt with other keys, return KeyUnknown with a nil
 // error, never KeyEscape; callers should ignore KeyUnknown.
 //
-// When in is a file that can be polled (a terminal or pipe on Unix), ReadKey
-// reads no further than the key it returns. Other readers are read in a
-// goroutine; after a lone Esc that goroutine may still be waiting, and the
-// byte it gets goes to the next ReadKey on the same reader.
+// When in is a file that can be polled (a terminal or pipe on Linux, or on
+// macOS and the BSDs below FD_SETSIZE), ReadKey reads no further than the
+// key it returns. Other inputs (Windows consoles, other readers) are read
+// in a goroutine; after a lone Esc, or a prompt cancelled by its context,
+// that goroutine may still be waiting, and the byte it gets goes to the next
+// ReadKey, prompt or clix.ReadLine on the same reader, in order. Code that
+// reads such an input directly, not through clix, can miss that one byte.
 func ReadKey(in io.Reader) (key Key, err error) {
-	st, release := acquireReader(in)
+	st, release := inputq.Acquire(in)
 	defer release()
 	ev, err := newKeyReader(in, st).next()
 	return ev.key, err
