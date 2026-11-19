@@ -57,7 +57,7 @@ func TestPrepareStaticCommandTree(t *testing.T) {
 		}},
 	}
 
-	app.ensureRootPrepared()
+	app.prepareTree()
 
 	if app.Root.Flags == nil {
 		t.Fatalf("expected root flags to be initialised")

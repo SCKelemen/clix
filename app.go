@@ -94,7 +94,6 @@ type App struct {
 
 	configLoaded  bool
 	configLoadErr error
-	rootPrepared  bool
 
 	// Extensions for optional batteries-included features
 	extensions     []Extension

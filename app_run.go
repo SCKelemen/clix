@@ -19,12 +19,17 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return errors.New("clix: no root command configured")
 	}
 
-	a.ensureRootPrepared()
+	// Prepare the tree on every Run: commands appended to Children (or a
+	// new Root) since the last Run need a flag set, --help and parent links.
+	// Preparing is idempotent.
+	a.prepareTree()
 
-	// Apply extensions (extensions add optional commands)
+	// Apply extensions (extensions add optional commands), then prepare
+	// whatever they attached directly to Children.
 	if err := a.ApplyExtensions(); err != nil {
 		return err
 	}
+	a.prepareTree()
 
 	if args == nil {
 		args = os.Args[1:]
@@ -50,9 +55,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		// Show version info - same format as "version" command but simpler (no commit/date)
 		// The version extension sets app.Version, so if it's enabled, we show it
 		if a.Version != "" {
-			fmt.Fprintf(a.Out, "%s version %s\n", a.Name, a.Version)
+			fmt.Fprintf(a.stdout(), "%s version %s\n", a.Name, a.Version)
 		} else {
-			fmt.Fprintf(a.Out, "%s\n", a.Name)
+			fmt.Fprintf(a.stdout(), "%s\n", a.Name)
 		}
 		return nil
 	}
@@ -278,12 +283,43 @@ func helpRequested(cmd *Command) bool {
 	return false
 }
 
-func (a *App) ensureRootPrepared() {
-	if a.Root == nil || a.rootPrepared {
+// prepareTree links every command to its parent and gives each one a flag
+// set and a --help flag. It is idempotent, so Run calls it every time.
+func (a *App) prepareTree() {
+	if a.Root == nil {
 		return
 	}
 	a.Root.prepare(nil)
-	a.rootPrepared = true
+}
+
+// stdout returns Out, or os.Stdout when Out is nil (for example, in a
+// zero-value App).
+func (a *App) stdout() io.Writer {
+	if a.Out == nil {
+		return os.Stdout
+	}
+	return a.Out
+}
+
+// stderr returns Err, or os.Stderr when Err is nil.
+func (a *App) stderr() io.Writer {
+	if a.Err == nil {
+		return os.Stderr
+	}
+	return a.Err
+}
+
+// prompter returns Prompter, or a TextPrompter on In and Err when it is
+// nil.
+func (a *App) prompter() Prompter {
+	if a.Prompter != nil {
+		return a.Prompter
+	}
+	var in io.Reader = os.Stdin
+	if a.In != nil {
+		in = a.In
+	}
+	return TextPrompter{In: in, Out: a.stderr()}
 }
 
 func (a *App) ensureConfigLoaded(ctx context.Context) error {
@@ -478,7 +514,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 			}
 		}
 
-		value, err := a.Prompter.Prompt(ctx, PromptRequest{
+		value, err := a.prompter().Prompt(ctx, PromptRequest{
 			Label:    label,
 			Theme:    a.DefaultTheme,
 			Validate: promptValidator(flag),
@@ -535,7 +571,7 @@ func checkValue(v Value, raw string) error {
 
 func (a *App) printCommandHelp(cmd *Command) error {
 	helper := HelpRenderer{App: a, Command: cmd}
-	return helper.Render(a.Out)
+	return helper.Render(a.stdout())
 }
 
 // countUserChildren returns the count of child commands/groups that are not extension commands.
