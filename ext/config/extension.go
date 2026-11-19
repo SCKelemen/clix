@@ -95,13 +95,71 @@ func NewConfigCommand(app *clix.App) *clix.Command {
 	)
 	cmd.Usage = fmt.Sprintf("%s config [command]", app.Name)
 	cmd.IsExtensionCommand = true
+	// The config commands must keep working when a value in the config
+	// file or the environment is bad (format: xml), since they are how it
+	// gets fixed; see clix.AllowConfigErrors.
+	clix.AllowConfigErrors(cmd)
 	return cmd
+}
+
+// requireLoadable refuses to work on a config file that cannot be loaded
+// (for example, one that is not valid YAML): its values are unknown, and
+// saving would replace it. Only "config reset" runs then.
+func requireLoadable(app *clix.App) error {
+	if err := app.ConfigLoadError(); err != nil {
+		return fmt.Errorf("%w (run %q to remove the file)", err, app.Name+" config reset")
+	}
+	return nil
+}
+
+// flagsForKey returns the flags anywhere in app's command tree that read
+// key from the config file (see clix.App.FlagConfigKey).
+func flagsForKey(app *clix.App, key string) []*clix.Flag {
+	var flags []*clix.Flag
+	var walk func(cmd *clix.Command)
+	walk = func(cmd *clix.Command) {
+		if cmd == nil {
+			return
+		}
+		if cmd.Flags != nil {
+			for _, f := range cmd.Flags.Flags() {
+				if k, ok := app.FlagConfigKey(f); ok && k == key {
+					flags = append(flags, f)
+				}
+			}
+		}
+		for _, child := range cmd.Children {
+			walk(child)
+		}
+	}
+	walk(app.Root)
+	return flags
+}
+
+// checkValue returns value as it would be stored under key: normalized by a
+// registered schema, and accepted by every flag that reads key from the
+// config file, so the saved value can never make a later run fail.
+func checkValue(app *clix.App, key, value string) (string, error) {
+	normalized, err := app.Config.NormalizeValue(key, value)
+	if err != nil {
+		return "", err
+	}
+	for _, f := range flagsForKey(app, key) {
+		if err := f.CheckValue(normalized); err != nil {
+			return "", fmt.Errorf("invalid value %q for config key %q, which sets --%s: %w", normalized, key, f.Name, err)
+		}
+	}
+	return normalized, nil
 }
 
 func configListCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("list")
 	cmd.Short = "List persisted configuration values"
+	clix.AllowConfigErrors(cmd)
 	cmd.Run = func(ctx *clix.Context) error {
+		if err := requireLoadable(app); err != nil {
+			return err
+		}
 		values := app.Config.Values()
 
 		format := clix.FormatText
@@ -140,9 +198,13 @@ func configGetCommand(app *clix.App) *clix.Command {
 		Value: &key,
 	})
 
+	clix.AllowConfigErrors(cmd)
 	cmd.Run = func(ctx *clix.Context) error {
 		keyPath, err := validateKeyPath(key)
 		if err != nil {
+			return err
+		}
+		if err := requireLoadable(app); err != nil {
 			return err
 		}
 		if value, ok := app.Config.Get(keyPath); ok {
@@ -186,6 +248,7 @@ func configSetCommand(app *clix.App) *clix.Command {
 		Value: &value,
 	})
 
+	clix.AllowConfigErrors(cmd)
 	cmd.Run = func(ctx *clix.Context) error {
 		keyPath, err := validateKeyPath(key)
 		if err != nil {
@@ -195,12 +258,12 @@ func configSetCommand(app *clix.App) *clix.Command {
 			return errors.New("value cannot be empty")
 		}
 
-		if app.Config != nil {
-			normalized, err := app.Config.NormalizeValue(keyPath, value)
-			if err != nil {
-				return err
-			}
-			value = normalized
+		if err := requireLoadable(app); err != nil {
+			return err
+		}
+		value, err = checkValue(app, keyPath, value)
+		if err != nil {
+			return err
 		}
 
 		app.Config.Set(keyPath, value)
@@ -232,9 +295,13 @@ func configUnsetCommand(app *clix.App) *clix.Command {
 		Value: &key,
 	})
 
+	clix.AllowConfigErrors(cmd)
 	cmd.Run = func(ctx *clix.Context) error {
 		keyPath, err := validateKeyPath(key)
 		if err != nil {
+			return err
+		}
+		if err := requireLoadable(app); err != nil {
 			return err
 		}
 		removed := app.Config.Delete(keyPath)
