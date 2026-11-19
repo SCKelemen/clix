@@ -210,45 +210,81 @@ func (f *flattener) document(doc *yaml.Node) error {
 	return f.mapping("", n, false)
 }
 
-// mapping flattens the pairs of n under prefix. Merge keys ("<<") are
-// applied first, so the mapping's own keys override what they bring in.
+// mapping flattens the pairs of n under prefix.
 func (f *flattener) mapping(prefix string, n *yaml.Node, weak bool) error {
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		key, value := n.Content[i], resolveAlias(n.Content[i+1])
-		if key.ShortTag() != "!!merge" {
-			continue
-		}
-		sources := []*yaml.Node{value}
-		if value.Kind == yaml.SequenceNode {
-			sources = value.Content
-		}
-		for _, src := range sources {
-			src = resolveAlias(src)
-			if src.Kind != yaml.MappingNode {
-				return fmt.Errorf("line %d: a merge key (<<) needs a mapping", src.Line)
-			}
-			if err := f.mapping(prefix, src, true); err != nil {
-				return err
-			}
-		}
+	pairs, err := mappingPairs(n, 0)
+	if err != nil {
+		return err
 	}
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		key, value := resolveAlias(n.Content[i]), n.Content[i+1]
-		if key.ShortTag() == "!!merge" {
-			continue
-		}
-		if key.Kind != yaml.ScalarNode {
-			return fmt.Errorf("line %d: keys must be scalars", key.Line)
-		}
-		full := key.Value
+	for _, p := range pairs {
+		full := p.key
 		if prefix != "" {
-			full = prefix + "." + key.Value
+			full = prefix + "." + p.key
 		}
-		if err := f.value(full, value, weak); err != nil {
+		if err := f.value(full, p.value, weak || p.merged); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// yamlPair is one key of a mapping with its value. merged marks a pair
+// that came from a merge key (<<).
+type yamlPair struct {
+	key    string
+	value  *yaml.Node
+	merged bool
+}
+
+// mappingPairs returns the pairs of mapping n with merge keys applied, as
+// the YAML merge-key spec says (https://yaml.org/type/merge.html): a merged
+// mapping only adds keys that n does not have itself, and with a list of
+// mappings to merge, earlier ones win over later ones. The merge is
+// shallow: a key of n, even one set to null, replaces the merged value as
+// a whole, so "child: {<<: *base, y: {w: 3}}" does not keep base's y.z.
+func mappingPairs(n *yaml.Node, depth int) ([]yamlPair, error) {
+	if depth > 100 {
+		return nil, fmt.Errorf("line %d: merge keys nested too deeply", n.Line)
+	}
+	var pairs []yamlPair
+	var sources []*yaml.Node
+	own := make(map[string]bool)
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		key, value := resolveAlias(n.Content[i]), n.Content[i+1]
+		if key.ShortTag() == "!!merge" {
+			v := resolveAlias(value)
+			if v.Kind == yaml.SequenceNode {
+				for _, item := range v.Content {
+					sources = append(sources, resolveAlias(item))
+				}
+			} else {
+				sources = append(sources, v)
+			}
+			continue
+		}
+		if key.Kind != yaml.ScalarNode {
+			return nil, fmt.Errorf("line %d: keys must be scalars", key.Line)
+		}
+		pairs = append(pairs, yamlPair{key: key.Value, value: value})
+		own[key.Value] = true
+	}
+	for _, src := range sources {
+		if src.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("line %d: a merge key (<<) needs a mapping", src.Line)
+		}
+		merged, err := mappingPairs(src, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		for _, p := range merged {
+			if own[p.key] {
+				continue
+			}
+			own[p.key] = true
+			pairs = append(pairs, yamlPair{key: p.key, value: p.value, merged: true})
+		}
+	}
+	return pairs, nil
 }
 
 // value flattens one value under key.

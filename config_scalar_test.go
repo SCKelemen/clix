@@ -3,6 +3,7 @@ package clix_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -135,6 +136,30 @@ func TestConfigErrorsNameTheFile(t *testing.T) {
 		app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(noop)))
 		if err := app.Run(bg, []string{"ls"}); err == nil || !strings.Contains(err.Error(), path) {
 			t.Errorf("Run with %q = %v, want an error naming %s", body, err, path)
+		}
+	}
+}
+
+// Merge keys merged deeply: "child: {<<: *b, y: {w: 3}}" still got
+// child.y.z from the base, and an explicit "x: ~" did not override the
+// merged x.
+func TestConfigMergeKeysAreShallow(t *testing.T) {
+	cases := []struct {
+		body string
+		want map[string]string
+	}{
+		{"base: &b {x: 1, y: {z: 2}}\nchild:\n  <<: *b\n  y: {w: 3}\n", map[string]string{"base.x": "1", "base.y.z": "2", "child.x": "1", "child.y.w": "3"}},
+		{"base: &b {x: 1}\nchild:\n  <<: *b\n  x: ~\n", map[string]string{"base.x": "1"}},
+		{"a: &a {k: from-a, only-a: 1}\nb: &b {k: from-b, only-b: 2}\nc:\n  <<: [*a, *b]\n", map[string]string{"a.k": "from-a", "a.only-a": "1", "b.k": "from-b", "b.only-b": "2", "c.k": "from-a", "c.only-a": "1", "c.only-b": "2"}},
+		{"base: &b {x: 1}\nmid: &m {<<: *b, y: 2}\ntop: {<<: *m, z: 3}\n", map[string]string{"base.x": "1", "mid.x": "1", "mid.y": "2", "top.x": "1", "top.y": "2", "top.z": "3"}},
+	}
+	for _, c := range cases {
+		m, err := loadConfig(t, c.body)
+		if err != nil {
+			t.Fatalf("%q: %v", c.body, err)
+		}
+		if got := m.Values(); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%q:\n got %v\nwant %v", c.body, got, c.want)
 		}
 	}
 }
