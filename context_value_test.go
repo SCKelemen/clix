@@ -12,7 +12,7 @@ import (
 func TestGetterReportsParsedValueFromEverySource(t *testing.T) {
 	for _, src := range []string{"default", "cli", "env", "config"} {
 		t.Run(src, func(t *testing.T) {
-			app, _ := newTestApp(t, "moln")
+			app, _ := newTestApp(t, "myapp")
 			var got string
 			var bound time.Duration
 			cmd := clix.NewCommand("ls", clix.WithCommandRun(func(ctx *clix.Context) error {
@@ -30,7 +30,7 @@ func TestGetterReportsParsedValueFromEverySource(t *testing.T) {
 			case "cli":
 				args = append(args, "--timeout", "90s")
 			case "env":
-				t.Setenv("MOLN_TIMEOUT", "90s")
+				t.Setenv("MYAPP_TIMEOUT", "90s")
 			case "config":
 				writeConfigFile(t, app, "timeout: 90s\n")
 			}

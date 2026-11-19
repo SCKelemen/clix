@@ -7,7 +7,7 @@ import (
 )
 
 func TestCommandShortFlagBeatsRootShortFlag(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var project string
 	var port int
 	app.Flags().StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "project", Short: "p"}, Value: &project})
@@ -32,7 +32,7 @@ func TestCommandShortFlagBeatsRootShortFlag(t *testing.T) {
 }
 
 func TestRootFlagBeforeCommandBindsToRoot(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var global, local string
 	app.Flags().StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "value"}, Value: &global})
 	cmd := NewCommand("run", WithCommandRun(func(*Context) error { return nil }))
@@ -49,7 +49,7 @@ func TestRootFlagBeforeCommandBindsToRoot(t *testing.T) {
 
 func TestRootBoolShortDoesNotStealCommandShort(t *testing.T) {
 	// Mirrors ext/format (-f) and ext/version (-v) registering root shorts.
-	app, out, _ := newIsolatedApp(t, "moln")
+	app, out, _ := newIsolatedApp(t, "myapp")
 	app.Flags().StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "format", Short: "f"}, Default: FormatText})
 	app.Flags().BoolVar(BoolVarOptions{FlagOptions: FlagOptions{Name: "version", Short: "v"}})
 
@@ -71,7 +71,7 @@ func TestRootBoolShortDoesNotStealCommandShort(t *testing.T) {
 }
 
 func TestDoubleDashEndsFlags(t *testing.T) {
-	app, out, _ := newIsolatedApp(t, "moln")
+	app, out, _ := newIsolatedApp(t, "myapp")
 	var text string
 	ran := false
 	cmd := NewCommand("echo", WithCommandRun(func(*Context) error { ran = true; return nil }))
@@ -91,7 +91,7 @@ func TestDoubleDashEndsFlags(t *testing.T) {
 }
 
 func TestHelpIsCheckedBeforePositionals(t *testing.T) {
-	app, out, _ := newIsolatedApp(t, "moln")
+	app, out, _ := newIsolatedApp(t, "myapp")
 	app.Root.AddCommand(NewCommand("ls", WithCommandRun(func(*Context) error {
 		t.Fatal("command ran")
 		return nil
@@ -105,7 +105,7 @@ func TestHelpIsCheckedBeforePositionals(t *testing.T) {
 }
 
 func TestCommandCanClaimHelpShort(t *testing.T) {
-	app, out, _ := newIsolatedApp(t, "moln")
+	app, out, _ := newIsolatedApp(t, "myapp")
 	var host string
 	cmd := NewCommand("ssh", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "host", Short: "h"}, Value: &host})
@@ -120,10 +120,10 @@ func TestCommandCanClaimHelpShort(t *testing.T) {
 }
 
 func TestUnknownSubcommandStillErrors(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	app.Root.AddCommand(NewGroup("projects", "Projects", NewCommand("list", WithCommandRun(func(*Context) error { return nil }))))
 	err := app.Run(context.Background(), []string{"projects", "lsit"})
-	if err == nil || !strings.Contains(err.Error(), "unknown command: moln projects lsit") {
+	if err == nil || !strings.Contains(err.Error(), "unknown command: myapp projects lsit") {
 		t.Fatalf("Run error = %v, want unknown command", err)
 	}
 }

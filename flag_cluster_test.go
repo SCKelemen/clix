@@ -80,10 +80,10 @@ func TestFlagSetParseClustersAndNumbers(t *testing.T) {
 
 // A cluster written before the command, mixing the command's switch with
 // a root flag that takes a value, used the command name as the value:
-// "moln -fp deploy" ran deploy with --project=deploy.
+// "myapp -fp deploy" ran deploy with --project=deploy.
 func TestClusterBeforeCommandDoesNotEatTheCommand(t *testing.T) {
 	for _, args := range [][]string{{"-fp", "deploy"}, {"-fp", "deploy", "prod"}, {"-fr", "deploy"}} {
-		app, _ := newTestApp(t, "moln")
+		app, _ := newTestApp(t, "myapp")
 		var project, rootRegion string
 		ran := false
 		app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "project", Short: "p"}, Value: &project})

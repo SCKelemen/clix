@@ -292,7 +292,7 @@ The other controls, all off by default:
 
 #### Context flags
 
-Some flags set the context a command runs in rather than its inputs: where to connect (`--target`, `--token`, `--timeout`, `--api-version`) or how to print the result (`--format`). Mark them `Ambient` (or pass `clix.WithFlagAmbient()`) so that giving them does not turn off prompting for missing required flags: with an Ambient `--target`, `moln --target staging widgets create` asks for the widget's missing required flags, just as `moln widgets create` does.
+Some flags set the context a command runs in rather than its inputs: where to connect (`--target`, `--token`, `--timeout`, `--api-version`) or how to print the result (`--format`). Mark them `Ambient` (or pass `clix.WithFlagAmbient()`) so that giving them does not turn off prompting for missing required flags: with an Ambient `--target`, `myapp --target staging widgets create` asks for the widget's missing required flags, just as `myapp widgets create` does.
 
 ```go
 var target string
@@ -306,7 +306,7 @@ app.Flags().StringVar(clix.StringVarOptions{
 })
 ```
 
-Any flag that is not Ambient still marks a scripted call: `moln --target staging widgets create --dry-run` returns a `*clix.MissingFlagsError` (see [Non-interactive use](#non-interactive-use) for the full rule). `Ambient` changes nothing else: the flag is parsed, read from the environment and the config file, checked when `Required` (and prompted for when missing), and shown in help like any other flag. The format extension's `--format` is Ambient.
+Any flag that is not Ambient still marks a scripted call: `myapp --target staging widgets create --dry-run` returns a `*clix.MissingFlagsError` (see [Non-interactive use](#non-interactive-use) for the full rule). `Ambient` changes nothing else: the flag is parsed, read from the environment and the config file, checked when `Required` (and prompted for when missing), and shown in help like any other flag. The format extension's `--format` is Ambient.
 
 #### Config file values
 
@@ -417,7 +417,7 @@ cmd.Flags.StringVar(clix.StringVarOptions{
 These rules describe exactly how `Run` turns arguments into a command, flag values and positional arguments. `routing_test.go` checks each of them. The examples use this tree:
 
 ```text
-moln [--project/-p] [--verbose/-v]
+myapp [--project/-p] [--verbose/-v]
 ├── deploy (alias ship) [--force/-f] [--region/-r] [--tag/-t]... [--count/-n] [target]
 ├── project [--org]
 │   └── ls (alias list) [--all/-a]
@@ -425,7 +425,7 @@ moln [--project/-p] [--verbose/-v]
     └── migrate
 ```
 
-**The command path.** Words are matched left to right against the children of the current command, by name or alias. Matching ignores ASCII case (`DEPLOY` runs `deploy`), but non-ASCII letters must match exactly; set `App.CaseSensitive` for exact matching. Hidden commands match like any other. The first word that is not a child ends the path: it and every later word are positional arguments, even if they name a command somewhere. One exception: a first word equal to the root's name (`moln moln deploy`) is skipped when no child has that name and the root has no `Run` handler or no positional flags.
+**The command path.** Words are matched left to right against the children of the current command, by name or alias. Matching ignores ASCII case (`DEPLOY` runs `deploy`), but non-ASCII letters must match exactly; set `App.CaseSensitive` for exact matching. Hidden commands match like any other. The first word that is not a child ends the path: it and every later word are positional arguments, even if they name a command somewhere. One exception: a first word equal to the root's name (`myapp myapp deploy`) is skipped when no child has that name and the root has no `Run` handler or no positional flags.
 
 **Tokens.** From left to right:
 
@@ -443,27 +443,27 @@ moln [--project/-p] [--verbose/-v]
 
 **Where a flag may appear, and which flag a name means.** A flag may be written before the path, between path segments or after it. Its name is looked up on the command in effect at that point (the deepest command matched so far), then on each ancestor up to the root. A cluster's letters are looked up the same way, so `deploy -fv` sets `deploy --force` and the root's `--verbose`.
 
-- `moln -p p1 deploy` and `moln deploy -p p1` both set the root's `--project`.
-- `moln project --org acme ls` and `moln project ls --org acme` both set the group's `--org`.
+- `myapp -p p1 deploy` and `myapp deploy -p p1` both set the root's `--project`.
+- `myapp project --org acme ls` and `myapp project ls --org acme` both set the group's `--org`.
 - When a command and one of its ancestors define the same name, a token after the command sets the command's flag and a token before it sets the ancestor's; `Context` getters prefer whichever was set on the command line. `App.Validate` reports this shadowing.
-- A flag written before the command that defines it (`moln --force deploy`) is accepted only if it needs no separate value: a switch, or `--name=value`. While matching the path, the parser cannot know that the next token is that flag's value, so `moln --org acme project ls` reads `acme` as a word and fails with `unknown command: moln acme`.
-- For the same reason, a cluster written before the command that mixes that command's switches with a flag that takes a value cannot take its value from the next token: `moln -fp deploy` (deploy's `-f`, the root's `-p`) fails with `-p needs a value: write -fp=VALUE, or put the flags after the command`. `moln -fp=p1 deploy` and `moln deploy -fp p1` work.
+- A flag written before the command that defines it (`myapp --force deploy`) is accepted only if it needs no separate value: a switch, or `--name=value`. While matching the path, the parser cannot know that the next token is that flag's value, so `myapp --org acme project ls` reads `acme` as a word and fails with `unknown command: myapp acme`.
+- For the same reason, a cluster written before the command that mixes that command's switches with a flag that takes a value cannot take its value from the next token: `myapp -fp deploy` (deploy's `-f`, the root's `-p`) fails with `-p needs a value: write -fp=VALUE, or put the flags after the command`. `myapp -fp=p1 deploy` and `myapp deploy -fp p1` work.
 
 **Unknown flags and extra arguments.**
 
-- Whether a flag is unknown is decided by the command that runs (the leaf), wherever the flag is written. Commands are strict by default, so `moln deploy --bogus` and `moln --bogus deploy` fail with `unknown flag: --bogus`.
+- Whether a flag is unknown is decided by the command that runs (the leaf), wherever the flag is written. Commands are strict by default, so `myapp deploy --bogus` and `myapp --bogus deploy` fail with `unknown flag: --bogus`.
 - The root flag set is not strict unless you call `app.Flags().SetStrict(true)`. When the root itself runs, an unknown flag fills one of its positional arguments if it takes any, and otherwise fails with `unknown flag: --bogus`.
 - Positional arguments fill the command's `Positional` flags in registration order, skipping flags already given by name. Any left over fail with `unexpected arguments: ...`.
 
 **Groups, and commands with both Run and children.**
 
 - A group (children, no `Run`) followed by no word shows its help and exits 0, without checking required flags.
-- A group followed by a word that is not a child fails with `unknown command: moln project nope`. The word `help` is not special there: `moln project help ls` is an unknown command, because the `help` command from `ext/help` only exists at the root.
-- A command with a `Run` handler and children runs its handler when the next word is not a child. `moln db users` runs `db` with `name` set to `users`; a command that takes no positional arguments fails with `unexpected arguments`.
+- A group followed by a word that is not a child fails with `unknown command: myapp project nope`. The word `help` is not special there: `myapp project help ls` is an unknown command, because the `help` command from `ext/help` only exists at the root.
+- A command with a `Run` handler and children runs its handler when the next word is not a child. `myapp db users` runs `db` with `name` set to `users`; a command that takes no positional arguments fails with `unexpected arguments`.
 
-**Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `moln --help deploy`, `moln project --help ls` and `moln deploy -fh` all show help, even when required flags are missing or there are extra arguments. A flag that uses `-h` (such as `--host`) on the command or on any command above it keeps `-h` after the command name, and the built-in help there has only `--help`: with a root `--host -h`, `moln deploy -h example.com` sets the host.
+**Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `myapp --help deploy`, `myapp project --help ls` and `myapp deploy -fh` all show help, even when required flags are missing or there are extra arguments. A flag that uses `-h` (such as `--host`) on the command or on any command above it keeps `-h` after the command name, and the built-in help there has only `--help`: with a root `--host -h`, `myapp deploy -h example.com` sets the host.
 
-**Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `moln version` never asks for `--project`. When one is missing, `Run` prompts for it only if the app is interactive and no flag other than an `Ambient` one was given on the command line, wherever and however it was written; otherwise it returns a `*MissingFlagsError` (see [Non-interactive use](#non-interactive-use)).
+**Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `myapp version` never asks for `--project`. When one is missing, `Run` prompts for it only if the app is interactive and no flag other than an `Ambient` one was given on the command line, wherever and however it was written; otherwise it returns a `*MissingFlagsError` (see [Non-interactive use](#non-interactive-use)).
 
 **Errors.** Every failure above is a usage error, as is a bad value from an environment variable or the config file: `clix.ExitCode` returns 2 for it and for a `*MissingFlagsError`.
 
@@ -606,7 +606,7 @@ Both APIs can be mixed. Options apply in order, so later options override earlie
 missing required flags: --project (or $MYAPP_PROJECT)
 ```
 
-`Run` prompts only when no flags were passed, too: a command line with flags is a scripted call, and a script that forgot a flag should get an error, not a question. A flag counts as passed when it is set on the command line, by name (`--name v`, `--name=v`, `-n v`, `-nv`, or inside a cluster such as `-qn`) or by position, on any command of the path: the root, a group, or the command itself. Values from environment variables, the config file and defaults never count, and neither do flags marked `Ambient` (see [Context flags](#context-flags)), such as the format extension's `--format`. So, with an Ambient `--target`, `moln widgets create` and `moln --target staging widgets create` prompt for the missing required flags, while `moln --project p widgets create` and `moln widgets create blue` (a positional argument) return a `*clix.MissingFlagsError`.
+`Run` prompts only when no flags were passed, too: a command line with flags is a scripted call, and a script that forgot a flag should get an error, not a question. A flag counts as passed when it is set on the command line, by name (`--name v`, `--name=v`, `-n v`, `-nv`, or inside a cluster such as `-qn`) or by position, on any command of the path: the root, a group, or the command itself. Values from environment variables, the config file and defaults never count, and neither do flags marked `Ambient` (see [Context flags](#context-flags)), such as the format extension's `--format`. So, with an Ambient `--target`, `myapp widgets create` and `myapp --target staging widgets create` prompt for the missing required flags, while `myapp --project p widgets create` and `myapp widgets create blue` (a positional argument) return a `*clix.MissingFlagsError`.
 
 Users can turn prompts off explicitly with `<PREFIX>_DISABLE_PROMPTS=1` (for example, `MYAPP_DISABLE_PROMPTS=1`, like gcloud's `CLOUDSDK_CORE_DISABLE_PROMPTS`). This environment variable applies in every mode. Programs can choose a mode themselves:
 

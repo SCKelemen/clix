@@ -47,7 +47,7 @@ func TestRequiredWorksForEveryType(t *testing.T) {
 }
 
 func TestRequiredIntIsEnforcedByRun(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var replicas int
 	ran := false
 	cmd := NewCommand("scale", WithCommandRun(func(*Context) error { ran = true; return nil }))
@@ -60,9 +60,9 @@ func TestRequiredIntIsEnforcedByRun(t *testing.T) {
 		t.Fatalf("ran=%v err=%v; want missing --replicas", ran, err)
 	}
 
-	t.Setenv("MOLN_REPLICAS", "3")
+	t.Setenv("MYAPP_REPLICAS", "3")
 	if err := app.Run(context.Background(), []string{"scale", "--dry-run"}); err != nil {
-		t.Fatalf("Run error with MOLN_REPLICAS set: %v", err)
+		t.Fatalf("Run error with MYAPP_REPLICAS set: %v", err)
 	}
 	if !ran || replicas != 3 {
 		t.Fatalf("ran=%v replicas=%d, want 3 from the environment", ran, replicas)

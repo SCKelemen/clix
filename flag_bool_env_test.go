@@ -28,7 +28,7 @@ func TestBoolReadsParsedValue(t *testing.T) {
 }
 
 func TestHelpFalseRunsCommand(t *testing.T) {
-	app, out, _ := newIsolatedApp(t, "moln")
+	app, out, _ := newIsolatedApp(t, "myapp")
 	ran := false
 	app.Root.AddCommand(NewCommand("deploy", WithCommandRun(func(*Context) error {
 		ran = true
@@ -44,13 +44,13 @@ func TestHelpFalseRunsCommand(t *testing.T) {
 
 func TestEnvDoesNotHijackHelpOrVersion(t *testing.T) {
 	for _, env := range []struct{ name, value string }{
-		{"MOLN_HELP", "false"},
-		{"MOLN_HELP", "true"},
-		{"MOLN_VERSION", "1.2.3"},
-		{"MOLN_VERSION", "true"},
+		{"MYAPP_HELP", "false"},
+		{"MYAPP_HELP", "true"},
+		{"MYAPP_VERSION", "1.2.3"},
+		{"MYAPP_VERSION", "true"},
 	} {
 		t.Run(env.name+"="+env.value, func(t *testing.T) {
-			app, out, _ := newIsolatedApp(t, "moln")
+			app, out, _ := newIsolatedApp(t, "myapp")
 			t.Setenv(env.name, env.value)
 			app.Flags().BoolVar(BoolVarOptions{FlagOptions: FlagOptions{Name: "version", Short: "v"}})
 			ran := false
@@ -69,15 +69,15 @@ func TestEnvDoesNotHijackHelpOrVersion(t *testing.T) {
 }
 
 func TestEnvSetErrorNamesSource(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
-	t.Setenv("MOLN_VERBOSE", "loud")
+	app, _, _ := newIsolatedApp(t, "myapp")
+	t.Setenv("MYAPP_VERBOSE", "loud")
 	cmd := NewCommand("deploy", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.BoolVar(BoolVarOptions{FlagOptions: FlagOptions{Name: "verbose"}})
 	app.Root.AddCommand(cmd)
 
 	err := app.Run(context.Background(), []string{"deploy"})
-	if err == nil || !strings.Contains(err.Error(), "MOLN_VERBOSE") || !strings.Contains(err.Error(), "--verbose") {
-		t.Fatalf("Run error = %v, want an error naming --verbose and MOLN_VERBOSE", err)
+	if err == nil || !strings.Contains(err.Error(), "MYAPP_VERBOSE") || !strings.Contains(err.Error(), "--verbose") {
+		t.Fatalf("Run error = %v, want an error naming --verbose and MYAPP_VERBOSE", err)
 	}
 	if v, _ := cmd.Flags.Bool("verbose"); v {
 		t.Fatal("a rejected environment value must not turn the flag on")
@@ -85,8 +85,8 @@ func TestEnvSetErrorNamesSource(t *testing.T) {
 }
 
 func TestEmptyEnvIsUnset(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
-	t.Setenv("MOLN_VERBOSE", "")
+	app, _, _ := newIsolatedApp(t, "myapp")
+	t.Setenv("MYAPP_VERBOSE", "")
 	var verbose bool
 	cmd := NewCommand("deploy", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.BoolVar(BoolVarOptions{FlagOptions: FlagOptions{Name: "verbose"}, Value: &verbose})
@@ -95,12 +95,12 @@ func TestEmptyEnvIsUnset(t *testing.T) {
 		t.Fatalf("Run error: %v", err)
 	}
 	if verbose {
-		t.Fatal("empty MOLN_VERBOSE turned the flag on")
+		t.Fatal("empty MYAPP_VERBOSE turned the flag on")
 	}
 }
 
 func TestConfigSetErrorNamesSource(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	app.configLoaded = true
 	app.Config.Set("port", "eighty")
 	var port int
@@ -115,7 +115,7 @@ func TestConfigSetErrorNamesSource(t *testing.T) {
 }
 
 func TestHelpDoesNotLeakIntoNextRun(t *testing.T) {
-	app, out, _ := newIsolatedApp(t, "moln")
+	app, out, _ := newIsolatedApp(t, "myapp")
 	ran := false
 	app.Root.AddCommand(NewCommand("ls", WithCommandRun(func(*Context) error { ran = true; return nil })))
 	if err := app.Run(context.Background(), []string{"ls", "--help"}); err != nil || ran {

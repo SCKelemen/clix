@@ -105,7 +105,7 @@ func TestHelpGivesShortHToAncestors(t *testing.T) {
 // app is meant to win, and the extensions keep their long names, so Err
 // does not report it.
 func TestExtensionsDoNotTakeShortNames(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.AddExtension(version.Extension{Version: "1.2.3"})
 	app.AddExtension(format.Extension{})
 	var verbose, force bool

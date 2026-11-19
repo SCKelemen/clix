@@ -31,12 +31,12 @@ func TestRootSetStrictIsHonored(t *testing.T) {
 // The root stays non-strict by default, including a root assigned after
 // NewApp, and SetStrict on a replacement root is honored.
 func TestRootStrictDefaults(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	if app.Flags().Strict() {
 		t.Fatal("default root is strict")
 	}
 
-	app.Root = clix.NewGroup("moln", "", clix.NewCommand("ls", clix.WithCommandRun(noop)))
+	app.Root = clix.NewGroup("myapp", "", clix.NewCommand("ls", clix.WithCommandRun(noop)))
 	if err := app.Run(bg, []string{}); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestRootStrictDefaults(t *testing.T) {
 		t.Fatal("a root assigned after NewApp is strict after Run")
 	}
 
-	app.Root = clix.NewCommand("moln", clix.WithCommandRun(noop))
+	app.Root = clix.NewCommand("myapp", clix.WithCommandRun(noop))
 	app.Root.Flags.SetStrict(true)
 	if err := app.Run(bg, []string{"--bogus"}); err == nil {
 		t.Fatal("explicitly strict root accepted --bogus")
@@ -54,7 +54,7 @@ func TestRootStrictDefaults(t *testing.T) {
 // Flags used to write the root flag set on every call, which raced with
 // handlers calling it concurrently. Run with -race.
 func TestFlagsIsReadOnly(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "project"}})
 	app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(func(ctx *clix.Context) error {
 		var wg sync.WaitGroup

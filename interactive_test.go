@@ -14,7 +14,7 @@ func newGreetApp(t *testing.T, opts ...AppOption) (app *App, out, errOut *bytes.
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	out, errOut = &bytes.Buffer{}, &bytes.Buffer{}
-	app = NewApp("moln", append([]AppOption{WithAppOut(out), WithAppErr(errOut)}, opts...)...)
+	app = NewApp("myapp", append([]AppOption{WithAppOut(out), WithAppErr(errOut)}, opts...)...)
 	cmd := NewCommand("greet", WithCommandRun(func(ctx *Context) error {
 		name, _ := ctx.String("name")
 		_, err := fmt.Fprintf(ctx.App.Out, "hello %s\n", name)
@@ -47,7 +47,7 @@ func TestNonInteractiveReturnsMissingFlagsError(t *testing.T) {
 	if len(missing.Flags) != 1 || missing.Flags[0] != "name" {
 		t.Fatalf("Flags = %v, want [name]", missing.Flags)
 	}
-	want := "missing required flags: --name (or $GREET_NAME, $MOLN_NAME)"
+	want := "missing required flags: --name (or $GREET_NAME, $MYAPP_NAME)"
 	if err.Error() != want {
 		t.Fatalf("Error() = %q, want %q", err.Error(), want)
 	}
@@ -78,8 +78,8 @@ func TestDisablePromptsEnvOverridesInteractiveAlways(t *testing.T) {
 	for _, v := range []string{"1", "true", "YES"} {
 		t.Run(v, func(t *testing.T) {
 			app, _, _, prompted := newGreetApp(t, WithAppInteractive(InteractiveAlways))
-			t.Setenv("MOLN_DISABLE_PROMPTS", v)
-			if name := app.DisablePromptsEnvVar(); name != "MOLN_DISABLE_PROMPTS" {
+			t.Setenv("MYAPP_DISABLE_PROMPTS", v)
+			if name := app.DisablePromptsEnvVar(); name != "MYAPP_DISABLE_PROMPTS" {
 				t.Fatalf("DisablePromptsEnvVar() = %q", name)
 			}
 			app.Prompter = prompterFunc(func(context.Context, ...PromptOption) (string, error) {
@@ -89,15 +89,15 @@ func TestDisablePromptsEnvOverridesInteractiveAlways(t *testing.T) {
 			err := app.Run(context.Background(), []string{"greet"})
 			var missing *MissingFlagsError
 			if *prompted || !errors.As(err, &missing) {
-				t.Fatalf("prompted=%v err=%v; MOLN_DISABLE_PROMPTS=%s must disable prompts", *prompted, err, v)
+				t.Fatalf("prompted=%v err=%v; MYAPP_DISABLE_PROMPTS=%s must disable prompts", *prompted, err, v)
 			}
 		})
 	}
 
 	app, _, _, _ := newGreetApp(t, WithAppInteractive(InteractiveAlways))
-	t.Setenv("MOLN_DISABLE_PROMPTS", "0")
+	t.Setenv("MYAPP_DISABLE_PROMPTS", "0")
 	if !app.IsInteractive() {
-		t.Fatal("MOLN_DISABLE_PROMPTS=0 should not disable prompts")
+		t.Fatal("MYAPP_DISABLE_PROMPTS=0 should not disable prompts")
 	}
 }
 
@@ -138,7 +138,7 @@ func TestExitCode(t *testing.T) {
 	defer cancelDeadline()
 	<-deadline.Done()
 
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	app.Root.AddCommand(NewGroup("projects", "Projects", NewCommand("list", WithCommandRun(func(*Context) error { return nil }))))
 	unknownFlag := app.Run(context.Background(), []string{"projects", "list", "--bogus"})
 	unknownCmd := app.Run(context.Background(), []string{"projects", "lsit"})

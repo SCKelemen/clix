@@ -31,7 +31,7 @@ func (p *askPrompter) Prompt(_ context.Context, opts ...clix.PromptOption) (stri
 // ambientApp is a gcloud-style tree whose connection and output flags are
 // Ambient:
 //
-//	moln [--target/-t] [--token] [--timeout] [--quiet/-q]   Ambient
+//	myapp [--target/-t] [--token] [--timeout] [--quiet/-q]   Ambient
 //	     [--project/-p]                                      an input
 //	└── widgets [--api-version]                              group, Ambient flag
 //	    └── create --name (required) --size (required)
@@ -48,10 +48,10 @@ type ambientApp struct {
 
 func newAmbientApp(t *testing.T, opts ...clix.AppOption) *ambientApp {
 	t.Helper()
-	t.Setenv("MOLN_DISABLE_PROMPTS", "")
+	t.Setenv("MYAPP_DISABLE_PROMPTS", "")
 	a := &ambientApp{prompter: &askPrompter{answers: map[string]string{"Name": "w1", "Size": "3"}}}
 	opts = append([]clix.AppOption{clix.WithAppInteractive(clix.InteractiveAlways), clix.WithAppPrompter(a.prompter)}, opts...)
-	app, _ := newTestApp(t, "moln", opts...)
+	app, _ := newTestApp(t, "myapp", opts...)
 	a.app = app
 
 	root := app.Flags()
@@ -158,8 +158,8 @@ func TestAmbientFlagsDoNotStopPrompting(t *testing.T) {
 		{name: "repeated", args: []string{"-t", "X", "widgets", create, "--target", "Y"}, asked: bothPrompts, target: "Y"},
 
 		// Environment variables never counted, Ambient or not.
-		{name: "input flag from the environment", args: []string{"widgets", create}, env: map[string]string{"MOLN_PROJECT": "p1"}, asked: bothPrompts},
-		{name: "Ambient flag from the environment", args: []string{"widgets", create}, env: map[string]string{"MOLN_TARGET": "E"}, asked: bothPrompts},
+		{name: "input flag from the environment", args: []string{"widgets", create}, env: map[string]string{"MYAPP_PROJECT": "p1"}, asked: bothPrompts},
+		{name: "Ambient flag from the environment", args: []string{"widgets", create}, env: map[string]string{"MYAPP_TARGET": "E"}, asked: bothPrompts},
 
 		// Required flags given with Ambient flags: nothing to prompt for.
 		{name: "required flags given", args: []string{"--target", "X", "widgets", create, "--name", "w1", "--size", "3"}, target: "X"},
@@ -199,7 +199,7 @@ func TestAmbientFlagsWhenNotInteractive(t *testing.T) {
 	}{
 		{name: "InteractiveNever", opts: []clix.AppOption{clix.WithAppInteractive(clix.InteractiveNever)}},
 		{name: "InteractiveAuto with a pipe", opts: []clix.AppOption{clix.WithAppInteractive(clix.InteractiveAuto), clix.WithAppIn(strings.NewReader("w1\n3\n"))}},
-		{name: "DISABLE_PROMPTS", env: map[string]string{"MOLN_DISABLE_PROMPTS": "1"}},
+		{name: "DISABLE_PROMPTS", env: map[string]string{"MYAPP_DISABLE_PROMPTS": "1"}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -215,7 +215,7 @@ func TestAmbientFlagsWhenNotInteractive(t *testing.T) {
 func TestAmbientRequiredFlag(t *testing.T) {
 	newApp := func(t *testing.T) (*clix.App, *askPrompter, *string, *string) {
 		p := &askPrompter{answers: map[string]string{"Region": "eu", "Name": "w1"}}
-		app, _ := newTestApp(t, "moln", clix.WithAppInteractive(clix.InteractiveAlways), clix.WithAppPrompter(p))
+		app, _ := newTestApp(t, "myapp", clix.WithAppInteractive(clix.InteractiveAlways), clix.WithAppPrompter(p))
 		var region, name string
 		app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "region", Required: true, Ambient: true}, Value: &region})
 		cmd := clix.NewCommand("create", clix.WithCommandRun(noop))
@@ -247,7 +247,7 @@ func TestAmbientRequiredFlag(t *testing.T) {
 // An Ambient flag set by position does not count either.
 func TestAmbientPositionalFlag(t *testing.T) {
 	p := &askPrompter{answers: map[string]string{"Name": "w1"}}
-	app, _ := newTestApp(t, "moln", clix.WithAppInteractive(clix.InteractiveAlways), clix.WithAppPrompter(p))
+	app, _ := newTestApp(t, "myapp", clix.WithAppInteractive(clix.InteractiveAlways), clix.WithAppPrompter(p))
 	var region, name string
 	cmd := clix.NewCommand("create", clix.WithCommandRun(noop))
 	cmd.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "region", Positional: true, Ambient: true}, Value: &region})
@@ -263,7 +263,7 @@ func TestAmbientPositionalFlag(t *testing.T) {
 // still reports it.
 func TestAmbientFlagOtherwiseUnchanged(t *testing.T) {
 	a := newAmbientApp(t)
-	t.Setenv("MOLN_TARGET", "from-env")
+	t.Setenv("MYAPP_TARGET", "from-env")
 	if err := a.app.Run(bg, []string{"widgets", "create", "--name", "n", "--size", "1"}); err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestAmbientFlagOtherwiseUnchanged(t *testing.T) {
 	}
 
 	a = newAmbientApp(t)
-	t.Setenv("MOLN_TARGET", "")
+	t.Setenv("MYAPP_TARGET", "")
 	writeConfigFile(t, a.app, "target: from-config\n")
 	if err := a.app.Run(bg, []string{"widgets", "create", "--name", "n", "--size", "1"}); err != nil {
 		t.Fatal(err)
@@ -301,7 +301,7 @@ func TestAmbientFlagOtherwiseUnchanged(t *testing.T) {
 func TestAmbientFlagHelpUnchanged(t *testing.T) {
 	help := func(ambient bool) string {
 		out := &bytes.Buffer{}
-		app, _ := newTestApp(t, "moln", clix.WithAppOut(out))
+		app, _ := newTestApp(t, "myapp", clix.WithAppOut(out))
 		app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "target", Short: "t", Usage: "API endpoint", Ambient: ambient}})
 		cmd := clix.NewCommand("create", clix.WithCommandRun(noop))
 		cmd.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "wait", Usage: "Wait until done", Ambient: ambient}})

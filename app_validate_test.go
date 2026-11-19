@@ -14,7 +14,7 @@ import (
 )
 
 func TestValidateAcceptsACleanApp(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.AddExtension(help.Extension{})
 	app.AddExtension(version.Extension{Version: "1.0.0"})
 	app.AddExtension(config.Extension{})
@@ -101,7 +101,7 @@ func TestValidateAcceptsExtensionsLosingShortNames(t *testing.T) {
 }
 
 func TestValidateReportsDefinitionMistakes(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	var rootP, cmdP string
 	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "project"}, Value: &rootP})
 
@@ -130,7 +130,7 @@ func TestValidateReportsDefinitionMistakes(t *testing.T) {
 		"flag --out redefined",
 		"--any cannot use -a",
 		`invalid default "eighty" for flag --port`,
-		"flag --project is also defined on \"moln\"",
+		"flag --project is also defined on \"myapp\"",
 		`"DEPLOY" names both "deploy" and "ship"`,
 		"child 3 is nil",
 	} {
@@ -154,7 +154,7 @@ func TestValidateReportsDefinitionMistakes(t *testing.T) {
 // An int flag with Default "eighty" kept 0 silently, and Required then
 // counted as satisfied.
 func TestInvalidDefaultDoesNotSatisfyRequired(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	var port int
 	cmd := clix.NewCommand("serve", clix.WithCommandRun(noop))
 	cmd.Flags.IntVar(clix.IntVarOptions{FlagOptions: clix.FlagOptions{Name: "port", Required: true}, Default: "eighty", Value: &port})

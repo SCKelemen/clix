@@ -314,7 +314,7 @@ type FlagOptions struct {
 	// command. An Ambient flag on the command line never counts as "flags
 	// passed" (see Required), wherever and however it is written: before,
 	// between or after the command names, as --name=value, inside a short
-	// cluster, or by position. So "moln --target X widgets create" still
+	// cluster, or by position. So "myapp --target X widgets create" still
 	// prompts for the widget's missing required flags when the app is
 	// interactive. Passing any flag that is not Ambient still turns
 	// prompting off: Run returns a *MissingFlagsError for the missing

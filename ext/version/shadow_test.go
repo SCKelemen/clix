@@ -12,7 +12,7 @@ import (
 func TestVersionShortDoesNotShadowCommandFlag(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	out := &bytes.Buffer{}
-	app := clix.NewApp("moln", clix.WithAppOut(out))
+	app := clix.NewApp("myapp", clix.WithAppOut(out))
 	app.AddExtension(Extension{Version: "1.0.0"})
 	var verbose bool
 	ran := false
@@ -38,9 +38,9 @@ func TestVersionShortDoesNotShadowCommandFlag(t *testing.T) {
 
 func TestVersionEnvDoesNotHijackCommands(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("MOLN_VERSION", "1.2.3")
+	t.Setenv("MYAPP_VERSION", "1.2.3")
 	out := &bytes.Buffer{}
-	app := clix.NewApp("moln", clix.WithAppOut(out))
+	app := clix.NewApp("myapp", clix.WithAppOut(out))
 	app.AddExtension(Extension{Version: "0.1.0"})
 	ran := false
 	app.Root.AddCommand(clix.NewCommand("deploy", clix.WithCommandRun(func(*clix.Context) error { ran = true; return nil })))
@@ -49,6 +49,6 @@ func TestVersionEnvDoesNotHijackCommands(t *testing.T) {
 		t.Fatalf("Run error: %v", err)
 	}
 	if !ran || out.Len() != 0 {
-		t.Fatalf("ran=%v out=%q; MOLN_VERSION must not print the version", ran, out.String())
+		t.Fatalf("ran=%v out=%q; MYAPP_VERSION must not print the version", ran, out.String())
 	}
 }

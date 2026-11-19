@@ -11,7 +11,7 @@ import (
 func TestBareSwitchRunsValidate(t *testing.T) {
 	var seen []string
 	for _, args := range [][]string{{"rm", "--force=true"}, {"rm", "--force"}, {"rm", "-f"}} {
-		app, _ := newTestApp(t, "moln")
+		app, _ := newTestApp(t, "myapp")
 		ran := false
 		cmd := clix.NewCommand("rm", clix.WithCommandRun(mark(&ran)))
 		cmd.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{

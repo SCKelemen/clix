@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewAppRegistersHelpOnce(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	if n := countFlags(app.Flags(), "help"); n != 1 {
 		t.Fatalf("root has %d help flags, want 1", n)
 	}
@@ -25,7 +25,7 @@ func TestHelpFlagDoesNotRunCommand(t *testing.T) {
 		{"--help", "ssh"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			app, out, _ := newIsolatedApp(t, "moln")
+			app, out, _ := newIsolatedApp(t, "myapp")
 			ran := false
 			app.Root.AddCommand(NewCommand("ssh", WithCommandShort("Connect"), WithCommandRun(func(*Context) error {
 				ran = true

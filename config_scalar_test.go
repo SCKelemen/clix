@@ -25,7 +25,7 @@ func loadConfig(t *testing.T, body string) (*clix.ConfigManager, error) {
 func TestConfigScalarsKeepTheirText(t *testing.T) {
 	for _, v := range []string{"1.10", "1.0", "0755", "1e3", "12345678901234567890", "2024-01-02", "0x1F", "True", "-0", ".inf"} {
 		t.Run(v, func(t *testing.T) {
-			app, _ := newTestApp(t, "moln")
+			app, _ := newTestApp(t, "myapp")
 			writeConfigFile(t, app, "tag: "+v+"\n")
 			var tag string
 			cmd := clix.NewCommand("ls", clix.WithCommandRun(noop))
@@ -54,7 +54,7 @@ func TestConfigNumbersForNumericFlags(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.yaml, func(t *testing.T) {
-			app, _ := newTestApp(t, "moln")
+			app, _ := newTestApp(t, "myapp")
 			writeConfigFile(t, app, "n: "+c.yaml+"\nratio: 1.10\nraw: 0x10\n")
 			var n int
 			var ratio float64
@@ -131,7 +131,7 @@ func TestConfigMergeKeysAndAliases(t *testing.T) {
 // Parse errors did not name the file.
 func TestConfigErrorsNameTheFile(t *testing.T) {
 	for _, body := range []string{"a: [unclosed\n", "- just\n- a list\n", "a: 1\na: 2\n"} {
-		app, _ := newTestApp(t, "moln")
+		app, _ := newTestApp(t, "myapp")
 		path := writeConfigFile(t, app, body)
 		app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(noop)))
 		if err := app.Run(bg, []string{"ls"}); err == nil || !strings.Contains(err.Error(), path) {

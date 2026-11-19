@@ -18,9 +18,9 @@ import (
 // the terminal through the default TextPrompter.
 func TestAmbientFlagsPromptOnTerminalInAutoMode(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("MOLN_DISABLE_PROMPTS", "")
+	t.Setenv("MYAPP_DISABLE_PROMPTS", "")
 	term := ptytest.New(t)
-	app := clix.NewApp("moln", clix.WithAppIn(term.TTY), clix.WithAppErr(term.TTY), clix.WithAppOut(&bytes.Buffer{}))
+	app := clix.NewApp("myapp", clix.WithAppIn(term.TTY), clix.WithAppErr(term.TTY), clix.WithAppOut(&bytes.Buffer{}))
 	if app.Interactive != clix.InteractiveAuto || !app.IsInteractive() {
 		t.Fatalf("Interactive = %v, IsInteractive = %v; want auto, true on a pty", app.Interactive, app.IsInteractive())
 	}
