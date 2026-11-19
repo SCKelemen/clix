@@ -11,7 +11,8 @@ import (
 type candidateCase struct {
 	name, line string
 	want, not  []string
-	exact      bool // want is the complete set
+	exact      bool     // want is the complete set
+	env        []string // extra environment
 }
 
 func checkCandidates(t *testing.T, c candidateCase, got []string) {
@@ -44,19 +45,22 @@ func checkCandidates(t *testing.T, c candidateCase, got []string) {
 // fishCases: "complete --do-complete" prints each candidate unescaped,
 // as the whole token, with its description after a tab.
 var fishCases = []candidateCase{
-	{"TopLevel", "probe ", topLevel, nil, true},
-	{"NestedCommands", "probe widgets ", []string{"get", "list", "ls"}, nil, true},
-	{"Aliases", "probe w ", []string{"get", "list", "ls"}, nil, true},
-	{"FlagsInScope", "probe widgets get -", allFlagsOfGet, nil, true},
-	{"FlagsOutOfScope", "probe rm --", []string{"--force", "--path", "--help", "--verbose", "--org"}, nil, true},
-	{"FlagValueHook", "probe widgets get --output ", []string{"json", "yaml"}, nil, true},
-	{"FlagValueEquals", "probe widgets get --output=", []string{"--output=json", "--output=yaml"}, nil, true},
-	{"PositionalHook", "probe widgets get ", []string{"alpha", "beta", "gamma ray"}, nil, true},
-	{"WeirdNames", "probe weird ", weirdNames, nil, true},
-	{"FileFallback", "probe rm fi", []string{"file-one.txt"}, nil, false},
-	{"AfterDoubleDash", "probe rm -- -", []string{"-x.txt"}, []string{"--force"}, false},
-	{"HiddenOmitted", "probe in", nil, []string{"internal-debug"}, false},
-	{"NoFilesForCommands", "probe widgets ", nil, []string{"file-one.txt", "dir-a/"}, false},
+	{"TopLevel", "probe ", topLevel, nil, true, nil},
+	{"NestedCommands", "probe widgets ", []string{"get", "list", "ls"}, nil, true, nil},
+	{"Aliases", "probe w ", []string{"get", "list", "ls"}, nil, true, nil},
+	{"FlagsInScope", "probe widgets get -", allFlagsOfGet, nil, true, nil},
+	{"FlagsOutOfScope", "probe rm --", []string{"--force", "--path", "--help", "--verbose", "--org"}, nil, true, nil},
+	{"FlagValueHook", "probe widgets get --output ", []string{"json", "yaml"}, nil, true, nil},
+	{"FlagValueEquals", "probe widgets get --output=", []string{"--output=json", "--output=yaml"}, nil, true, nil},
+	{"PositionalHook", "probe widgets get ", []string{"alpha", "beta", "gamma ray"}, nil, true, nil},
+	{"WeirdNames", "probe weird ", weirdNames, nil, true, nil},
+	{"FileFallback", "probe rm fi", []string{"file-one.txt"}, nil, false, nil},
+	{"AfterDoubleDash", "probe rm -- -", []string{"-x.txt"}, []string{"--force"}, false, nil},
+	{"HiddenOmitted", "probe in", nil, []string{"internal-debug"}, false, nil},
+	{"NoFilesForCommands", "probe widgets ", nil, []string{"file-one.txt", "dir-a/"}, false, nil},
+	{"FlagValueFile", "probe rm --path=fi", []string{"--path=file-one.txt"}, nil, false, nil},
+	{"FileDollar", "probe rm evil/zz", []string{"evil/zz$(touch pwned).txt"}, nil, false, nil},
+	{"FileBackquote", "probe rm evil/yy", []string{"evil/yy`touch pwned`.txt"}, nil, false, nil},
 }
 
 // TestShell_Fish asks fish for completions with complete --do-complete
@@ -65,10 +69,10 @@ func TestShell_Fish(t *testing.T) {
 	fish := needShell(t, "fish", "fish")
 	_, _, work := shellEnv(t)
 	path := writeScript(t, "fish", "probe.fish")
-	for _, c := range fishCases {
+	for _, c := range withConfigCases(t, fishCases) {
 		t.Run(c.name, func(t *testing.T) {
 			cmd := exec.Command(fish, "--no-config", "-c", `source $CLIX_SCRIPT; and complete --do-complete=$CLIX_LINE`)
-			cmd.Env = append(shellEnviron(t), "CLIX_SCRIPT="+path, "CLIX_LINE="+c.line)
+			cmd.Env = shellEnviron(t, append(c.env, "CLIX_SCRIPT="+path, "CLIX_LINE="+c.line)...)
 			cmd.Dir = work
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -86,23 +90,35 @@ func TestShell_Fish(t *testing.T) {
 	assertNotPwned(t)
 }
 
+// withConfigCases adds to cases one per broken configuration (see
+// configCases), each completing "probe widgets ".
+func withConfigCases(t *testing.T, cases []candidateCase) []candidateCase {
+	t.Helper()
+	out := append([]candidateCase(nil), cases...)
+	for _, name := range []string{"MalformedFile", "BadConfigValue", "BadEnvValue"} {
+		out = append(out, candidateCase{name: name, line: "probe widgets ", want: []string{"get", "list", "ls"}, exact: true, env: configCases(t)[name]})
+	}
+	return out
+}
+
 // pwshCases: TabExpansion2 returns CompletionText, which PowerShell
 // inserts as is, so values that need it are single-quoted.
 var pwshCases = []candidateCase{
-	{"TopLevel", "probe ", topLevel, nil, true},
-	{"NestedCommands", "probe widgets ", []string{"get", "list", "ls"}, nil, true},
-	{"Aliases", "probe w ", []string{"get", "list", "ls"}, nil, true},
-	{"FlagsInScope", "probe widgets get -", allFlagsOfGet, nil, true},
-	{"FlagsOutOfScope", "probe rm --", []string{"--force", "--path", "--help", "--verbose", "--org"}, nil, true},
-	{"FlagValueHook", "probe widgets get --output ", []string{"json", "yaml"}, nil, true},
-	{"FlagValueEquals", "probe widgets get --output=", []string{"--output=json", "--output=yaml"}, nil, true},
-	{"PositionalHook", "probe widgets get ", []string{"alpha", "beta", "'gamma ray'"}, nil, true},
-	{"WeirdNames", "probe weird ", []string{`'say"hi'`, "'it''s'", "'$(touch pwned)'", "'two words'", "x:y", `back\slash`}, nil, true},
-	{"QuotedWord", "probe weird 'tw", []string{"'two words'"}, nil, true},
-	{"FileFallback", "probe rm fi", []string{"file-one.txt*"}, nil, false},
-	{"AfterDoubleDash", "probe rm -- -", nil, []string{"--force"}, false},
-	{"HiddenOmitted", "probe in", nil, []string{"internal-debug"}, false},
-	{"NoFilesForCommands", "probe nosuch ", nil, []string{"file-one.txt", "./file-one.txt"}, false},
+	{"TopLevel", "probe ", topLevel, nil, true, nil},
+	{"NestedCommands", "probe widgets ", []string{"get", "list", "ls"}, nil, true, nil},
+	{"Aliases", "probe w ", []string{"get", "list", "ls"}, nil, true, nil},
+	{"FlagsInScope", "probe widgets get -", allFlagsOfGet, nil, true, nil},
+	{"FlagsOutOfScope", "probe rm --", []string{"--force", "--path", "--help", "--verbose", "--org"}, nil, true, nil},
+	{"FlagValueHook", "probe widgets get --output ", []string{"json", "yaml"}, nil, true, nil},
+	{"FlagValueEquals", "probe widgets get --output=", []string{"--output=json", "--output=yaml"}, nil, true, nil},
+	{"PositionalHook", "probe widgets get ", []string{"alpha", "beta", "'gamma ray'"}, nil, true, nil},
+	{"WeirdNames", "probe weird ", []string{`'say"hi'`, "'it''s'", "'$(touch pwned)'", "'two words'", "x:y", `back\slash`}, nil, true, nil},
+	{"QuotedWord", "probe weird 'tw", []string{"'two words'"}, nil, true, nil},
+	{"FileFallback", "probe rm fi", []string{"file-one.txt*"}, nil, false, nil},
+	{"AfterDoubleDash", "probe rm -- -", nil, []string{"--force"}, false, nil},
+	{"HiddenOmitted", "probe in", nil, []string{"internal-debug"}, false, nil},
+	{"NoFilesForCommands", "probe nosuch ", nil, []string{"file-one.txt", "./file-one.txt"}, false, nil},
+	{"FlagValueFile", "probe rm --path=fi", []string{"--path=*", "file-one.txt*"}, nil, false, nil},
 }
 
 // psDriver loads the script and prints the completion text of every
@@ -118,10 +134,10 @@ func TestShell_PowerShell(t *testing.T) {
 	pwsh := needShell(t, "pwsh", "pwsh")
 	_, _, work := shellEnv(t)
 	path := writeScript(t, "powershell", "probe.ps1")
-	for _, c := range pwshCases {
+	for _, c := range withConfigCases(t, pwshCases) {
 		t.Run(c.name, func(t *testing.T) {
 			cmd := exec.Command(pwsh, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", psDriver)
-			cmd.Env = append(shellEnviron(t), "CLIX_SCRIPT="+path, "CLIX_LINE="+c.line)
+			cmd.Env = shellEnviron(t, append(c.env, "CLIX_SCRIPT="+path, "CLIX_LINE="+c.line)...)
 			cmd.Dir = work
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -135,6 +151,50 @@ func TestShell_PowerShell(t *testing.T) {
 			}
 			checkCandidates(t, c, got)
 		})
+	}
+	assertNotPwned(t)
+}
+
+// psLiteralDriver completes $env:CLIX_LINE and, for each match, prints the
+// kind of argument PowerShell parses its completion text as, and its value:
+// a file name with $(...) must come back as a constant string, never as an
+// expandable one that would run the subexpression.
+const psLiteralDriver = `. $env:CLIX_SCRIPT
+$line = $env:CLIX_LINE
+$result = TabExpansion2 -inputScript $line -cursorColumn $line.Length
+foreach ($match in $result.CompletionMatches) {
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput('Write-Output ' + $match.CompletionText, [ref]$null, [ref]$null)
+    $arg = $ast.EndBlock.Statements[0].PipelineElements[0].CommandElements[1]
+    $arg.GetType().Name + "` + "\t" + `" + $arg.Extent.Text + "` + "\t" + `" + $arg.Value
+}`
+
+// TestShell_PowerShell_FileNamesAreLiteral checks that PowerShell's own
+// file completion, which the script falls back to, quotes file names with
+// $(...) and backquotes (CI only).
+func TestShell_PowerShell_FileNamesAreLiteral(t *testing.T) {
+	pwsh := needShell(t, "pwsh", "pwsh")
+	_, _, work := shellEnv(t)
+	path := writeScript(t, "powershell", "probe.ps1")
+	for _, line := range []string{"probe rm evil/zz", "probe rm evil/yy"} {
+		cmd := exec.Command(pwsh, "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", psLiteralDriver)
+		cmd.Env = shellEnviron(t, "CLIX_SCRIPT="+path, "CLIX_LINE="+line)
+		cmd.Dir = work
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("pwsh: %v\n%s", err, out)
+		}
+		t.Logf("%q:\n%s", line, out)
+		lines := strings.Split(strings.TrimSpace(strings.ReplaceAll(string(out), "\r\n", "\n")), "\n")
+		if len(lines) == 0 || lines[0] == "" {
+			t.Errorf("%q: no file completion", line)
+		}
+		for _, l := range lines {
+			kind, rest, _ := strings.Cut(l, "\t")
+			_, value, _ := strings.Cut(rest, "\t")
+			if kind != "StringConstantExpressionAst" || !strings.HasSuffix(value, ".txt") || !strings.Contains(value, "touch pwned") {
+				t.Errorf("%q: completion %q is not the literal file name", line, l)
+			}
+		}
 	}
 	assertNotPwned(t)
 }

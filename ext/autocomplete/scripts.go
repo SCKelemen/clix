@@ -28,14 +28,21 @@ const bashScript = `# bash completion for @NAME@                                
     # $2 is the text readline replaces: the end of the word after the last
     # word-break character in COMP_WORDBREAKS (such as = and :).
     local cur=${2-${COMP_WORDS[COMP_CWORD]}} prog=${COMP_WORDS[0]}
-    local line out item directive quote i n
-    local -a lines
+    local line out item entry directive quote quoted fcur c i j n
+    local -a lines files
     COMPREPLY=()
     case $prog in
         "~/"*) prog=$HOME/${prog#"~/"} ;;
     esac
     if [[ -n ${COMP_LINE+set} ]]; then
-        line=${COMP_LINE:0:COMP_POINT}
+        if (( BASH_VERSINFO[0] < 4 )); then
+            # bash 3 counts COMP_POINT in bytes, so cut the line in the C
+            # locale; ${COMP_LINE:0:COMP_POINT} counts characters.
+            line=$(LC_ALL=C; printf '%s.' "${COMP_LINE:0:COMP_POINT}")
+            line=${line%.}
+        else
+            line=${COMP_LINE:0:COMP_POINT}
+        fi
     else
         for (( i = 0; i <= COMP_CWORD; i++ )); do
             line+=${line:+ }${COMP_WORDS[i]}
@@ -56,22 +63,72 @@ const bashScript = `# bash completion for @NAME@                                
         COMPREPLY[i]=${lines[i]}
     done
     if (( n == 1 )) && [[ $directive == :files ]]; then
-        # bash 4 and later: let readline complete file names.
-        compopt -o default 2>/dev/null && return 0
-        # bash 3.2 has no compopt: list them with compgen. Inside quotes
-        # readline closes the quote itself, so only bare words are escaped.
+        # The word starts after an opening quote (which readline closes
+        # itself) or bare, where backslashes are escapes.
         i=$(( ${#line} - ${#cur} - 1 ))
         quote=
         (( i >= 0 )) && quote=${line:i:1}
+        # bash 4 and later: let readline complete and quote file names,
+        # except after a double quote, where readline inserts $ and @BQ@
+        # unescaped, so a file name could run a command.
+        if [[ $quote != \" ]] && compopt -o default 2>/dev/null; then
+            return 0
+        fi
+        # Otherwise, and in bash 3.2, which has no compopt, list file names
+        # with compgen and quote them here.
+        case $quote in
+            \' | \") fcur=$cur ;;
+            *) quote= fcur=${cur//\\/} ;;
+        esac
+        files=()
         while IFS= read -r item; do
             [[ -n $item ]] || continue
             [[ -d $item ]] && item=$item/
+            files[${#files[@]}]=$item
+        done <<< "$(compgen -f -- "$fcur")"
+        # Readline ends a single match with a space (and a closing quote),
+        # which would end the word after a directory: offer the
+        # directory's entries instead, so completion goes on inside it.
+        if (( ${#files[@]} == 1 )) && [[ ${files[0]} == */ ]]; then
+            item=${files[0]}
+            while IFS= read -r entry; do
+                [[ -n $entry ]] || continue
+                [[ -d $entry ]] && entry=$entry/
+                [[ $entry == "$item" ]] && continue
+                files[${#files[@]}]=$entry
+            done <<< "$(compgen -f -- "$item")"
+            (( ${#files[@]} > 1 )) && files=("${files[@]:1}")
+        fi
+        # Quote each name so the shell reads it back literally: in double
+        # quotes \ $ @BQ@ and " need a backslash, in single quotes ' is written
+        # as '\'', and a bare word is quoted by printf %q.
+        for (( i = 0; i < ${#files[@]}; i++ )); do
+            item=${files[i]}
             case $quote in
-                \' | \") ;;
+                \")
+                    quoted=
+                    for (( j = 0; j < ${#item}; j++ )); do
+                        c=${item:j:1}
+                        case $c in
+                            \\ | \$ | \@BQ@ | \") quoted+=\\$c ;;
+                            *) quoted+=$c ;;
+                        esac
+                    done
+                    item=$quoted
+                    ;;
+                \')
+                    quoted=
+                    for (( j = 0; j < ${#item}; j++ )); do
+                        c=${item:j:1}
+                        [[ $c == "'" ]] && c="'\\''"
+                        quoted+=$c
+                    done
+                    item=$quoted
+                    ;;
                 *) printf -v item '%q' "$item" ;;
             esac
-            COMPREPLY[${#COMPREPLY[@]}]=$item
-        done <<< "$(compgen -f -- "$cur")"
+            COMPREPLY[i]=$item
+        done
     fi
     return 0
 }
@@ -112,6 +169,8 @@ const zshScript = `#compdef @COMPDEF@
     return 0
   fi
   if [[ $directive == :files ]]; then
+    # A flag value written as --name=value: complete the part after "=".
+    [[ $PREFIX == -*=* ]] && compset -P 1 '*='
     _files
     return
   fi
@@ -152,7 +211,16 @@ function @FUNC@
     if set -q out[1]
         printf '%s\n' $out
     else if test "$directive" = :files
-        __fish_complete_path "$cur"
+        if string match -qr -- '^-[^=]*=' $cur
+            # A flag value written as --name=value: complete the part
+            # after "=" and keep the flag in front.
+            set -l flag (string match -r -- '^-[^=]*=' $cur)
+            for path in (__fish_complete_path (string replace -r -- '^-[^=]*=' '' $cur))
+                printf '%s%s\n' $flag $path
+            end
+        else
+            __fish_complete_path "$cur"
+        end
     end
 end
 
@@ -207,6 +275,22 @@ Register-ArgumentCompleter -Native -CommandName @PSNAMES@ -ScriptBlock {
     if ($results.Count -gt 0) { return $results }
     # With no result PowerShell completes file names; an empty string stops it.
     if ($directive -eq ':nofiles') { return '' }
+    # A flag value written as --name=value: complete file names after "="
+    # and keep the flag in front, inside the quotes PowerShell adds.
+    if ($wordToComplete -match '^(-[^=]*=)(.*)$') {
+        $flag = $Matches[1]
+        foreach ($file in [System.Management.Automation.CompletionCompleters]::CompleteFilename($Matches[2])) {
+            $text = $file.CompletionText
+            if ($text.StartsWith("'")) {
+                $text = "'" + $flag.Replace("'", "''") + $text.Substring(1)
+            } elseif ($text.StartsWith('"')) {
+                $text = '"' + $flag + $text.Substring(1)
+            } else {
+                $text = $flag + $text
+            }
+            [System.Management.Automation.CompletionResult]::new($text, $file.ListItemText, 'ParameterValue', $file.ToolTip)
+        }
+    }
 }
 `
 
@@ -224,6 +308,7 @@ func script(name, shell string) (string, error) {
 	}
 	id := identifier(name)
 	common := []string{
+		"@BQ@", "`", // a backquote, which a Go raw string cannot hold
 		"@NAME@", commentSafe(name),
 		"@COMPDEF@", strings.Join(strings.Fields(commentSafe(name)), "_"),
 	}

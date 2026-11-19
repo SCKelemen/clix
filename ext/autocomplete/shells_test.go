@@ -181,12 +181,13 @@ for w in "${COMPREPLY[@]}"; do
 done
 `
 
-// bashComplete returns COMPREPLY for line.
-func bashComplete(t *testing.T, bash bashInfo, scriptPath, line, bc, mode string) []string {
+// bashComplete returns COMPREPLY for line, in the shell environment plus
+// extra.
+func bashComplete(t *testing.T, bash bashInfo, scriptPath, line, bc, mode string, extra ...string) []string {
 	t.Helper()
 	_, _, work := shellEnv(t)
 	cmd := exec.Command(bash.path, "--norc", "--noprofile", "-c", bashHarness, "bash", scriptPath, line, readlineWord(line), bc, mode)
-	cmd.Env = shellEnviron(t)
+	cmd.Env = shellEnviron(t, extra...)
 	cmd.Dir = work
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -233,8 +234,20 @@ var bashCases = []bashCase{
 	{"PositionalEscaped", `probe widgets get gamma\ `, []string{`gamma\ ray`}, ""},
 	{"AfterDoubleDash", "probe rm -- -", []string{"-x.txt"}, ""},
 	{"AfterDoubleDashValues", "probe widgets get -- ", []string{"alpha", "beta", `gamma\ ray`}, ""},
-	{"FileFallback", "probe rm ", []string{"dir-a/", "file-one.txt", "-x.txt", `sp\ ace.txt`}, ""},
+	{"FileFallback", "probe rm ", []string{"dir-a/", "evil/", "file-one.txt", "-x.txt", `sp\ ace.txt`}, ""},
 	{"FileFallbackPrefix", "probe rm sp", []string{`sp\ ace.txt`}, ""},
+	{"FileFallbackEscaped", `probe rm sp\ a`, []string{`sp\ ace.txt`}, ""},
+	// A lone directory would get a trailing space in bash 3.2, so its
+	// entries are offered instead.
+	{"DirectoryEntries", "probe rm di", []string{"dir-a/inner.txt", "dir-a/other.txt"}, ""},
+	{"FlagValueFile", "probe rm --path=fi", []string{"file-one.txt"}, ""},
+	// File names are quoted for where the word starts, so $(...) and
+	// backquotes in them are never run.
+	{"FileDollarBare", "probe rm evil/zz", []string{`evil/zz\$\(touch\ pwned\).txt`}, ""},
+	{"FileDollarDoubleQuoted", `probe rm "evil/zz`, []string{`evil/zz\$(touch pwned).txt`}, ""},
+	{"FileDollarSingleQuoted", `probe rm 'evil/zz`, []string{`evil/zz$(touch pwned).txt`}, ""},
+	{"FileBackquoteDoubleQuoted", `probe rm "evil/yy`, []string{"evil/yy\\`touch pwned\\`.txt"}, ""},
+	{"FileBackquoteBare", "probe rm evil/yy", []string{"evil/yy\\`touch\\ pwned\\`.txt"}, ""},
 	{"HiddenTyped", "probe internal-debug --s", []string{"--secret-flag"}, ""},
 	{"WeirdNames", "probe weird ", []string{`say\"hi`, `it\'s`, `\$\(touch\ pwned\)`, `two\ words`, "x:y", `back\\slash`}, ""},
 	{"WeirdSingleQuoted", "probe weird 'it", []string{`it'\''s`}, ""},
@@ -253,6 +266,15 @@ func runBashCases(t *testing.T, bash bashInfo, bc string) {
 	for _, c := range bashCases {
 		t.Run(c.name, func(t *testing.T) {
 			assertSet(t, "COMPREPLY for "+strconv.Quote(c.line), bashComplete(t, bash, path, c.line, bc, c.mode), c.want)
+		})
+	}
+	// A broken config file or a bad config or environment value must not
+	// stop completion: __complete ignores them, and its warning goes to
+	// standard error, which the script discards.
+	for name, env := range configCases(t) {
+		t.Run(name, func(t *testing.T) {
+			got := bashComplete(t, bash, path, "probe widgets ", bc, "", env...)
+			assertSet(t, "COMPREPLY for \"probe widgets \" with "+name, got, []string{"get", "list", "ls"})
 		})
 	}
 	assertNotPwned(t)

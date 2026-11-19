@@ -29,13 +29,13 @@ type session struct {
 }
 
 // startSession starts an interactive shell on a new pty in the work
-// directory and runs setup in it.
-func startSession(t *testing.T, path string, args []string, setup string) *session {
+// directory, with the shell environment plus extra, and runs setup in it.
+func startSession(t *testing.T, path string, args []string, setup string, extra ...string) *session {
 	t.Helper()
 	_, _, work := shellEnv(t)
 	term := ptytest.New(t)
 	cmd := exec.Command(path, args...)
-	cmd.Env = shellEnviron(t)
+	cmd.Env = shellEnviron(t, extra...)
 	cmd.Dir = work
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = term.TTY, term.TTY, term.TTY
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
@@ -89,13 +89,17 @@ var wordLine = regexp.MustCompile(`(?m)^W<(.*)>\r?$`)
 // insert types line, presses Tab, and returns the words of the resulting
 // command line as the shell parses them. Each one is printed by printf, so
 // a candidate that was not quoted correctly shows up as a different word
-// (or runs, which assertNotPwned catches).
+// (or runs, which assertNotPwned catches). A tab inside line is a Tab
+// pressed in the middle: "probe rm di\tin" completes twice.
 func (s *session) insert(line string) []string {
 	s.t.Helper()
 	s.term.ResetOutput()
 	cmd, mark := s.marker()
+	for _, part := range strings.Split(line, "\t") {
+		s.term.Type(s.t, part, "\t")
+	}
 	// Ctrl-A goes to the start of the line, Ctrl-E to its end.
-	s.term.Type(s.t, line, "\t", "\x01", `printf 'W<%s>\n' `, "\x05", " ; "+cmd+"\r")
+	s.term.Type(s.t, "\x01", `printf 'W<%s>\n' `, "\x05", " ; "+cmd+"\r")
 	out := clean(s.waitMarker(mark))
 	var words []string
 	for _, m := range wordLine.FindAllStringSubmatch(out, -1) {
@@ -195,6 +199,17 @@ var insertCases = []insertCase{
 	{"FileFallback", "probe rm fi", []string{"probe", "rm", "file-one.txt"}},
 	{"FileWithSpace", "probe rm sp", []string{"probe", "rm", "sp ace.txt"}},
 	{"FileAfterDoubleDash", "probe rm -- -", []string{"probe", "rm", "--", "-x.txt"}},
+	{"FlagValueFile", "probe rm --path=fi", []string{"probe", "rm", "--path=file-one.txt"}},
+	// A directory must not end the word: completion goes on inside it.
+	{"DirectoryThenFile", "probe rm di\tin", []string{"probe", "rm", "dir-a/inner.txt"}},
+	// $(...) and backquotes in names are inserted literally, whatever the
+	// quote the word starts with.
+	{"FileDollarBare", "probe rm evil/zz", []string{"probe", "rm", "evil/zz$(touch pwned).txt"}},
+	{"FileDollarDoubleQuoted", `probe rm "evil/zz`, []string{"probe", "rm", "evil/zz$(touch pwned).txt"}},
+	{"FileDollarSingleQuoted", `probe rm 'evil/zz`, []string{"probe", "rm", "evil/zz$(touch pwned).txt"}},
+	{"FileBackquoteBare", "probe rm evil/yy", []string{"probe", "rm", "evil/yy`touch pwned`.txt"}},
+	{"FileBackquoteDoubleQuoted", `probe rm "evil/yy`, []string{"probe", "rm", "evil/yy`touch pwned`.txt"}},
+	{"FileBackquoteSingleQuoted", `probe rm 'evil/yy`, []string{"probe", "rm", "evil/yy`touch pwned`.txt"}},
 }
 
 type listCase struct {
@@ -257,24 +272,40 @@ func runListCases(t *testing.T, s *session, key string) {
 	}
 }
 
-// bashSession starts an interactive bash with the probe script loaded
-// (after bash-completion, when bc is set).
-func bashSession(t *testing.T, bash bashInfo, bc string) *session {
-	path := writeScript(t, "bash", "probe.bash")
+// bashSession starts an interactive bash and loads the probe script the
+// way the autocomplete help says, with eval "$(probe autocomplete bash)"
+// (which works in bash 3.2, unlike source <(...)), or from a file after
+// bash-completion when bc is set.
+func bashSession(t *testing.T, bash bashInfo, bc string, extra ...string) *session {
 	setup := "PS1='PROMPT> '; bind 'set page-completions off'; bind 'set completion-query-items 0'"
 	if bash.major >= 4 {
 		setup += "; bind 'set enable-bracketed-paste off'"
 	}
 	if bc != "" {
-		setup += "; source " + shellSingleQuote(bc)
+		setup += "; source " + shellSingleQuote(bc) + "; source " + shellSingleQuote(writeScript(t, "bash", "probe.bash"))
+	} else {
+		setup += `; eval "$(probe autocomplete bash)"`
 	}
-	setup += "; source " + shellSingleQuote(path)
-	return startSession(t, bash.path, []string{"--norc", "--noprofile", "-i"}, setup)
+	return startSession(t, bash.path, []string{"--norc", "--noprofile", "-i"}, setup, extra...)
+}
+
+// bashInsertCases only make sense in bash: zsh reads "$( inside double
+// quotes as the start of a command substitution and waits for its end.
+var bashInsertCases = []insertCase{
+	{"NameWithCommandSubstitutionDoubleQuoted", `probe weird "$(t`, []string{"probe", "weird", "$(touch pwned)"}},
 }
 
 func runBashReadline(t *testing.T, bash bashInfo, bc string) {
 	s := bashSession(t, bash, bc)
 	runInsertCases(t, s)
+	for _, c := range bashInsertCases {
+		t.Run("Insert"+c.name, func(t *testing.T) {
+			s.t = t
+			if got := s.insert(c.line); strings.Join(got, "\x00") != strings.Join(c.want, "\x00") {
+				t.Errorf("%q<TAB> gave the words %q, want %q", c.line, got, c.want)
+			}
+		})
+	}
 	// Esc-? is readline's possible-completions: it lists without changing
 	// the line.
 	runListCases(t, s, "\x1b?")
@@ -288,6 +319,91 @@ func runBashReadline(t *testing.T, bash bashInfo, bc string) {
 		}
 	})
 	assertNotPwned(t)
+}
+
+// runConfigErrors starts a shell for each broken configuration and checks
+// that loading the script and completing still work: __complete and
+// autocomplete ignore the bad file or value, and their warnings go to
+// standard error, which the scripts discard.
+func runConfigErrors(t *testing.T, start func(t *testing.T, extra []string) *session) {
+	for name, env := range configCases(t) {
+		t.Run(name, func(t *testing.T) {
+			s := start(t, env)
+			if got := s.insert("probe wid"); strings.Join(got, " ") != "probe widgets" {
+				t.Errorf("probe wid<TAB> gave %q, want [probe widgets]", got)
+			}
+			if got := s.insert("probe widgets get --out"); strings.Join(got, " ") != "probe widgets get --output" {
+				t.Errorf("probe widgets get --out<TAB> gave %q", got)
+			}
+		})
+	}
+}
+
+// utf8Locale returns an installed UTF-8 locale, or skips the test.
+func utf8Locale(t *testing.T) string {
+	t.Helper()
+	out, _ := exec.Command("locale", "-a").Output()
+	have := map[string]bool{}
+	for _, l := range strings.Fields(string(out)) {
+		have[l] = true
+	}
+	for _, l := range []string{"C.UTF-8", "C.utf8", "en_US.UTF-8", "en_US.utf8"} {
+		if have[l] {
+			return l
+		}
+	}
+	t.Skip("no UTF-8 locale is installed")
+	return ""
+}
+
+// runNonASCII completes with multibyte text before the cursor and more
+// text after it, in a UTF-8 locale: bash 3.2 counts COMP_POINT in bytes,
+// so the line must be cut by bytes there. Ctrl-B moves the cursor back.
+func runNonASCII(t *testing.T, s *session) {
+	cases := []insertCase{
+		{"BeforeCursor", "probe --org 日本 wid zz\x02\x02\x02", []string{"probe", "--org", "日本", "widgets", "zz"}},
+		{"Accents", "probe --org é widgets g -w\x02\x02\x02", []string{"probe", "--org", "é", "widgets", "get", "-w"}},
+		{"AtEnd", "probe --org 日本 widgets get --wa", []string{"probe", "--org", "日本", "widgets", "get", "--watch"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s.t = t
+			if got := s.insert(c.line); strings.Join(got, "\x00") != strings.Join(c.want, "\x00") {
+				t.Errorf("%q<TAB> gave the words %q, want %q", c.line, got, c.want)
+			}
+		})
+	}
+}
+
+func utf8Env(t *testing.T) []string {
+	l := utf8Locale(t)
+	return []string{"LANG=" + l, "LC_ALL=" + l}
+}
+
+// TestShell_Bash32_ConfigErrors completes in /bin/bash 3.2 with a broken
+// config file, a bad config value and a bad environment value.
+func TestShell_Bash32_ConfigErrors(t *testing.T) {
+	bash := needBash(t, "bash32")
+	runConfigErrors(t, func(t *testing.T, extra []string) *session { return bashSession(t, bash, "", extra...) })
+}
+
+// TestShell_Bash5_ConfigErrors does the same in bash 4 or later.
+func TestShell_Bash5_ConfigErrors(t *testing.T) {
+	bash := needBash(t, "bash5")
+	runConfigErrors(t, func(t *testing.T, extra []string) *session { return bashSession(t, bash, "", extra...) })
+}
+
+// TestShell_Bash32_NonASCII checks the byte-counted COMP_POINT of bash 3.2.
+func TestShell_Bash32_NonASCII(t *testing.T) {
+	bash := needBash(t, "bash32")
+	runNonASCII(t, bashSession(t, bash, "", utf8Env(t)...))
+}
+
+// TestShell_Bash5_NonASCII checks the character-counted COMP_POINT of
+// bash 4 and later.
+func TestShell_Bash5_NonASCII(t *testing.T) {
+	bash := needBash(t, "bash5")
+	runNonASCII(t, bashSession(t, bash, "", utf8Env(t)...))
 }
 
 // TestShell_Bash32_Readline completes in an interactive /bin/bash 3.2.
@@ -331,6 +447,24 @@ func runZsh(t *testing.T, setup string) {
 		}
 	})
 	assertNotPwned(t)
+}
+
+// zshSession starts zsh -f and loads the script with
+// source <(probe autocomplete zsh) after compinit.
+func zshSession(t *testing.T, extra ...string) *session {
+	zsh := needShell(t, "zsh", "zsh")
+	return startSession(t, zsh, []string{"-f", "-i"}, zshSetup+"; autoload -Uz compinit; compinit -u -D; source <(probe autocomplete zsh)", extra...)
+}
+
+// TestShell_Zsh_ConfigErrors completes in zsh with a broken config file,
+// a bad config value and a bad environment value.
+func TestShell_Zsh_ConfigErrors(t *testing.T) {
+	runConfigErrors(t, func(t *testing.T, extra []string) *session { return zshSession(t, extra...) })
+}
+
+// TestShell_Zsh_NonASCII completes with multibyte text on the line.
+func TestShell_Zsh_NonASCII(t *testing.T) {
+	runNonASCII(t, zshSession(t, utf8Env(t)...))
 }
 
 // TestShell_Zsh_Sourced loads the script with source after compinit.

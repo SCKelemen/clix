@@ -218,12 +218,15 @@ func shellEnv(t *testing.T) (bin, home, work string) {
 				}
 			}
 		}
-		for _, d := range []string{"bin", "home", "work/dir-a"} {
+		for _, d := range []string{"bin", "home", "work/dir-a", "work/evil"} {
 			if s.err = os.MkdirAll(filepath.Join(dir, d), 0o755); s.err != nil {
 				return
 			}
 		}
-		for _, f := range []string{"work/file-one.txt", "work/-x.txt", "work/sp ace.txt", "work/dir-a/inner.txt"} {
+		// The names in evil/ run "touch pwned" if a shell ever reads them
+		// as code instead of as a file name.
+		files := []string{"work/file-one.txt", "work/-x.txt", "work/sp ace.txt", "work/dir-a/inner.txt", "work/dir-a/other.txt", evilDollar, evilBackquote}
+		for _, f := range files {
 			if s.err = os.WriteFile(filepath.Join(dir, f), nil, 0o644); s.err != nil {
 				return
 			}
@@ -245,7 +248,7 @@ func cleanupShellEnv() {
 
 // shellEnviron returns the environment for a shell under test: probe on
 // PATH, a private home and config directory, and no user configuration.
-func shellEnviron(t *testing.T) []string {
+func shellEnviron(t *testing.T, extra ...string) []string {
 	t.Helper()
 	bin, home, _ := shellEnv(t)
 	env := []string{
@@ -264,7 +267,37 @@ func shellEnviron(t *testing.T) []string {
 	if tmp := os.Getenv("TMPDIR"); tmp != "" {
 		env = append(env, "TMPDIR="+tmp)
 	}
-	return env
+	// Later entries win (os/exec keeps the last value of a duplicate key).
+	return append(env, extra...)
+}
+
+// File names in the work directory that run "touch pwned" when a shell
+// evaluates them instead of reading them literally.
+const (
+	evilDollar    = "work/evil/zz$(touch pwned).txt"
+	evilBackquote = "work/evil/yy`touch pwned`.txt"
+)
+
+// configCases are broken configurations that completion must survive:
+// each is extra environment for the shell, pointing XDG_CONFIG_HOME at a
+// probe/config.yaml with the given content, or setting a variable.
+func configCases(t *testing.T) map[string][]string {
+	t.Helper()
+	dir := func(content string) string {
+		d := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(d, "probe"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(d, "probe", "config.yaml"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	return map[string][]string{
+		"MalformedFile":  {"XDG_CONFIG_HOME=" + dir("key: [unclosed\n")},
+		"BadConfigValue": {"XDG_CONFIG_HOME=" + dir("verbose: zzz\n")},
+		"BadEnvValue":    {"PROBE_VERBOSE=zzz"},
+	}
 }
 
 // assertNotPwned fails the test if completing the "$(touch pwned)"
