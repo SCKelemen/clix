@@ -58,9 +58,9 @@
 //
 //   - Use Required: true on FlagOptions to mark a flag as mandatory
 //   - Use Prompt: "label" to set the interactive prompt label
-//   - A flag is resolved against the command it follows first and the root
-//     second, so a command's -f is never shadowed by a root -f; "--" ends
-//     flag parsing
+//   - A flag is resolved against the command it follows first, then each
+//     command above it up to the root, so a command's -f is never shadowed
+//     by a root -f; "--" ends flag parsing
 //   - Use ExitCode to turn the error from Run into a process exit status
 //
 // Commands run in one of three modes:
@@ -115,5 +115,5 @@
 // github.com/SCKelemen/clix/v2/ext/... may evolve more quickly but will also respect
 // semver for their exported APIs.
 //
-// clix requires Go 1.24 or later.
+// clix requires Go 1.27 or later.
 package clix
