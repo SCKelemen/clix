@@ -819,6 +819,22 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 		return false, nil
 	}
 
+	if dv, isDecode := flag.Value.(*decodeValue); isDecode {
+		// A DecodeVar flag's key may hold the document itself.
+		decoded, err := dv.decodeConfig(a.Config, key)
+		if decoded || err != nil {
+			flag.touched = true
+		}
+		if err != nil {
+			return false, usageErrorf("invalid value for --%s from config file key %q: %w", flag.Name, key, err)
+		}
+		if decoded {
+			flag.set = true
+			flag.source = SourceConfigFile
+			return true, nil
+		}
+	}
+
 	val, ok := a.Config.Get(key)
 	if !ok {
 		return false, nil

@@ -365,6 +365,33 @@ myapp deploy --flags-file deploy.yaml --region eu-west1
 
 An app flag named `--flags-file` wins over the one `EnableFlagsFile` adds, and is an ordinary flag.
 
+#### Structured inputs from files
+
+For rich inputs, like gcloud's `--*-from-file` flags and kubectl's `-f`, `DecodeVar` registers a flag whose value names a YAML or JSON file that is decoded into a Go value with the [strict rules](#strict-decoding):
+
+```go
+type Spec struct {
+        Image    string            `json:"image"`
+        Replicas int               `json:"replicas"`
+        Env      map[string]string `json:"env"`
+}
+spec := Spec{Replicas: 1} // the defaults: fields the file leaves out keep them
+cmd.Flags.DecodeVar(clix.DecodeVarOptions{
+        FlagOptions: clix.FlagOptions{Name: "spec", Short: "f", Usage: "Deployment spec (YAML or JSON, - for stdin)", Required: true},
+        Value:       &spec,
+})
+```
+
+```text
+myapp deploy -f spec.yaml
+generate-spec | myapp deploy -f -
+```
+
+- The value is a file name, or `-` for standard input. A leading `@` is ignored, so `-f @spec.yaml` and `-f @-` work as for a `ValueFromFile` flag (`@@x` names the file `@x`). In a [flags file](#flags-files) a relative name is relative to the flags file.
+- Unknown fields, duplicate keys and values of the wrong type are a usage error that lists every problem with its path (`spec.yaml: strict decoding error: unknown field "replcas", env.A: expected string, got a mapping`), and the variable is not changed.
+- Every source works: the command line, an environment variable (`MYAPP_SPEC=spec.yaml`), the config file, where the flag's key may hold the document itself (`spec: {image: web}`) or a file name, and a prompt for a `Required` flag, which asks for a file name. Repeating the flag decodes each file in turn into the same variable.
+- Files are read up to `App.MaxFileSize`, and standard input once per run. For a `Sensitive` flag, errors name fields by path but never show a value.
+
 #### Flag groups
 
 Some flags only make sense in combination, like cobra's flag groups. Declare the rule on a flag set, naming flags by their long names:
@@ -470,7 +497,7 @@ With a schema in place, `cli config set project.retries 10` is accepted, while n
 
 #### Strict decoding
 
-`app.Config.Decode(prefix, &v)` decodes a section of the config file into a struct, and `clix.UnmarshalStrict(data, &v)` decodes any YAML or JSON document, both strictly, in the spirit of Kubernetes' `sigs.k8s.io/json` `UnmarshalStrict`.
+`app.Config.Decode(prefix, &v)` decodes a section of the config file into a struct, and `clix.UnmarshalStrict(data, &v)` decodes any YAML or JSON document, both strictly, in the spirit of Kubernetes' `sigs.k8s.io/json` `UnmarshalStrict`. `DecodeVar` flags use the same decoder.
 
 ```go
 type Server struct {
