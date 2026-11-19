@@ -126,6 +126,9 @@ type App struct {
 	configLoaded  bool
 	configLoadErr error
 
+	configurations   bool   // EnableConfigurations was called
+	configLoadedPath string // the file Config was loaded from
+
 	// boundRoot and boundFlags are the root command and root flag set the
 	// App last adopted (see bindRoot), so Run can tell when Root changed.
 	boundRoot  *Command

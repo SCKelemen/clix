@@ -1,6 +1,7 @@
 package clix
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -41,6 +42,7 @@ func (a *App) configErrorAllowed(cmd *Command) bool {
 		return false
 	}
 	a.configLoaded = false
+	a.configLoadedPath = ""
 	a.configLoadErr = nil
 	return true
 }
@@ -79,6 +81,10 @@ func (a *App) valueError(flag *Flag, err error, tolerate bool, undo func()) erro
 // valid YAML.
 func (a *App) ConfigLoadError() error {
 	path, err := a.configFilePath()
+	var selection *configurationError
+	if errors.As(err, &selection) {
+		return selection.err
+	}
 	if err != nil {
 		return nil
 	}
