@@ -343,8 +343,17 @@ func TestComplete_NewCompleteCommandOnly(t *testing.T) {
 
 func TestComplete_ProbeAppIsValid(t *testing.T) {
 	app, _ := testApp(t)
-	if err := app.Validate(); err != nil {
-		t.Fatalf("the test app has definition problems: %v", err)
+	err := app.Validate()
+	if err == nil {
+		return
+	}
+	// The test app reuses -o on purpose (root --org, leaf --output) to check
+	// that completion resolves it like the parser; App.Validate reports that
+	// overlap, and nothing else may be reported.
+	for _, line := range strings.Split(err.Error(), "\n") {
+		if !strings.Contains(line, "-o is also the short name of --org") {
+			t.Fatalf("the test app has definition problems: %v", err)
+		}
 	}
 }
 

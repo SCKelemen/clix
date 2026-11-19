@@ -180,13 +180,15 @@ func TestCaseSensitiveCommandsAreVisible(t *testing.T) {
 	if !strings.Contains(out.String(), "App status") || !strings.Contains(out.String(), "Extension status") {
 		t.Fatalf("help:\n%s", out)
 	}
-	var script bytes.Buffer
-	app.Out = &script
-	if err := app.Run(bg, []string{"autocomplete", "--shell", "bash"}); err != nil {
+	// The completion script asks the program (its hidden __complete
+	// command), so check the candidates it gets.
+	var candidates bytes.Buffer
+	app.Out = &candidates
+	if err := app.Run(bg, []string{"__complete", "--cur=", "--", "o"}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(script.String(), "Status") || !strings.Contains(script.String(), " status") {
-		t.Fatalf("completion:\n%s", script.String())
+	if !hasCandidate(candidates.String(), "Status") || !hasCandidate(candidates.String(), "status") {
+		t.Fatalf("completion:\n%s", candidates.String())
 	}
 	assertValidate(t, app)
 }
@@ -211,4 +213,15 @@ func TestReplacedRootKeepsExtensionCommands(t *testing.T) {
 		t.Fatalf("deploy: %v", err)
 	}
 	assertValidate(t, app)
+}
+
+// hasCandidate reports whether the output of the autocomplete extension's
+// __complete command offers name.
+func hasCandidate(out, name string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		if line == name || strings.HasPrefix(line, name+"\t") {
+			return true
+		}
+	}
+	return false
 }
