@@ -299,3 +299,49 @@ func TestValidate(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// With named configurations, aliases belong to the configuration in
+// effect.
+func TestAliasesAndNamedConfigurations(t *testing.T) {
+	t.Setenv("PROBE_CONFIGURATION", "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	out := &bytes.Buffer{}
+	app := clix.NewApp("probe", clix.WithAppOut(out), clix.WithAppErr(&bytes.Buffer{}), clix.WithAppInteractive(clix.InteractiveNever))
+	app.ConfigPath = filepath.Join(t.TempDir(), "config.yaml")
+	ran := ""
+	app.Root.AddCommand(clix.NewGroup("pr", "Pull requests", clix.NewCommand("checkout", clix.WithCommandRun(func(ctx *clix.Context) error {
+		ran = ctx.Command.Path()
+		return nil
+	}))))
+	app.AddExtension(Extension{})
+	app.AddExtension(config.Extension{Configurations: true})
+	run := func(args ...string) error {
+		ran = ""
+		return app.Run(context.Background(), args)
+	}
+	for _, args := range [][]string{
+		{"config", "configurations", "create", "work"},
+		{"alias", "set", "co", "pr checkout"},
+	} {
+		if err := run(args...); err != nil {
+			t.Fatalf("%q: %v", args, err)
+		}
+	}
+	if err := run("co"); err != nil || ran != "probe pr checkout" {
+		t.Fatalf("co in work: %v, ran %q", err, ran)
+	}
+	if err := run("config", "configurations", "activate", "default"); err != nil {
+		t.Fatal(err)
+	}
+	if err := run("co"); err == nil || !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("co in default: %v", err)
+	}
+	t.Setenv("PROBE_CONFIGURATION", "work")
+	if err := run("co"); err != nil || ran != "probe pr checkout" {
+		t.Fatalf("co with PROBE_CONFIGURATION=work: %v, ran %q", err, ran)
+	}
+	t.Setenv("PROBE_CONFIGURATION", "nope")
+	if err := run("co"); err == nil || !strings.Contains(err.Error(), `configuration "nope"`) {
+		t.Fatalf("co with a missing configuration: %v", err)
+	}
+}

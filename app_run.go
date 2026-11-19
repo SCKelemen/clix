@@ -66,8 +66,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// User aliases (see ExpandAliases) are read from the config file, so a
 	// first word that may be one needs the file.
 	if a.ExpandAliases {
-		if _, unknown := a.firstWordUnknown(args); unknown && configErr != nil {
-			return configErr
+		if _, unknown := a.firstWordUnknown(args); unknown {
+			// With named configurations the file is not loaded yet; the
+			// aliases come from the configuration that the environment or
+			// active_config selects (flags before an alias are not
+			// supported).
+			if err := a.ensureConfigLoaded(ctx); err != nil {
+				return err
+			}
 		}
 		expanded, _, err := a.ExpandAlias(args)
 		if err != nil {
