@@ -54,6 +54,15 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		args = os.Args[1:]
 	}
 
+	// A plugin (see Plugins) runs before the config file is read: it is a
+	// program of its own.
+	a.ranPlugin = false
+	if word, ok := a.pluginCandidate(args); ok {
+		if p, found := a.LookupPlugin(word); found && p.Command == "" {
+			return a.runPlugin(ctx, p, args[1:])
+		}
+	}
+
 	// Load configuration up front, but report a broken config file only after
 	// --help and --version have had a chance to run.
 	configErr := a.ensureConfigLoaded(ctx)

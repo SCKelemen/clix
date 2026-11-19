@@ -117,6 +117,9 @@ func newProbeApp(out, errw io.Writer) *clix.App {
 	secret.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "secret-flag", Usage: "Secret"}})
 	app.Root.AddCommand(secret)
 
+	// Plugins come from PATH; only the plugin tests put one there (see
+	// plugin_shells_test.go).
+	app.Plugins = true
 	app.AddExtension(Extension{})
 	return app
 }

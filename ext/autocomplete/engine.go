@@ -2,6 +2,7 @@ package autocomplete
 
 import (
 	"context"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -88,6 +89,13 @@ func (e *engine) complete(words []string, cur string) result {
 	var out result
 	if !st.strayed {
 		out.candidates = e.children(cmd, cur)
+		if len(words) == 0 {
+			// Run looks a plugin up only as the first word.
+			out.candidates = append(out.candidates, e.plugins(cur)...)
+		}
+	} else if e.isPlugin(words) {
+		// What a plugin takes is up to the plugin.
+		return result{files: true}
 	}
 	pos := e.positional(st, cur)
 	out.candidates = append(out.candidates, pos.candidates...)
@@ -243,6 +251,33 @@ func (e *engine) children(cmd *clix.Command, cur string) []clix.Completion {
 		}
 	}
 	return out
+}
+
+// plugins returns the plugins on PATH (see clix.App.Plugins) that start
+// with cur and would run: not those a command shadows.
+func (e *engine) plugins(cur string) []clix.Completion {
+	if !e.app.Plugins {
+		return nil
+	}
+	var out []clix.Completion
+	for _, p := range e.app.ListPlugins() {
+		if p.Runnable() && strings.HasPrefix(p.Name, cur) && e.findChild(e.app.Root, p.Name) == nil {
+			out = append(out, clix.Completion{Value: p.Name, Description: "Plugin " + filepath.Base(p.Path)})
+		}
+	}
+	return out
+}
+
+// isPlugin reports whether words start with a plugin that Run would run.
+func (e *engine) isPlugin(words []string) bool {
+	if !e.app.Plugins || len(words) == 0 || e.findChild(e.app.Root, words[0]) != nil {
+		return false
+	}
+	if root := e.app.Root; root.Run != nil && root.Flags != nil && len(root.Flags.PositionalFlags()) > 0 {
+		return false // the word is the root's argument
+	}
+	p, ok := e.app.LookupPlugin(words[0])
+	return ok && p.Runnable()
 }
 
 // hasNamePrefix reports whether the command name starts with prefix,

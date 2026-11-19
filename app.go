@@ -116,6 +116,14 @@ type App struct {
 	// non-ASCII letters always match exactly.
 	CaseSensitive bool
 
+	// Plugins makes Run run the executable <Name>-<word> from PATH, as
+	// kubectl and gh do, when the first argument is a word that names no
+	// command: "myapp foo a b" runs "myapp-foo a b". Plugins never shadow
+	// commands and are never looked up in the current directory; see
+	// LookupPlugin, PluginEnv and ext/plugin, which sets this field and
+	// adds "plugin list".
+	Plugins bool
+
 	configLoaded  bool
 	configLoadErr error
 
@@ -131,6 +139,8 @@ type App struct {
 	extErr     error // the first error an extension returned
 	extending  bool  // an extension's Extend is running
 	running    bool  // Run is running
+
+	ranPlugin bool // the last Run ran a plugin, whose exit status Main passes on
 }
 
 // AppOption configures an App using the functional options pattern.

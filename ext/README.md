@@ -64,6 +64,13 @@ Adds command-based help similar to man pages:
 
 **Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
 
+### Plugin Extension (`clix/ext/plugin`)
+
+Runs kubectl- and gh-style plugins: `cli foo args...` runs the executable `cli-foo` from PATH when `foo` is not a command, with the app's standard streams, and passes on its exit status.
+- `cli plugin list` - List the plugins found on PATH, with warnings for shadowed, overridden and insecure ones
+
+Only absolute PATH directories are searched, never the current directory; plugins never shadow commands; a world-writable plugin is refused. See "Plugin Extension" in the main README for the security model.
+
 ### Config Extension (`clix/ext/config`)
 
 Adds configuration management commands using dot-separated key paths (e.g. `project.default`):
