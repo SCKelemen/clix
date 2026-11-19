@@ -252,12 +252,18 @@ func (fs *FlagSet) AnyCLISet() bool {
 // source (command line, positional argument, environment, config file, or
 // prompt) and have no default. It works for every flag type: an int flag's
 // zero value does not count as provided, while an explicit --name "" does.
+// A string flag whose bound variable already holds a value counts as
+// provided, as it did before v2.5.0.
 func (fs *FlagSet) MissingRequired() []*Flag {
 	var missing []*Flag
 	for _, flag := range fs.flags {
-		if flag.Required && !flag.set && flag.Default == "" {
-			missing = append(missing, flag)
+		if !flag.Required || flag.set || flag.Default != "" {
+			continue
 		}
+		if sv, ok := flag.Value.(*StringValue); ok && sv.String() != "" {
+			continue
+		}
+		missing = append(missing, flag)
 	}
 	return missing
 }

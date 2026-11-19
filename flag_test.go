@@ -1,6 +1,8 @@
 package clix
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -162,5 +164,32 @@ func TestFlagSetParseMissingValue(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "flag --config requires a value") {
 		t.Fatalf("unexpected error message: %v", err)
+	}
+}
+
+// A required string flag whose bound variable is already set counts as
+// provided, as it did before v2.5.0.
+func TestRequiredStringPresetIsSatisfied(t *testing.T) {
+	app, _, _ := newIsolatedApp(t, "app")
+	app.Interactive = InteractiveNever
+	region := "us-east1"
+	ran := false
+	cmd := NewCommand("mk", WithCommandRun(func(*Context) error { ran = true; return nil }))
+	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "region", Required: true}, Value: &region})
+	app.Root.AddCommand(cmd)
+	if err := app.Run(context.Background(), []string{"mk"}); err != nil {
+		t.Fatalf("Run error: %v; a preset required string must count as provided", err)
+	}
+	if !ran || region != "us-east1" {
+		t.Fatalf("ran=%v region=%q, want the command to run with the preset value", ran, region)
+	}
+
+	empty := ""
+	cmd2 := NewCommand("mk2", WithCommandRun(func(*Context) error { return nil }))
+	cmd2.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "zone", Required: true}, Value: &empty})
+	app.Root.AddCommand(cmd2)
+	var missing *MissingFlagsError
+	if err := app.Run(context.Background(), []string{"mk2"}); !errors.As(err, &missing) {
+		t.Fatalf("err = %v, want *MissingFlagsError for an empty required string", err)
 	}
 }
