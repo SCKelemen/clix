@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A global `--quiet` flag, like gcloud's, opt in with `App.EnableQuiet(clix.QuietOptions{})`. It turns off every interactive prompt for one command and accepts defaults: `IsInteractive` reports false whatever `App.Interactive` says, so a missing required flag is a `*MissingFlagsError`; a prompt from command code is answered without drawing or reading anything (a confirmation as Enter would answer it, Yes unless its `Default` is no; a select, multi-select, text or secret prompt with its `Default`; `Validate` still runs), and a prompt without a default is an error wrapping `ErrPromptsDisabled`; and `Context.Progress` prints nothing. The built-in prompters (`TextPrompter`, `clix/ext/prompt`, and `clix/ext/survey`, which also skips its end card) do this through the new `QuietAnswer(cfg)`; under `--quiet`, `NewPromptConfig` returns an error wrapping the new `ErrQuiet` and `ErrPromptsDisabled`, so custom prompters can do the same and otherwise fail safe. `--quiet` is Ambient and read from the command line only: it confirms destructive operations, so no environment variable or config key turns it on, and `<PREFIX>_DISABLE_PROMPTS` keeps failing closed (gcloud treats the two as one; when both apply, `--quiet` wins). `App.Quiet()` reports it. An app flag named `--quiet` is resolved like any name conflict and is then an ordinary flag.
+- `--quiet` has no short name by default, because the format extension gives `-q` to `--jq`, as gh does. `App.EnableQuiet(clix.QuietOptions{Short: "q"})` gives it gcloud's `-q`; called by the app, the flag is the app's and wins `-q` over the extension whatever the order, and `--jq` keeps only its long name, silently. Called from an extension's `Extend`, the flag follows extension order.
+
 ## [2.8.0] - 2026-11-19
 
 ### Added

@@ -565,7 +565,7 @@ Line mode answers:
 - `Validate` runs on every answer, including the default, the chosen option of a select, the comma-joined values of a multi-select, and the `"y"`/`"n"` of a confirm. A rejected answer is shown with the theme's error marker and asked again.
 - A confirm `Default` of `n`, `no`, `false`, `f`, `0` or `off` (any case) makes Enter mean No; anything else, or no default, means Yes.
 - A select or multi-select with an empty option list returns `clix.ErrNoOptions`, and a `Default` that names no option returns `clix.ErrInvalidDefault`. A multi-select `Default` is a comma-separated list of values or labels (or, when none of the parts is one, of 1-based option numbers).
-- A prompt made from command code returns `clix.ErrPromptsDisabled` when `App.Interactive` is `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` is set. With `InteractiveAuto` it still answers from a pipe.
+- A prompt made from command code returns `clix.ErrPromptsDisabled` when `App.Interactive` is `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` is set. With `InteractiveAuto` it still answers from a pipe. Under `--quiet` it returns its default instead (see [Quiet mode](#quiet-mode---quiet)).
 - A secret is never shown: not while typing, not in the finished prompt, and not in validation messages, where the typed value is replaced with `[redacted]`. The value of a `Sensitive` flag is also redacted in errors about it, whether it came from a prompt, an environment variable or the config file.
 - On Windows, and for inputs that cannot be polled (descriptors above `FD_SETSIZE` on macOS, readers that are not files), keys are read in a goroutine. A byte it reads after a prompt ended (for example after Esc) goes to the next prompt or `clix.ReadLine` on the same input, in order; code that reads that input directly, not through clix, can miss it.
 
@@ -670,7 +670,7 @@ Other guarantees:
 
 - **Prompts go to `App.Err`**, never `App.Out`, so `myapp get --format json | jq` stays clean.
 - **Cancellation**: every prompt returns `ctx.Err()` as soon as the context is done, in raw and line mode, even while waiting on an idle pipe. In raw mode Ctrl-C returns `clix.ErrCancelled` (Esc does too in select prompts), and SIGINT or SIGTERM restores the terminal and returns `clix.ErrCancelled` instead of exiting the process. In line mode Ctrl-C is the terminal's interrupt signal; with `signal.NotifyContext` as below it cancels the context. The extension only replaces the default `TextPrompter`; a `Prompter` you set yourself is kept.
-- **Prompts from command code** follow the same rules: with `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` they fail with `clix.ErrPromptsDisabled` instead of reading stdin.
+- **Prompts from command code** follow the same rules: with `InteractiveNever` or `<PREFIX>_DISABLE_PROMPTS` they fail with `clix.ErrPromptsDisabled` instead of reading stdin, and under `--quiet` they return their default (see below).
 - **Piped answers**: each prompt reads exactly one line, so `printf 'a\nb\n' | myapp mk` (with `InteractiveAlways`) answers two prompts in turn.
 - **Exit codes**: `clix.ExitCode(err)` returns 0 for success, 2 for usage errors, missing flags and broken flag groups, 130 for cancellation, a plugin's own status for a `*PluginExitError`, and 1 otherwise:
 
@@ -698,9 +698,43 @@ func main() {
 }
 ```
 
+#### Quiet mode (`--quiet`)
+
+`app.EnableQuiet(clix.QuietOptions{})` adds gcloud's global `--quiet`: it turns off every interactive prompt for one command and accepts defaults where input is needed, or fails.
+
+```go
+app.EnableQuiet(clix.QuietOptions{})           // --quiet
+app.EnableQuiet(clix.QuietOptions{Short: "q"}) // --quiet and -q, as in gcloud (see below)
+
+cmd.Run = func(ctx *clix.Context) error {
+        ok, err := ctx.App.Prompter.Prompt(ctx, clix.PromptRequest{Label: "Delete 3 instances?", Confirm: true})
+        if err != nil {
+                return err
+        }
+        // Under --quiet, ok is "y" without asking.
+        ...
+}
+```
+
+| Under `--quiet` | |
+| --- | --- |
+| Missing required flags | Never prompted for: `IsInteractive` reports false, whatever `App.Interactive` says, so `Run` returns a `*clix.MissingFlagsError`, as in a script. `--quiet` is Ambient, but there is no prompt to keep. |
+| A confirmation | Answered as Enter would answer it: Yes, unless its `Default` is `n`, `no`, `false`, `f`, `0` or `off`. So `myapp instances delete --quiet` deletes without asking, as in gcloud; give a confirmation `Default: "n"` to make `--quiet` decline. |
+| A select or multi-select | Its `Default`: the `Value` of the option it names (by value, then label), or for a multi-select the values it names, comma-joined in option order. |
+| A text or secret prompt | Its `Default`, as is. |
+| A prompt without a default | An error that wraps `clix.ErrPromptsDisabled` (and `clix.ErrQuiet`). |
+| `Validate` | Runs on the default answer; a rejected default is an error (a secret is redacted). |
+| Progress | `ctx.Progress` prints nothing, whatever `App.ProgressMode` is. |
+
+Nothing is drawn and nothing is read: the built-in prompters (`TextPrompter`, `clix/ext/prompt`, and `clix/ext/survey` through them, which also skips its end card) return `clix.QuietAnswer(cfg)`. `clix.NewPromptConfig` returns an error that wraps `clix.ErrQuiet` and `clix.ErrPromptsDisabled` under `--quiet`; a custom prompter should return `clix.QuietAnswer(cfg)` when `errors.Is(err, clix.ErrQuiet)`, and one that returns the error instead fails safe. `app.Quiet()` reports whether `--quiet` is in effect.
+
+**Command line only.** `--quiet` is never read from the environment or the config file (`CommandLineOnly`): because it answers Yes to confirmations, it confirms destructive operations, and no `MYAPP_QUIET=1` or `quiet: true` should do that for every run, as for `--force`. That is where clix differs from gcloud, whose `--quiet` is the same as `CLOUDSDK_CORE_DISABLE_PROMPTS=1`. In clix the two stay apart: `<PREFIX>_DISABLE_PROMPTS` fails closed (prompts return `clix.ErrPromptsDisabled` and nothing is answered for the user), and `--quiet`, when both apply, wins and accepts the defaults.
+
+**`-q`.** gcloud spells `--quiet` as `-q`, but the format extension gives `-q` to `--jq`, as gh does. So `--quiet` has no short name unless the app asks for one with `clix.QuietOptions{Short: "q"}`. When the app calls `EnableQuiet` itself, the flag is the app's, and the app's flags win over extensions' whatever the order (see [Precedence](#precedence)): `-q` is `--quiet`, and `--jq` keeps only its long name, without anything for `App.Validate` to report. When an extension calls `EnableQuiet` from its `Extend`, the flag is that extension's, and between extensions the one added first wins. A `--quiet` the app defines itself is resolved like any name conflict; when it is the one in effect, it is an ordinary flag and `Quiet()` is false.
+
 ### Structured Output
 
-Structured output is opt-in and modeled on the GitHub CLI (`gh`). The format extension (`github.com/SCKelemen/clix/v2/ext/format`) registers four global flags: `--format`/`-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq`/`-q` and `--template`/`-t`. A handler prints its result with `format.Write`, which applies all of them:
+Structured output is opt-in and modeled on the GitHub CLI (`gh`). The format extension (`github.com/SCKelemen/clix/v2/ext/format`) registers four global flags: `--format`/`-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq`/`-q` and `--template`/`-t`. A handler prints its result with `format.Write`, which applies all of them. (A gcloud-like app that wants `-q` for `--quiet` can have it; `--jq` then keeps its long name only. See [Quiet mode](#quiet-mode---quiet).)
 
 ```go
 import (
@@ -865,7 +899,7 @@ How it shows depends on `App.Err` and `App.ProgressMode`:
 
 - **On a terminal** (`clix.ProgressAuto`, the default): a spinner, the label, the latest message and percentage (`⠹ Deploying: uploading (42%)`), redrawn on one line about ten times a second, cut to the terminal width so it never wraps, with the cursor hidden. `Done` and `Fail` replace it with a final line: `✓ Deploying: deployed` or `✗ Deploying: failed`. The spinner and symbols are colored unless `NO_COLOR` is set or `CLICOLOR=0`. With `TERM=dumb` the spinner is ASCII and redrawn with carriage returns and spaces only, with no escape sequences at all. Outside a UTF-8 locale (`LC_ALL`, `LC_CTYPE` or `LANG`), frames and symbols are ASCII (`|/-\`, `+`, `!`).
 - **Not a terminal** (a pipe, a file, CI), or `clix.ProgressPlain`: one plain line, `Deploying...` when it starts and the final message when it ends, as in `Deploying...done`. `Update` prints nothing.
-- **`clix.ProgressQuiet`**: nothing. Map your own `--quiet` flag to it with `ctx.App.ProgressMode = clix.ProgressQuiet`.
+- **`clix.ProgressQuiet`**, or `--quiet` (see [Quiet mode](#quiet-mode---quiet)): nothing.
 
 An indicator ends once, at the first of `Done`, `Fail` (messages default to `done` and `failed`), the end of its context (`cancelled`, or `timed out` for a deadline), or its command's handler returning: `Run` ends an indicator that `PreRun`, `Run` or `PostRun` left running, with `Done` when they succeeded and `Fail` otherwise. Later calls do nothing, and every method is a no-op on a nil `*Progress`.
 
@@ -1314,6 +1348,7 @@ Key methods:
 - `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does). With named configurations, `ConfigFile` is the file of the configuration in effect
 - `EnableConfigurations()`, `Configuration()`, `Configurations()`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` - Named configurations (see [Named configurations](#named-configurations))
 - `IsInteractive() bool` - Whether a missing required flag will be prompted for (see Non-interactive use)
+- `EnableQuiet(QuietOptions)`, `Quiet() bool` - The global `--quiet` flag (see [Quiet mode](#quiet-mode---quiet))
 - `SaveConfig() error` - Persist `Config` values to the configuration file
 
 Structured output lives outside `App`: use `format.Write` from the format extension, or `clix.FormatData` and `clix.FormatDataWith` directly (see [Structured Output](#structured-output)).
