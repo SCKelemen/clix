@@ -143,7 +143,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	// environment, then config file, then defaults. Every command on the
 	// path takes part: the root, each group, and the command itself.
 	for _, c := range path {
-		if err := a.applyConfigToFlags(c.Flags); err != nil {
+		if err := a.applyConfigToFlags(c.Flags, configErrorsAllowed(cmd)); err != nil {
 			return err
 		}
 	}
@@ -536,7 +536,7 @@ func (a *App) ensureConfigLoaded(ctx context.Context) error {
 // default. It must run after parsing so command-line values keep the highest
 // precedence. A value that the flag rejects is reported as an error naming
 // its source.
-func (a *App) applyConfigToFlags(flags *FlagSet) error {
+func (a *App) applyConfigToFlags(flags *FlagSet, tolerate bool) error {
 	if flags == nil {
 		return nil
 	}
@@ -557,14 +557,15 @@ func (a *App) applyConfigToFlags(flags *FlagSet) error {
 		}
 
 		// Try each source in order of precedence
+		undo := valueUndo(flag, tolerate)
 		if ok, err := a.trySetFromEnv(flag); ok || err != nil {
-			if err != nil {
+			if err := a.valueError(flag, err, tolerate, undo); err != nil {
 				return err
 			}
 			continue
 		}
 		if ok, err := a.trySetFromConfig(flag); ok || err != nil {
-			if err != nil {
+			if err := a.valueError(flag, err, tolerate, undo); err != nil {
 				return err
 			}
 			continue
