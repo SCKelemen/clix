@@ -375,7 +375,7 @@ func (fs *FlagSet) StringSliceVar(opts ...FlagOption) {
 		*value.target = append([]string(nil), sliceOpts.Default...)
 		def = value.String()
 	}
-	flag := sliceOpts.FlagOptions.newFlag(value, def)
+	flag := sliceOpts.newFlag(value, def)
 	fs.addFlag(flag)
 }
 
