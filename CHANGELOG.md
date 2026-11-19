@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- gcloud's global `--verbosity=debug|info|warning|error|critical|none` flag and an app logger: `App.EnableVerbosity()` registers the flag (Ambient, default `warning`, also read from `<PREFIX>_VERBOSITY` and the `verbosity` config key even when `AutoEnv` or `AutoConfig` is off; any other value is a usage error that lists the levels; shell completion offers them), and `App.Logger()` and `Context.Logger()` return a `*slog.Logger` that writes `LEVEL: message key=value ...` lines (gcloud's level names, no timestamp, attributes as slog's text handler writes them) to `App.Err`, never `App.Out`, at the level `--verbosity` chooses. `Run` sets the level before the handlers run; each `Run` starts from `warning`, and a nested `Run` restores the outer level. `App.LogLevel()` exposes the level as a read-only `slog.Leveler` for other handlers, and `clix.LevelCritical` and `clix.LevelNone` are the `critical` and `none` levels. Standard library only (`log/slog`). An app flag named `--verbosity` replaces the global one. See "Logging and `--verbosity`" in the README.
+
 ## [2.8.0] - 2026-11-19
 
 ### Added
