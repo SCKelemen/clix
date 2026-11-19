@@ -51,7 +51,7 @@ func TestTextPrompterLeavesRestOfInputUnread(t *testing.T) {
 }
 
 func TestTwoRequiredFlagsFromPipedInput(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var a, b string
 	cmd := NewCommand("mk", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "a", Required: true}, Value: &a})

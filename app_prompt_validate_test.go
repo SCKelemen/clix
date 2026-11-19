@@ -10,7 +10,7 @@ import (
 )
 
 func TestPromptRepromptsOnInvalidAnswer(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var replicas int
 	var zone string
 	cmd := NewCommand("scale", WithCommandRun(func(*Context) error { return nil }))
@@ -42,7 +42,7 @@ func TestPromptRepromptsOnInvalidAnswer(t *testing.T) {
 }
 
 func TestPromptReportsInvalidAnswerFromCustomPrompter(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var replicas int
 	cmd := NewCommand("scale", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.IntVar(IntVarOptions{FlagOptions: FlagOptions{Name: "replicas", Required: true}, Value: &replicas})
@@ -57,7 +57,7 @@ func TestPromptReportsInvalidAnswerFromCustomPrompter(t *testing.T) {
 }
 
 func TestPromptReportsExhaustedInput(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var replicas int
 	cmd := NewCommand("scale", WithCommandRun(func(*Context) error { return nil }))
 	cmd.Flags.IntVar(IntVarOptions{FlagOptions: FlagOptions{Name: "replicas", Required: true}, Value: &replicas})

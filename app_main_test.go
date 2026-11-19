@@ -12,7 +12,7 @@ func TestMainReportsErrorsAndExitCodes(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	newMainApp := func() (*App, *bytes.Buffer) {
 		errOut := &bytes.Buffer{}
-		app := NewApp("moln", WithAppOut(&bytes.Buffer{}), WithAppErr(errOut), WithAppInteractive(InteractiveNever))
+		app := NewApp("myapp", WithAppOut(&bytes.Buffer{}), WithAppErr(errOut), WithAppInteractive(InteractiveNever))
 		app.Root.AddCommand(NewCommand("ok", WithCommandRun(func(*Context) error { return nil })))
 		app.Root.AddCommand(NewCommand("fail", WithCommandRun(func(*Context) error { return errors.New("boom") })))
 		app.Root.AddCommand(NewCommand("cancel", WithCommandRun(func(*Context) error { return ErrCancelled })))
@@ -32,7 +32,7 @@ func TestMainReportsErrorsAndExitCodes(t *testing.T) {
 		{[]string{"ok"}, 0, ""},
 		{[]string{"ctx"}, 0, ""},
 		{[]string{"fail"}, 1, "boom\n"},
-		{[]string{"nope"}, 2, "unknown command: moln nope\n"},
+		{[]string{"nope"}, 2, "unknown command: myapp nope\n"},
 		{[]string{"cancel"}, 130, ""},
 	}
 	for _, c := range cases {
@@ -49,9 +49,9 @@ func TestRunNilReadsOSArgs(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	saved := os.Args
 	t.Cleanup(func() { os.Args = saved })
-	os.Args = []string{"/usr/local/bin/moln", "ls"}
+	os.Args = []string{"/usr/local/bin/myapp", "ls"}
 
-	app := NewApp("moln", WithAppOut(&bytes.Buffer{}), WithAppErr(&bytes.Buffer{}))
+	app := NewApp("myapp", WithAppOut(&bytes.Buffer{}), WithAppErr(&bytes.Buffer{}))
 	ran := false
 	app.Root.AddCommand(NewCommand("ls", WithCommandRun(func(*Context) error { ran = true; return nil })))
 	if err := app.Run(context.Background(), nil); err != nil || !ran {

@@ -14,7 +14,7 @@ func TestFormatShortDoesNotShadowCommandFlag(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	t.Run("bool -f", func(t *testing.T) {
-		app := clix.NewApp("moln", clix.WithAppOut(&bytes.Buffer{}))
+		app := clix.NewApp("myapp", clix.WithAppOut(&bytes.Buffer{}))
 		app.AddExtension(format.Extension{})
 		var force bool
 		cmd := clix.NewCommand("delete", clix.WithCommandRun(func(*clix.Context) error { return nil }))
@@ -30,7 +30,7 @@ func TestFormatShortDoesNotShadowCommandFlag(t *testing.T) {
 	})
 
 	t.Run("string -f", func(t *testing.T) {
-		app := clix.NewApp("moln", clix.WithAppOut(&bytes.Buffer{}))
+		app := clix.NewApp("myapp", clix.WithAppOut(&bytes.Buffer{}))
 		app.AddExtension(format.Extension{})
 		var file string
 		cmd := clix.NewCommand("apply", clix.WithCommandRun(func(*clix.Context) error { return nil }))

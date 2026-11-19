@@ -324,7 +324,7 @@ scan:
 		}
 		for _, u := range uses {
 			// Both passes must agree on which tokens are values. A cluster
-			// written before the command, such as -fp in "moln -fp deploy"
+			// written before the command, such as -fp in "myapp -fp deploy"
 			// with -f from deploy and -p from the root, could not be read
 			// in pass 1, so the next token was not set aside as -p's value
 			// and may be the command itself.

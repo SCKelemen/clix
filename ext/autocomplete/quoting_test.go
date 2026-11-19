@@ -15,8 +15,8 @@ func newQuotingApp(t *testing.T) (*clix.App, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	out, errw := &bytes.Buffer{}, &bytes.Buffer{}
-	app := clix.NewApp("moln", clix.WithAppOut(out), clix.WithAppErr(errw))
-	app.Root = clix.NewGroup("moln", "root")
+	app := clix.NewApp("myapp", clix.WithAppOut(out), clix.WithAppErr(errw))
+	app.Root = clix.NewGroup("myapp", "root")
 	app.AddExtension(Extension{})
 
 	rm := clix.NewCommand("rm", clix.WithCommandRun(func(*clix.Context) error { return nil }))
@@ -52,8 +52,8 @@ func TestScriptsContainNoCommandTree(t *testing.T) {
 
 func TestCompletionOmitsHiddenCommands(t *testing.T) {
 	app, out, _ := newQuotingApp(t)
-	lines, _ := runComplete(t, app, out, "--cur=", "--", "moln")
-	assertSet(t, "moln <TAB>", values(lines), []string{"autocomplete", "rm"})
+	lines, _ := runComplete(t, app, out, "--cur=", "--", "myapp")
+	assertSet(t, "myapp <TAB>", values(lines), []string{"autocomplete", "rm"})
 }
 
 func TestAutocompleteAcceptsPositionalShell(t *testing.T) {
@@ -61,7 +61,7 @@ func TestAutocompleteAcceptsPositionalShell(t *testing.T) {
 	if err := app.Run(context.Background(), []string{"autocomplete", "bash"}); err != nil {
 		t.Fatalf("autocomplete bash: %v", err)
 	}
-	if !strings.Contains(out.String(), "complete -F '_moln_completions' 'moln'") {
+	if !strings.Contains(out.String(), "complete -F '_myapp_completions' 'myapp'") {
 		t.Fatalf("not a bash completion script:\n%s", out.String())
 	}
 }
@@ -74,7 +74,7 @@ func TestAutocompleteScriptOnlyOnStdout(t *testing.T) {
 		if err := app.Run(context.Background(), []string{"autocomplete", shell}); err != nil {
 			t.Fatalf("autocomplete %s: %v", shell, err)
 		}
-		want, err := script("moln", shell)
+		want, err := script("myapp", shell)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +94,7 @@ func TestAutocompleteHelpShowsInstallation(t *testing.T) {
 	}
 	// bash 3.2 (the macOS /bin/bash) ignores source <(...), so bash users
 	// are told to eval the script.
-	for _, s := range []string{`eval "$(moln autocomplete bash)"`, `"${fpath[1]}/_moln"`, "moln autocomplete fish | source", "moln autocomplete powershell"} {
+	for _, s := range []string{`eval "$(myapp autocomplete bash)"`, `"${fpath[1]}/_myapp"`, "myapp autocomplete fish | source", "myapp autocomplete powershell"} {
 		if !strings.Contains(out.String(), s) {
 			t.Errorf("autocomplete help does not explain %q:\n%s", s, out.String())
 		}

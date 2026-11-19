@@ -8,10 +8,10 @@ import (
 )
 
 func TestEffectiveStringReportsActualSource(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	app.configLoaded = true
 	app.Config.Set("zone", "from-config")
-	t.Setenv("MOLN_PROJECT", "from-env")
+	t.Setenv("MYAPP_PROJECT", "from-env")
 
 	sources := map[string]Source{}
 	cmd := NewCommand("ls", WithCommandRun(func(ctx *Context) error {
@@ -50,7 +50,7 @@ func TestEffectiveStringReportsActualSource(t *testing.T) {
 }
 
 func TestPromptedValueReportsPromptSource(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var src Source
 	var name string
 	cmd := NewCommand("mk", WithCommandRun(func(ctx *Context) error {
@@ -85,17 +85,17 @@ func TestEnvAndConfigValuesAreValidated(t *testing.T) {
 	}
 
 	t.Run("env", func(t *testing.T) {
-		app, _, _ := newIsolatedApp(t, "moln")
-		t.Setenv("MOLN_ZONE", "bad zone")
+		app, _, _ := newIsolatedApp(t, "myapp")
+		t.Setenv("MYAPP_ZONE", "bad zone")
 		newCmd(app)
 		err := app.Run(context.Background(), []string{"ls"})
-		if err == nil || !strings.Contains(err.Error(), "MOLN_ZONE") || !strings.Contains(err.Error(), "must not contain spaces") {
-			t.Fatalf("Run error = %v, want a validation error naming MOLN_ZONE", err)
+		if err == nil || !strings.Contains(err.Error(), "MYAPP_ZONE") || !strings.Contains(err.Error(), "must not contain spaces") {
+			t.Fatalf("Run error = %v, want a validation error naming MYAPP_ZONE", err)
 		}
 	})
 
 	t.Run("config", func(t *testing.T) {
-		app, _, _ := newIsolatedApp(t, "moln")
+		app, _, _ := newIsolatedApp(t, "myapp")
 		app.configLoaded = true
 		app.Config.Set("zone", "bad zone")
 		newCmd(app)
@@ -106,21 +106,21 @@ func TestEnvAndConfigValuesAreValidated(t *testing.T) {
 	})
 
 	t.Run("bad int from env", func(t *testing.T) {
-		app, _, _ := newIsolatedApp(t, "moln")
-		t.Setenv("MOLN_PORT", "notanint")
+		app, _, _ := newIsolatedApp(t, "myapp")
+		t.Setenv("MYAPP_PORT", "notanint")
 		var port int
 		cmd := NewCommand("serve", WithCommandRun(func(*Context) error { return nil }))
 		cmd.Flags.IntVar(IntVarOptions{FlagOptions: FlagOptions{Name: "port"}, Default: "8080", Value: &port})
 		app.Root.AddCommand(cmd)
 		err := app.Run(context.Background(), []string{"serve"})
-		if err == nil || !strings.Contains(err.Error(), "MOLN_PORT") {
-			t.Fatalf("Run error = %v, want an error naming MOLN_PORT", err)
+		if err == nil || !strings.Contains(err.Error(), "MYAPP_PORT") {
+			t.Fatalf("Run error = %v, want an error naming MYAPP_PORT", err)
 		}
 	})
 
 	t.Run("command line overrides a bad env value", func(t *testing.T) {
-		app, _, _ := newIsolatedApp(t, "moln")
-		t.Setenv("MOLN_ZONE", "bad zone")
+		app, _, _ := newIsolatedApp(t, "myapp")
+		t.Setenv("MYAPP_ZONE", "bad zone")
 		newCmd(app)
 		if err := app.Run(context.Background(), []string{"ls", "--zone", "good"}); err != nil {
 			t.Fatalf("Run error: %v", err)

@@ -17,7 +17,7 @@ func (e failingExtension) Extend(*clix.App) error {
 // An extension error used to be returned only by the first Run; later Runs
 // carried on with half the extensions applied.
 func TestExtensionErrorIsSticky(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	ran := false
 	app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(mark(&ran))))
 	calls := 0
@@ -41,7 +41,7 @@ func (e addCommandExtension) Extend(app *clix.App) error {
 
 // Extensions added after the first Run used to be ignored.
 func TestExtensionAddedAfterRunIsApplied(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.AddExtension(addCommandExtension{name: "one"})
 	if err := app.Run(bg, []string{"one"}); err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func (chainExtension) Extend(app *clix.App) error {
 
 // An extension may add another extension, which is applied right after.
 func TestExtensionCanAddExtension(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	app.AddExtension(chainExtension{})
 	if err := app.Run(bg, []string{"chained"}); err != nil {
 		t.Fatal(err)

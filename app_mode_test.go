@@ -7,7 +7,7 @@ import (
 )
 
 func TestRootFlagCountsAsFlagsPassed(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	var project, name string
 	app.Flags().StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "project"}, Value: &project})
 	cmd := NewCommand("mk", WithCommandRun(func(*Context) error { return nil }))

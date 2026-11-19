@@ -47,7 +47,7 @@ func withOrder(t *testing.T, app *clix.App, order string, exts []clix.Extension,
 func TestAppShortNamesBeatExtensions(t *testing.T) {
 	for _, order := range registrationOrders {
 		t.Run(order, func(t *testing.T) {
-			app, out := newTestApp(t, "moln")
+			app, out := newTestApp(t, "myapp")
 			var verbose, force bool
 			var host string
 			ran := false
@@ -125,7 +125,7 @@ func assertValidate(t *testing.T, app *clix.App, want ...string) {
 func TestAppLongNamesBeatExtensions(t *testing.T) {
 	for _, order := range registrationOrders {
 		t.Run(order, func(t *testing.T) {
-			app, out := newTestApp(t, "moln")
+			app, out := newTestApp(t, "myapp")
 			var mine string
 			withOrder(t, app, order, []clix.Extension{format.Extension{}}, func() {
 				app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "format", Usage: "Mine"}, Value: &mine})
@@ -142,7 +142,7 @@ func TestAppLongNamesBeatExtensions(t *testing.T) {
 			if n := strings.Count(out.String(), "--format"); n != 1 || !strings.Contains(out.String(), "Mine") {
 				t.Fatalf("help shows --format %d times:\n%s", n, out)
 			}
-			assertValidate(t, app, `moln: clix: extension #1 (format.Extension): flag --format in flag set "moln" is also defined by the app; the app's --format is used and this one is ignored`)
+			assertValidate(t, app, `myapp: clix: extension #1 (format.Extension): flag --format in flag set "myapp" is also defined by the app; the app's --format is used and this one is ignored`)
 		})
 	}
 }
@@ -180,7 +180,7 @@ func TestFirstAddedExtensionWins(t *testing.T) {
 				name += ", applied in between"
 			}
 			t.Run(name, func(t *testing.T) {
-				app, _ := newTestApp(t, "moln")
+				app, _ := newTestApp(t, "myapp")
 				app.AddExtension(exts[first])
 				if applyBetween {
 					if err := app.ApplyExtensions(); err != nil {
@@ -213,8 +213,8 @@ func TestFirstAddedExtensionWins(t *testing.T) {
 				// The second extension's -x is not reported: its --second
 				// still works.
 				assertValidate(t, app,
-					"moln: clix: extension "+loserExt[second]+": flag --mode in flag set \"moln\" is also defined by extension "+loserExt[first]+"; extension "+loserExt[first]+"'s --mode is used and this one is ignored",
-					"moln: extension "+loserExt[second]+": command \"sync\" is shadowed by extension "+loserExt[first]+"'s \"sync\"; it is not reachable and is left out of help",
+					"myapp: clix: extension "+loserExt[second]+": flag --mode in flag set \"myapp\" is also defined by extension "+loserExt[first]+"; extension "+loserExt[first]+"'s --mode is used and this one is ignored",
+					"myapp: extension "+loserExt[second]+": command \"sync\" is shadowed by extension "+loserExt[first]+"'s \"sync\"; it is not reachable and is left out of help",
 				)
 			})
 		}
@@ -226,7 +226,7 @@ func TestFirstAddedExtensionWins(t *testing.T) {
 func TestAppVersionCommandWithVersionExtension(t *testing.T) {
 	for _, order := range registrationOrders {
 		t.Run(order, func(t *testing.T) {
-			app, out := newTestApp(t, "moln")
+			app, out := newTestApp(t, "myapp")
 			ran := false
 			withOrder(t, app, order, []clix.Extension{version.Extension{Version: "9.9.9"}}, func() {
 				app.Root.AddCommand(clix.NewCommand("version", clix.WithCommandShort("Mine"), clix.WithCommandRun(mark(&ran))))
@@ -241,7 +241,7 @@ func TestAppVersionCommandWithVersionExtension(t *testing.T) {
 			if order == "applied before the app" {
 				// The extension added its own version command first; the
 				// app's, added later, still wins.
-				assertValidate(t, app, `moln: extension #1 (version.Extension): command "version" is shadowed by the app's "version"; it is not reachable and is left out of help`)
+				assertValidate(t, app, `myapp: extension #1 (version.Extension): command "version" is shadowed by the app's "version"; it is not reachable and is left out of help`)
 			} else {
 				assertValidate(t, app)
 			}
@@ -269,7 +269,7 @@ func (ghostExtension) Extend(app *clix.App) error {
 func TestAppCommandsBeatExtensionCommands(t *testing.T) {
 	for _, order := range registrationOrders {
 		t.Run(order, func(t *testing.T) {
-			app, out := newTestApp(t, "moln")
+			app, out := newTestApp(t, "myapp")
 			var ran string
 			withOrder(t, app, order, []clix.Extension{ghostExtension{}, autocomplete.Extension{}}, func() {
 				app.Root.AddCommand(clix.NewCommand("deploy", clix.WithCommandRun(func(*clix.Context) error { ran = "app deploy"; return nil })))
@@ -281,7 +281,7 @@ func TestAppCommandsBeatExtensionCommands(t *testing.T) {
 					t.Fatalf("%s ran %q (%v), want %q", c.word, ran, err, c.want)
 				}
 			}
-			if err := app.Run(bg, []string{"dp"}); err == nil || !strings.Contains(err.Error(), "unknown command: moln dp") {
+			if err := app.Run(bg, []string{"dp"}); err == nil || !strings.Contains(err.Error(), "unknown command: myapp dp") {
 				t.Fatalf("dp = %v, want unknown command", err)
 			}
 			if err := app.Run(bg, []string{"status"}); err != nil {
@@ -295,7 +295,7 @@ func TestAppCommandsBeatExtensionCommands(t *testing.T) {
 			}
 			var candidates bytes.Buffer
 			app.Out = &candidates
-			if err := app.Run(bg, []string{"__complete", "--cur=", "--", "moln"}); err != nil {
+			if err := app.Run(bg, []string{"__complete", "--cur=", "--", "myapp"}); err != nil {
 				t.Fatal(err)
 			}
 			if hasCandidate(candidates.String(), "dp") || !hasCandidate(candidates.String(), "deploy") {
@@ -305,7 +305,7 @@ func TestAppCommandsBeatExtensionCommands(t *testing.T) {
 
 			// The extension's status only lost its alias st: not reported.
 			assertValidate(t, app,
-				`moln: extension #1 (clix_test.ghostExtension): command "deploy" is shadowed by the app's "deploy"; it is not reachable and is left out of help`,
+				`myapp: extension #1 (clix_test.ghostExtension): command "deploy" is shadowed by the app's "deploy"; it is not reachable and is left out of help`,
 			)
 		})
 	}

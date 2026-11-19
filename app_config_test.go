@@ -10,14 +10,14 @@ import (
 )
 
 func TestRunDoesNotCreateConfigDir(t *testing.T) {
-	app, out, _ := newIsolatedApp(t, "moln")
+	app, out, _ := newIsolatedApp(t, "myapp")
 	if err := app.Run(context.Background(), []string{"--help"}); err != nil {
 		t.Fatalf("Run error: %v", err)
 	}
 	if !strings.Contains(out.String(), "USAGE") {
 		t.Fatal("no help printed")
 	}
-	if _, err := os.Stat(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "moln")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "myapp")); !os.IsNotExist(err) {
 		t.Fatalf("Run created the config directory (stat err=%v)", err)
 	}
 }
@@ -41,7 +41,7 @@ func TestUnwritableConfigHomeDoesNotBreakRun(t *testing.T) {
 	}
 	t.Setenv("XDG_CONFIG_HOME", dir)
 
-	app := NewApp("moln", WithAppOut(&strings.Builder{}))
+	app := NewApp("myapp", WithAppOut(&strings.Builder{}))
 	ran := false
 	app.Root.AddCommand(NewCommand("ls", WithCommandRun(func(*Context) error { ran = true; return nil })))
 	if err := app.Run(context.Background(), []string{"--help"}); err != nil {
@@ -56,7 +56,7 @@ func TestSaveConfigUsesPrivatePermissions(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission bits are not enforced on Windows")
 	}
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	app.Config.Set("token", "secret")
 	if err := app.SaveConfig(); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
@@ -84,7 +84,7 @@ func TestSaveConfigUsesPrivatePermissions(t *testing.T) {
 		t.Fatalf("leftover temporary files: %v", entries)
 	}
 
-	loaded := NewConfigManager("moln")
+	loaded := NewConfigManager("myapp")
 	if err := loaded.Load(path); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestSaveConfigUsesPrivatePermissions(t *testing.T) {
 }
 
 func TestConfigPathOverrides(t *testing.T) {
-	app, _, _ := newIsolatedApp(t, "moln")
+	app, _, _ := newIsolatedApp(t, "myapp")
 	custom := filepath.Join(t.TempDir(), "custom.yaml")
 	if err := os.WriteFile(custom, []byte("project: from-config-path\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -116,9 +116,9 @@ func TestConfigPathOverrides(t *testing.T) {
 	}
 
 	// <PREFIX>_CONFIG belongs to an app's own --config flag, not to clix.
-	t.Setenv("MOLN_CONFIG", filepath.Join(t.TempDir(), "env.yaml"))
+	t.Setenv("MYAPP_CONFIG", filepath.Join(t.TempDir(), "env.yaml"))
 	if got, _ := app.ConfigFile(); got != custom {
-		t.Fatalf("ConfigFile() = %q, want App.ConfigPath (%q); MOLN_CONFIG must not move it", got, custom)
+		t.Fatalf("ConfigFile() = %q, want App.ConfigPath (%q); MYAPP_CONFIG must not move it", got, custom)
 	}
 }
 

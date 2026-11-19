@@ -10,7 +10,7 @@ import (
 // Values parsed by one Run leaked into the next: "rm --force" followed by
 // "rm" still had force=true.
 func TestRunRestoresValuesBetweenRuns(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	var force bool
 	var target, preset string
 	var timeout time.Duration
@@ -52,17 +52,17 @@ func TestRunRestoresValuesBetweenRuns(t *testing.T) {
 
 // A value from the environment does not outlive the variable.
 func TestRunRestoresEnvValues(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	var region string
 	cmd := clix.NewCommand("ls", clix.WithCommandRun(noop))
 	cmd.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "region"}, Value: &region})
 	app.Root.AddCommand(cmd)
 
-	t.Setenv("MOLN_REGION", "eu")
+	t.Setenv("MYAPP_REGION", "eu")
 	if err := app.Run(bg, []string{"ls"}); err != nil || region != "eu" {
 		t.Fatalf("Run = %v, region = %q", err, region)
 	}
-	t.Setenv("MOLN_REGION", "")
+	t.Setenv("MYAPP_REGION", "")
 	if err := app.Run(bg, []string{"ls"}); err != nil || region != "" {
 		t.Fatalf("Run = %v, region = %q, want \"\"", err, region)
 	}

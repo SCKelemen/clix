@@ -19,7 +19,7 @@ func TestEnvVarsAliasesAreCheckedInOrder(t *testing.T) {
 	}
 
 	t.Run("first alias", func(t *testing.T) {
-		app, _, _ := newIsolatedApp(t, "moln")
+		app, _, _ := newIsolatedApp(t, "myapp")
 		t.Setenv("CLOUDSDK_CORE_PROJECT", "p1")
 		t.Setenv("GOOGLE_CLOUD_PROJECT", "p2")
 		var project, got string
@@ -34,7 +34,7 @@ func TestEnvVarsAliasesAreCheckedInOrder(t *testing.T) {
 	})
 
 	t.Run("later alias", func(t *testing.T) {
-		app, _, _ := newIsolatedApp(t, "moln")
+		app, _, _ := newIsolatedApp(t, "myapp")
 		t.Setenv("GOOGLE_CLOUD_PROJECT", "p2")
 		var project, got string
 		var src Source

@@ -17,7 +17,7 @@ func TestGetterMatrix(t *testing.T) {
 	for _, typ := range []string{"int", "int64", "float64", "bool", "duration"} {
 		for _, s := range []string{"cli", "env", "config", "default"} {
 			t.Run(typ+"/"+s, func(t *testing.T) {
-				app, _ := newTestApp(t, "moln")
+				app, _ := newTestApp(t, "myapp")
 				raw := raws[typ]
 				var got, bound string
 				var src clix.Source
@@ -79,7 +79,7 @@ func TestGetterMatrix(t *testing.T) {
 				case "cli":
 					args = append(args, "--x="+raw)
 				case "env":
-					t.Setenv("MOLN_X", raw)
+					t.Setenv("MYAPP_X", raw)
 				case "config":
 					writeConfigFile(t, app, "x: "+raw+"\n")
 				}
@@ -102,7 +102,7 @@ func TestGetterMatrix(t *testing.T) {
 }
 
 func TestBoolDefaultTrue(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	var color bool
 	cmd := clix.NewCommand("ls", clix.WithCommandRun(noop))
 	cmd.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "color"}, Default: true, Value: &color})
@@ -153,7 +153,7 @@ func (t *toggle) IsBoolFlag() bool { return true }
 func (t *toggle) Reset()           { t.on = false }
 
 func TestVarCustomValue(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	var lv level
 	tg := &toggle{}
 	var viaCtx string
@@ -180,7 +180,7 @@ func TestVarCustomValue(t *testing.T) {
 }
 
 func TestStringSliceVar(t *testing.T) {
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	var tags []string
 	cmd := clix.NewCommand("ls", clix.WithCommandRun(noop))
 	cmd.Flags.StringSliceVar(clix.StringSliceVarOptions{FlagOptions: clix.FlagOptions{Name: "tag", Short: "t"}, Default: []string{"default"}, Value: &tags})
@@ -204,14 +204,14 @@ func TestStringSliceVar(t *testing.T) {
 		t.Fatalf("StringSlice = %q", got)
 	}
 
-	t.Setenv("MOLN_TAG", "e1,e2")
+	t.Setenv("MYAPP_TAG", "e1,e2")
 	if err := app.Run(bg, []string{"ls"}); err != nil || !reflect.DeepEqual(tags, []string{"e1", "e2"}) {
 		t.Fatalf("env: %v, tags = %q", err, tags)
 	}
-	t.Setenv("MOLN_TAG", "")
+	t.Setenv("MYAPP_TAG", "")
 
 	writeConfigFile(t, app, "tag: [c1, c2]\n")
-	app2, _ := newTestApp(t, "moln")
+	app2, _ := newTestApp(t, "myapp")
 	var tags2 []string
 	cmd2 := clix.NewCommand("ls", clix.WithCommandRun(noop))
 	cmd2.Flags.StringSliceVar(clix.WithFlagName("tag"), clix.WithStringSliceValue(&tags2), clix.WithStringSliceDefault("d"))

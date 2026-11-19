@@ -12,7 +12,7 @@ import (
 
 // routingApp builds the command tree the routing matrix runs against:
 //
-//	moln [--project/-p] [--verbose/-v] [--env]           group, no Run
+//	myapp [--project/-p] [--verbose/-v] [--env]           group, no Run
 //	     [--output/-o] (Ambient)
 //	├── deploy (alias ship) [--force/-f] [--region/-r] [--tag/-t ...]
 //	│                       [--count/-n] [--name] [target]
@@ -38,7 +38,7 @@ type routingApp struct {
 func newRoutingApp(t *testing.T) *routingApp {
 	t.Helper()
 	r := &routingApp{initial: map[string]string{}}
-	app, _ := newTestApp(t, "moln")
+	app, _ := newTestApp(t, "myapp")
 	r.app = app
 	run := func(ctx *clix.Context) error { r.ran = ctx.Command.Path(); return nil }
 	str := func(fs *clix.FlagSet, fo clix.FlagOptions) { fs.StringVar(clix.StringVarOptions{FlagOptions: fo}) }
@@ -133,41 +133,41 @@ type routingCase struct {
 
 func TestRoutingMatrix(t *testing.T) {
 	const (
-		deploy = "moln deploy"
-		ls     = "moln project ls"
+		deploy = "myapp deploy"
+		ls     = "myapp project ls"
 	)
 	cases := []routingCase{
 		// The command path: names, aliases, case, the root name.
 		{name: "leaf", args: []string{"deploy"}, ran: deploy},
 		{name: "alias", args: []string{"ship"}, ran: deploy},
 		{name: "ASCII case", args: []string{"DePloy"}, ran: deploy},
-		{name: "alias path", args: []string{"proj", "list", "--org", "o"}, ran: ls, set: map[string]string{"moln project --org": "o" + cmdFlag}},
-		{name: "repeated root name", args: []string{"moln", "deploy"}, ran: deploy},
-		{name: "bare root name", args: []string{"moln"}, help: true},
-		{name: "positional equal to the root name", args: []string{"deploy", "moln"}, ran: deploy, set: map[string]string{deploy + " --target": "moln" + cmdFlag}},
+		{name: "alias path", args: []string{"proj", "list", "--org", "o"}, ran: ls, set: map[string]string{"myapp project --org": "o" + cmdFlag}},
+		{name: "repeated root name", args: []string{"myapp", "deploy"}, ran: deploy},
+		{name: "bare root name", args: []string{"myapp"}, help: true},
+		{name: "positional equal to the root name", args: []string{"deploy", "myapp"}, ran: deploy, set: map[string]string{deploy + " --target": "myapp" + cmdFlag}},
 		{name: "positional equal to a command name", args: []string{"deploy", "deploy"}, ran: deploy, set: map[string]string{deploy + " --target": "deploy" + cmdFlag}},
-		{name: "hidden command", args: []string{"secret"}, ran: "moln secret"},
+		{name: "hidden command", args: []string{"secret"}, ran: "myapp secret"},
 		{name: "no arguments", args: []string{}, help: true},
 		{name: "group alone shows help", args: []string{"project"}, help: true},
-		{name: "unknown command", args: []string{"nope"}, err: "unknown command: moln nope", kind: "usage"},
-		{name: "unknown command in a group", args: []string{"project", "nope"}, err: "unknown command: moln project nope", kind: "usage"},
-		{name: "help in the middle is a word", args: []string{"project", "help", "ls"}, err: "unknown command: moln project help", kind: "usage"},
+		{name: "unknown command", args: []string{"nope"}, err: "unknown command: myapp nope", kind: "usage"},
+		{name: "unknown command in a group", args: []string{"project", "nope"}, err: "unknown command: myapp project nope", kind: "usage"},
+		{name: "help in the middle is a word", args: []string{"project", "help", "ls"}, err: "unknown command: myapp project help", kind: "usage"},
 		{name: "non-ASCII case does not fold", args: []string{"Kache"}, err: "unknown command", kind: "usage"},
 
 		// Where flags may appear.
-		{name: "root flag before the path", args: []string{"-p", "p1", "deploy"}, ran: deploy, set: map[string]string{"moln --project": "p1" + appFlag}},
-		{name: "root flag after the path", args: []string{"deploy", "--project", "p1"}, ran: deploy, set: map[string]string{"moln --project": "p1" + appFlag}},
-		{name: "flag value equal to a command name", args: []string{"--env", "deploy", "deploy"}, ran: deploy, set: map[string]string{"moln --env": "deploy" + appFlag}},
-		{name: "group flag between path segments", args: []string{"project", "--org", "o", "ls"}, ran: ls, set: map[string]string{"moln project --org": "o" + cmdFlag}},
-		{name: "group flag after the leaf", args: []string{"project", "ls", "--org", "o", "-a"}, ran: ls, set: map[string]string{"moln project --org": "o" + cmdFlag, ls + " --all": "true" + cmdFlag}},
-		{name: "deeper flag before its command with =", args: []string{"--org=o", "project", "ls"}, ran: ls, set: map[string]string{"moln project --org": "o" + cmdFlag}},
+		{name: "root flag before the path", args: []string{"-p", "p1", "deploy"}, ran: deploy, set: map[string]string{"myapp --project": "p1" + appFlag}},
+		{name: "root flag after the path", args: []string{"deploy", "--project", "p1"}, ran: deploy, set: map[string]string{"myapp --project": "p1" + appFlag}},
+		{name: "flag value equal to a command name", args: []string{"--env", "deploy", "deploy"}, ran: deploy, set: map[string]string{"myapp --env": "deploy" + appFlag}},
+		{name: "group flag between path segments", args: []string{"project", "--org", "o", "ls"}, ran: ls, set: map[string]string{"myapp project --org": "o" + cmdFlag}},
+		{name: "group flag after the leaf", args: []string{"project", "ls", "--org", "o", "-a"}, ran: ls, set: map[string]string{"myapp project --org": "o" + cmdFlag, ls + " --all": "true" + cmdFlag}},
+		{name: "deeper flag before its command with =", args: []string{"--org=o", "project", "ls"}, ran: ls, set: map[string]string{"myapp project --org": "o" + cmdFlag}},
 		{name: "deeper switch before its command", args: []string{"--force", "deploy"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag}},
 		{name: "cluster before its command with a value flag", args: []string{"-fp", "deploy"}, err: "-p needs a value: write -fp=VALUE, or put the flags after the command", kind: "usage"},
-		{name: "cluster before its command with =", args: []string{"-fp=p1", "deploy"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "moln --project": "p1" + appFlag}},
-		{name: "cluster before its command, all switches", args: []string{"-fv", "deploy"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "moln --verbose": "true" + appFlag}},
-		{name: "deeper flag before its command, value separate", args: []string{"--org", "o", "project", "ls"}, err: "unknown command: moln o", kind: "usage"},
-		{name: "same name on root and leaf, after the leaf", args: []string{"show", "--project", "s1"}, ran: "moln show", set: map[string]string{"moln show --project": "s1" + cmdFlag}},
-		{name: "same name on root and leaf, before the leaf", args: []string{"--project", "r1", "show"}, ran: "moln show", set: map[string]string{"moln --project": "r1" + appFlag}},
+		{name: "cluster before its command with =", args: []string{"-fp=p1", "deploy"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "myapp --project": "p1" + appFlag}},
+		{name: "cluster before its command, all switches", args: []string{"-fv", "deploy"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "myapp --verbose": "true" + appFlag}},
+		{name: "deeper flag before its command, value separate", args: []string{"--org", "o", "project", "ls"}, err: "unknown command: myapp o", kind: "usage"},
+		{name: "same name on root and leaf, after the leaf", args: []string{"show", "--project", "s1"}, ran: "myapp show", set: map[string]string{"myapp show --project": "s1" + cmdFlag}},
+		{name: "same name on root and leaf, before the leaf", args: []string{"--project", "r1", "show"}, ran: "myapp show", set: map[string]string{"myapp --project": "r1" + appFlag}},
 
 		// Values: =, separate, empty, repeated, slices, dashes.
 		{name: "= value", args: []string{"deploy", "--region=eu"}, ran: deploy, set: map[string]string{deploy + " --region": "eu" + cmdFlag}},
@@ -193,23 +193,23 @@ func TestRoutingMatrix(t *testing.T) {
 		{name: "negative value, =", args: []string{"deploy", "--count=-5"}, ran: deploy, set: map[string]string{deploy + " --count": "-5" + cmdFlag}},
 		{name: "negative value, short", args: []string{"deploy", "-n", "-5"}, ran: deploy, set: map[string]string{deploy + " --count": "-5" + cmdFlag}},
 		{name: "negative value, attached", args: []string{"deploy", "-n-5"}, ran: deploy, set: map[string]string{deploy + " --count": "-5" + cmdFlag}},
-		{name: "negative positionals", args: []string{"calc", "-5", "-1.5"}, ran: "moln calc", set: map[string]string{"moln calc --x": "-5" + cmdFlag, "moln calc --y": "-1.5" + cmdFlag}},
-		{name: "negative positionals after --", args: []string{"calc", "--", "-5", "-1.5"}, ran: "moln calc", set: map[string]string{"moln calc --x": "-5" + cmdFlag, "moln calc --y": "-1.5" + cmdFlag}},
+		{name: "negative positionals", args: []string{"calc", "-5", "-1.5"}, ran: "myapp calc", set: map[string]string{"myapp calc --x": "-5" + cmdFlag, "myapp calc --y": "-1.5" + cmdFlag}},
+		{name: "negative positionals after --", args: []string{"calc", "--", "-5", "-1.5"}, ran: "myapp calc", set: map[string]string{"myapp calc --x": "-5" + cmdFlag, "myapp calc --y": "-1.5" + cmdFlag}},
 		{name: "negative number as a string value", args: []string{"deploy", "--name", "-1.5"}, ran: deploy, set: map[string]string{deploy + " --name": "-1.5" + cmdFlag}},
-		{name: "negative number in a group", args: []string{"-5"}, err: "unknown command: moln -5", kind: "usage"},
+		{name: "negative number in a group", args: []string{"-5"}, err: "unknown command: myapp -5", kind: "usage"},
 		{name: "overflowing negative number is a positional", args: []string{"deploy", "-1e999"}, ran: deploy, set: map[string]string{deploy + " --target": "-1e999" + cmdFlag}},
 		{name: "overflowing negative number for a float", args: []string{"calc", "-1e999"}, err: "invalid value for positional argument x", kind: "usage"},
 
 		// Short clusters and attached values, across the command chain.
-		{name: "cluster", args: []string{"deploy", "-fv"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "moln --verbose": "true" + appFlag}},
+		{name: "cluster", args: []string{"deploy", "-fv"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "myapp --verbose": "true" + appFlag}},
 		{name: "attached value", args: []string{"deploy", "-rus"}, ran: deploy, set: map[string]string{deploy + " --region": "us" + cmdFlag}},
 		{name: "cluster ending in a value flag", args: []string{"deploy", "-fr", "us"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
-		{name: "cluster with an attached value", args: []string{"deploy", "-vfrus"}, ran: deploy, set: map[string]string{"moln --verbose": "true" + appFlag, deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
+		{name: "cluster with an attached value", args: []string{"deploy", "-vfrus"}, ran: deploy, set: map[string]string{"myapp --verbose": "true" + appFlag, deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
 		{name: "cluster with an attached value after a value flag", args: []string{"deploy", "-frus"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
 		{name: "cluster with =", args: []string{"deploy", "-fr=us"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
 		{name: "cluster with an unknown letter", args: []string{"deploy", "-fz"}, err: "unknown flag: -z (in -fz)", kind: "usage"},
 		{name: "cluster with an unknown first letter", args: []string{"deploy", "-zf"}, err: "unknown flag: -zf", kind: "usage"},
-		{name: "Ambient flag in a cluster", args: []string{"deploy", "-fojson"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "moln --output": "json" + appFlag}},
+		{name: "Ambient flag in a cluster", args: []string{"deploy", "-fojson"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "myapp --output": "json" + appFlag}},
 
 		// Unknown flags and excess positionals.
 		{name: "unknown flag on a command", args: []string{"deploy", "--bogus"}, err: "unknown flag: --bogus", kind: "usage"},
@@ -227,19 +227,19 @@ func TestRoutingMatrix(t *testing.T) {
 		{name: "-h in a cluster", args: []string{"deploy", "-fh"}, help: true, set: map[string]string{deploy + " --force": "true" + cmdFlag}},
 
 		// A command with both Run and children.
-		{name: "Run and children, no argument", args: []string{"db"}, ran: "moln db"},
-		{name: "Run and children, a child", args: []string{"db", "migrate"}, ran: "moln db migrate"},
-		{name: "Run and children, another word", args: []string{"db", "users"}, ran: "moln db", set: map[string]string{"moln db --name": "users" + cmdFlag}},
+		{name: "Run and children, no argument", args: []string{"db"}, ran: "myapp db"},
+		{name: "Run and children, a child", args: []string{"db", "migrate"}, ran: "myapp db migrate"},
+		{name: "Run and children, another word", args: []string{"db", "users"}, ran: "myapp db", set: map[string]string{"myapp db --name": "users" + cmdFlag}},
 		{name: "Run and children, no positionals", args: []string{"cache", "stuff"}, err: "unexpected arguments: stuff", kind: "usage"},
 
 		// Required flags and extension commands.
 		{name: "required flag missing", args: []string{"mk"}, err: "missing required flags: --name", kind: "missing"},
-		{name: "required flag given", args: []string{"mk", "--name", "n"}, ran: "moln mk", set: map[string]string{"moln mk --name": "n" + cmdFlag}},
+		{name: "required flag given", args: []string{"mk", "--name", "n"}, ran: "myapp mk", set: map[string]string{"myapp mk --name": "n" + cmdFlag}},
 		{name: "required flag missing, Ambient flag given", args: []string{"-o", "json", "mk"}, err: "missing required flags: --name", kind: "missing"},
-		{name: "required flag given with an Ambient flag", args: []string{"mk", "--name", "n", "--output=json"}, ran: "moln mk", set: map[string]string{"moln mk --name": "n" + cmdFlag, "moln --output": "json" + appFlag}},
+		{name: "required flag given with an Ambient flag", args: []string{"mk", "--name", "n", "--output=json"}, ran: "myapp mk", set: map[string]string{"myapp mk --name": "n" + cmdFlag, "myapp --output": "json" + appFlag}},
 		{name: "group's required flag missing", args: []string{"project", "ls"}, err: "missing required flags: --org", kind: "missing"},
-		{name: "extension command skips ancestors' required", args: []string{"project", "doctor"}, ran: "moln project doctor"},
-		{name: "extension command at the root", args: []string{"version"}, ran: "moln version"},
+		{name: "extension command skips ancestors' required", args: []string{"project", "doctor"}, ran: "myapp project doctor"},
+		{name: "extension command at the root", args: []string{"version"}, ran: "myapp version"},
 	}
 
 	for _, c := range cases {
@@ -323,7 +323,7 @@ func TestRoutingAmbientFlagsKeepPrompting(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := newRoutingApp(t)
-			t.Setenv("MOLN_DISABLE_PROMPTS", "")
+			t.Setenv("MYAPP_DISABLE_PROMPTS", "")
 			p := &askPrompter{answers: map[string]string{"Name": "n", "Org": "o"}}
 			r.app.Interactive, r.app.Prompter = clix.InteractiveAlways, p
 			err := r.app.Run(bg, c.args)
