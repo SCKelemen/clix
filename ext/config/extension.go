@@ -35,12 +35,24 @@ import (
 // tree as JSON, encoded like clix.FormatData.
 //
 // `get` of a missing key is an error (exit code 1). `set` validates the
-// value against a registered schema and then rewrites the whole file (see
-// clix.ConfigManager.Save): a flat, key-sorted mapping of dotted keys to
-// strings, without the comments, nesting or lists of a hand-written file.
-// `unset` writes the file only when it removed something. `reset` deletes
-// the file (the target of a symlinked config path, keeping the link), and
-// it is the only config command that runs when the file is not valid YAML.
+// value against a registered schema and against every flag that reads the
+// key from the config file (clix.Flag.CheckValue), so it cannot store a
+// value that would make later runs fail, and then rewrites the whole file
+// (see clix.ConfigManager.Save): a flat, key-sorted mapping of dotted keys
+// to strings, without the comments, nesting or lists of a hand-written
+// file. Without a value, an interactive `set` asks for it. `unset` writes
+// the file only when it removed something. `reset` deletes the file (the
+// target of a symlinked config path, keeping the link).
+//
+// The config commands run even when the configuration is broken, since
+// they are how it gets fixed: a value from the file or the environment
+// that a flag rejects (format: xml) is ignored with a warning (see
+// clix.AllowConfigErrors). A file that is not valid YAML makes list, get,
+// set and unset fail with a hint to run reset, which always works.
+//
+// Keys of flags marked Sensitive hold secrets: `set` asks for them with
+// echo off and prints "key set" instead of the value, `list` shows
+// [redacted], and `get` refuses to print them unless --reveal is given.
 //
 // Example:
 //
@@ -146,10 +158,71 @@ func checkValue(app *clix.App, key, value string) (string, error) {
 	}
 	for _, f := range flagsForKey(app, key) {
 		if err := f.CheckValue(normalized); err != nil {
+			if f.Sensitive {
+				return "", fmt.Errorf("invalid value for config key %q, which sets --%s: %w", key, f.Name, err)
+			}
 			return "", fmt.Errorf("invalid value %q for config key %q, which sets --%s: %w", normalized, key, f.Name, err)
 		}
 	}
 	return normalized, nil
+}
+
+// redactedValue stands in for the value of a sensitive key in output.
+const redactedValue = "[redacted]"
+
+// sensitiveKey reports whether key supplies a flag marked Sensitive, such
+// as a token or password.
+func sensitiveKey(app *clix.App, key string) bool {
+	for _, f := range flagsForKey(app, key) {
+		if f.Sensitive {
+			return true
+		}
+	}
+	return false
+}
+
+// redactError removes value from err's message, for a sensitive key.
+func redactError(err error, value string) error {
+	if err == nil || value == "" || !strings.Contains(err.Error(), value) {
+		return err
+	}
+	return errors.New(strings.ReplaceAll(err.Error(), value, redactedValue))
+}
+
+// promptValue asks for the value of key, with echo off for a sensitive key,
+// re-asking until checkValue accepts the answer.
+func promptValue(ctx *clix.Context, app *clix.App, key string, sensitive bool) (string, error) {
+	prompter := app.Prompter
+	if prompter == nil {
+		var in io.Reader = os.Stdin
+		if app.In != nil {
+			in = app.In
+		}
+		var out io.Writer = os.Stderr
+		if app.Err != nil {
+			out = app.Err
+		}
+		prompter = clix.TextPrompter{In: in, Out: out}
+	}
+	answer, err := prompter.Prompt(ctx, clix.PromptRequest{
+		Label:  "Value",
+		Theme:  app.DefaultTheme,
+		Secret: sensitive,
+		Validate: func(v string) error {
+			if strings.TrimSpace(v) == "" {
+				return errors.New("value cannot be empty")
+			}
+			_, err := checkValue(app, key, v)
+			if sensitive {
+				err = redactError(err, v)
+			}
+			return err
+		},
+	})
+	if errors.Is(err, io.EOF) {
+		return "", fmt.Errorf("no input for --value: %w", err)
+	}
+	return answer, err
 }
 
 func configListCommand(app *clix.App) *clix.Command {
@@ -161,6 +234,11 @@ func configListCommand(app *clix.App) *clix.Command {
 			return err
 		}
 		values := app.Config.Values()
+		for key := range values {
+			if sensitiveKey(app, key) {
+				values[key] = redactedValue
+			}
+		}
 
 		format := clix.FormatText
 		if v, ok := app.Flags().String("format"); ok && v != "" {
@@ -198,6 +276,16 @@ func configGetCommand(app *clix.App) *clix.Command {
 		Value: &key,
 	})
 
+	var reveal bool
+	cmd.Flags.BoolVar(clix.BoolVarOptions{
+		FlagOptions: clix.FlagOptions{
+			Name:            "reveal",
+			Usage:           "Print the value even when it is a secret",
+			CommandLineOnly: true,
+		},
+		Value: &reveal,
+	})
+
 	clix.AllowConfigErrors(cmd)
 	cmd.Run = func(ctx *clix.Context) error {
 		keyPath, err := validateKeyPath(key)
@@ -208,8 +296,13 @@ func configGetCommand(app *clix.App) *clix.Command {
 			return err
 		}
 		if value, ok := app.Config.Get(keyPath); ok {
-			fmt.Fprintln(app.Out, value)
-			return nil
+			// A secret is printed only on request, so it does not end up in
+			// a terminal scrollback or a CI log by accident.
+			if !reveal && sensitiveKey(app, keyPath) {
+				return fmt.Errorf("config key %q holds a secret; add --reveal to print it", keyPath)
+			}
+			_, err := fmt.Fprintln(app.Out, value)
+			return err
 		}
 		return fmt.Errorf("config key %q not found", keyPath)
 	}
@@ -236,10 +329,10 @@ func configSetCommand(app *clix.App) *clix.Command {
 	})
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:       "value",
-			Usage:      "Value to set",
-			Required:   true,
-			Prompt:     "Value",
+			Name: "value",
+			// Not Required: when it is missing, Run asks for it itself, with
+			// echo off when the key holds a secret.
+			Usage:      "Value to set (asked for when missing)",
 			Positional: true,
 			// Only the command line: MYAPP_KEY or MYAPP_VALUE (often a
 			// secret) must not become the argument.
@@ -254,24 +347,42 @@ func configSetCommand(app *clix.App) *clix.Command {
 		if err != nil {
 			return err
 		}
+		if err := requireLoadable(app); err != nil {
+			return err
+		}
+		sensitive := sensitiveKey(app, keyPath)
+		if !cmd.Flags.Changed("value") {
+			// As for a required flag: a scripted call ("config set key")
+			// is an error, an interactive "config set" asks.
+			if cmd.Flags.Changed("key") || !app.IsInteractive() {
+				return &clix.MissingFlagsError{Flags: []string{"value"}}
+			}
+			if value, err = promptValue(ctx, app, keyPath, sensitive); err != nil {
+				return err
+			}
+		}
 		if strings.TrimSpace(value) == "" {
 			return errors.New("value cannot be empty")
 		}
 
-		if err := requireLoadable(app); err != nil {
-			return err
+		stored, err := checkValue(app, keyPath, value)
+		if sensitive {
+			err = redactError(err, value)
 		}
-		value, err = checkValue(app, keyPath, value)
 		if err != nil {
 			return err
 		}
 
-		app.Config.Set(keyPath, value)
+		app.Config.Set(keyPath, stored)
 		if err := app.SaveConfig(); err != nil {
 			return err
 		}
-		fmt.Fprintf(app.Out, "%s = %s\n", keyPath, value)
-		return nil
+		if sensitive {
+			_, err = fmt.Fprintf(app.Out, "%s set\n", keyPath)
+		} else {
+			_, err = fmt.Fprintf(app.Out, "%s = %s\n", keyPath, stored)
+		}
+		return err
 	}
 	return cmd
 }
