@@ -17,7 +17,10 @@ import (
 //
 // Run is not safe for concurrent use on the same App: it resets and fills
 // the flags of the command tree. Calling Run several times in sequence is
-// supported. To run commands in parallel, build one App per goroutine.
+// supported: each Run first restores every flag (and its destination
+// variable) to the value it held before the first Run, so values parsed by
+// one Run never leak into the next. To run commands in parallel, build one
+// App per goroutine.
 func (a *App) Run(ctx context.Context, args []string) error {
 	if a.Root == nil {
 		return errors.New("clix: no root command configured")
@@ -183,7 +186,6 @@ func (a *App) Run(ctx context.Context, args []string) error {
 func (a *App) parseCommandLine(args []string) (cmd *Command, positionals []string, stray string, err error) {
 	root := a.Root
 	cmd = root
-	path := []*Command{root}
 	scope := make([]*Command, len(args)) // command in effect for each flag token
 	isPath := make([]bool, len(args))    // tokens that name the command path
 	sawWord := false
@@ -217,13 +219,12 @@ scan:
 			}
 			isPath[i] = true
 			cmd = child
-			path = append(path, child)
 		}
 	}
 
-	for _, c := range path {
-		resetFlagState(c.Flags)
-	}
+	// Start every Run from the values flags held before the first one, so
+	// nothing parsed by a previous Run (on any command) carries over.
+	resetTree(root)
 
 	// Pass 2: parse flags and collect positionals.
 	for i := 0; i < len(args); i++ {

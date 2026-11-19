@@ -121,9 +121,11 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 }
 
 // resetFlagState forgets which flags were set by a previous parse, so an App
-// can be run more than once. The command-line-only --help and --version
-// switches are also turned back off; other values are left alone because
-// callers may pre-initialize their destination variables.
+// can be run more than once. The first reset of a flag records its value,
+// which keeps values callers pre-set in the destination variable (and the
+// flag's default); every later reset restores that value, so nothing a
+// previous Run parsed carries over. The command-line-only --help and
+// --version switches are always turned back off.
 func resetFlagState(fs *FlagSet) {
 	if fs == nil {
 		return
@@ -134,6 +136,44 @@ func resetFlagState(fs *FlagSet) {
 		f.source = SourceDefault
 		if isCommandLineOnly(f) {
 			_ = f.Value.(boolFlag).SetBool(false)
+		}
+		if f.restore == nil {
+			f.restore = snapshotValue(f.Value)
+		} else {
+			f.restore()
+		}
+	}
+}
+
+// resetTree resets the flags of cmd and every command below it.
+func resetTree(cmd *Command) {
+	if cmd == nil {
+		return
+	}
+	resetFlagState(cmd.Flags)
+	for _, child := range cmd.Children {
+		resetTree(child)
+	}
+}
+
+// valueSnapshotter is implemented by values that cannot be restored by
+// passing their String form back to Set, such as slices, whose Set
+// appends.
+type valueSnapshotter interface {
+	snapshot() func()
+}
+
+// snapshotValue returns a function that puts v back to its current value.
+// Values are restored by passing the current String form back to Set,
+// only when it has changed.
+func snapshotValue(v Value) func() {
+	if s, ok := v.(valueSnapshotter); ok {
+		return s.snapshot()
+	}
+	saved := v.String()
+	return func() {
+		if v.String() != saved {
+			_ = v.Set(saved)
 		}
 	}
 }
