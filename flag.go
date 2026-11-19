@@ -109,6 +109,8 @@ type Flag struct {
 	source Source // Internal: where a non-CLI value came from (env, config, or prompt) when set
 
 	restore func() // Internal: puts Value back as it was before the first Run
+
+	yieldsShort bool // Internal: the built-in --help, which gives up -h to a later flag
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.
@@ -759,10 +761,13 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 // Err. Registration does not panic on duplicates because existing programs
 // that happen to register a name twice must keep working.
 //
-// A short name that is already taken moves to the new flag, and the previous
-// owner loses its short name. This keeps the historical "newest wins" parsing
-// behavior (for example, a command may claim -h for --host) while making help
-// output and lookups agree on which flag owns the short name.
+// A short name is never taken from the flag that has it: a later flag with
+// the same short name is registered without one (its long name still
+// works), and the conflict is recorded in Err. This way an extension
+// applied at Run, such as a --version with -v, cannot take -v from an
+// app's own --verbose. The one exception is the built-in --help, which
+// gives -h up to a flag registered later, so a command may use -h for
+// --host.
 func (fs *FlagSet) addFlag(flag *Flag) {
 	if flag.Name == "" {
 		panic("flag requires a name")
@@ -782,12 +787,19 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 		fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s redefined in flag set %q; keeping the first definition", flag.Name, fs.name))
 		return
 	}
+	if flag.Short != "" {
+		if previous, taken := fs.index["-"+flag.Short]; taken && previous != flag {
+			if previous.yieldsShort {
+				previous.Short = ""
+			} else {
+				fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s cannot use -%s in flag set %q because --%s already has it; it is available only as --%s", flag.Name, flag.Short, fs.name, previous.Name, flag.Name))
+				flag.Short = ""
+			}
+		}
+	}
 	fs.flags = append(fs.flags, flag)
 	fs.index["--"+flag.Name] = flag
 	if flag.Short != "" {
-		if previous, taken := fs.index["-"+flag.Short]; taken && previous != flag {
-			previous.Short = ""
-		}
 		fs.index["-"+flag.Short] = flag
 	}
 }

@@ -137,20 +137,11 @@ type CommandOption interface {
 //	)
 //	cmd.Run = func(ctx *clix.Context) error { ... }
 func NewCommand(name string, opts ...CommandOption) *Command {
-	var help bool
 	cmd := &Command{
 		Name:  name,
 		Flags: NewFlagSet(name),
 	}
-
-	cmd.Flags.BoolVar(BoolVarOptions{
-		FlagOptions: FlagOptions{
-			Name:  "help",
-			Short: "h",
-			Usage: "Show help information",
-		},
-		Value: &help,
-	})
+	addHelpFlag(cmd.Flags)
 
 	for _, opt := range opts {
 		opt.ApplyCommand(cmd)
@@ -178,22 +169,13 @@ func NewCommand(name string, opts ...CommandOption) *Command {
 //		WithCommandLong("Detailed description..."),
 //	)
 func NewGroup(name, short string, children ...*Command) *Command {
-	var help bool
 	cmd := &Command{
 		Name:     name,
 		Short:    short,
 		Children: children,
 		Flags:    NewFlagSet(name),
 	}
-
-	cmd.Flags.BoolVar(BoolVarOptions{
-		FlagOptions: FlagOptions{
-			Name:  "help",
-			Short: "h",
-			Usage: "Show help information",
-		},
-		Value: &help,
-	})
+	addHelpFlag(cmd.Flags)
 
 	return cmd
 }
@@ -225,19 +207,33 @@ func (c *Command) prepare(parent *Command) {
 	}
 
 	if c.Flags.lookup("help") == nil {
-		c.Flags.BoolVar(BoolVarOptions{
-			FlagOptions: FlagOptions{
-				Name:  "help",
-				Short: "h",
-				Usage: "Show help information",
-			},
-		})
+		addHelpFlag(c.Flags)
 	}
 
 	for _, child := range c.Children {
 		if child != nil {
 			child.prepare(c)
 		}
+	}
+}
+
+// addHelpFlag registers the built-in --help switch on fs. It takes -h only
+// when no other flag has it, and gives -h up to a flag registered later
+// (such as --host), so help never takes a short name from a user's flag.
+func addHelpFlag(fs *FlagSet) {
+	short := "h"
+	if _, taken := fs.index["-h"]; taken {
+		short = ""
+	}
+	fs.BoolVar(BoolVarOptions{
+		FlagOptions: FlagOptions{
+			Name:  "help",
+			Short: short,
+			Usage: "Show help information",
+		},
+	})
+	if f := fs.lookup("help"); f != nil {
+		f.yieldsShort = true
 	}
 }
 
