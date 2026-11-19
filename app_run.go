@@ -120,7 +120,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 					return usageErrorf("unknown flag: %s", name)
 				}
 			}
-			return usageErrorf("unexpected arguments: %s", strings.Join(excess, " "))
+			if !cmd.Flags.takeRest(excess) {
+				return usageErrorf("unexpected arguments: %s", strings.Join(excess, " "))
+			}
 		}
 	}
 
