@@ -111,9 +111,46 @@ func TestConfigPathOverrides(t *testing.T) {
 		t.Fatalf("project = %q, want the value from App.ConfigPath", project)
 	}
 
-	fromEnv := filepath.Join(t.TempDir(), "env.yaml")
-	t.Setenv("MOLN_CONFIG", fromEnv)
-	if got, _ := app.ConfigFile(); got != fromEnv {
-		t.Fatalf("ConfigFile() = %q, want MOLN_CONFIG (%q) to win", got, fromEnv)
+	// <PREFIX>_CONFIG belongs to an app's own --config flag, not to clix.
+	t.Setenv("MOLN_CONFIG", filepath.Join(t.TempDir(), "env.yaml"))
+	if got, _ := app.ConfigFile(); got != custom {
+		t.Fatalf("ConfigFile() = %q, want App.ConfigPath (%q); MOLN_CONFIG must not move it", got, custom)
+	}
+}
+
+func TestAppConfigFlagKeepsItsEnvVar(t *testing.T) {
+	app, _, _ := newIsolatedApp(t, "app")
+	settings := filepath.Join(t.TempDir(), "settings.toml")
+	if err := os.WriteFile(settings, []byte("[server]\nport = 8080\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("APP_CONFIG", settings)
+
+	var config string
+	app.Flags().StringVar(StringVarOptions{FlagOptions: FlagOptions{Name: "config"}, Value: &config})
+	app.Root.AddCommand(NewCommand("serve", WithCommandRun(func(*Context) error { return nil })))
+	if err := app.Run(context.Background(), []string{"serve"}); err != nil {
+		t.Fatalf("Run error: %v (APP_CONFIG is the app's --config flag, not a clix config file)", err)
+	}
+	if config != settings {
+		t.Fatalf("--config = %q, want APP_CONFIG (%q)", config, settings)
+	}
+}
+
+func TestConfigFileCreatesItsDirectory(t *testing.T) {
+	app, _, _ := newIsolatedApp(t, "fresh")
+	path, err := app.ConfigFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("k: v\n"), 0o600); err != nil {
+		t.Fatalf("writing ConfigFile's path failed: %v", err)
+	}
+	info, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Fatalf("config directory mode = %o, want 0700", perm)
 	}
 }

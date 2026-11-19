@@ -8,20 +8,13 @@ import (
 // configFileName is the name of the config file inside the config directory.
 const configFileName = "config.yaml"
 
-// configEnvVar returns the name of the environment variable that overrides
-// the config file location: the app's EnvPrefix followed by "_CONFIG" (for
-// example, MYAPP_CONFIG).
-func (a *App) configEnvVar() string {
-	return a.envVarName("config")
-}
-
 // configFilePath resolves the config file location without touching the
-// filesystem. Precedence: the <EnvPrefix>_CONFIG environment variable, then
-// App.ConfigPath, then config.yaml in the default directory.
+// filesystem: App.ConfigPath, or config.yaml in the default directory.
+//
+// There is deliberately no environment variable for it: <EnvPrefix>_CONFIG
+// is what an app's own --config flag reads, and that file need not be clix
+// YAML.
 func (a *App) configFilePath() (string, error) {
-	if path := os.Getenv(a.configEnvVar()); path != "" {
-		return path, nil
-	}
 	if a.ConfigPath != "" {
 		return a.ConfigPath, nil
 	}
@@ -65,14 +58,21 @@ func (a *App) ConfigDir() (string, error) {
 	return dir, nil
 }
 
-// ConfigFile returns the path to the main configuration file. It does not
-// create the file or its directory.
+// ConfigFile returns the path to the main configuration file, creating its
+// directory (mode 0700) if it does not exist, so callers can write to the
+// path directly. It does not create the file.
 //
-// The location is, in order of precedence: the <EnvPrefix>_CONFIG
-// environment variable, App.ConfigPath, then config.yaml
-// in $XDG_CONFIG_HOME/<name> or ~/.config/<name>.
+// The location is App.ConfigPath when set, and otherwise config.yaml in
+// $XDG_CONFIG_HOME/<name> or ~/.config/<name>. Run does not call ConfigFile.
 func (a *App) ConfigFile() (string, error) {
-	return a.configFilePath()
+	path, err := a.configFilePath()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // SaveConfig persists the configuration manager's values to ConfigFile,

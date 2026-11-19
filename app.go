@@ -54,8 +54,7 @@ type App struct {
 
 	// ConfigPath overrides the location of the config file. When empty,
 	// config.yaml in $XDG_CONFIG_HOME/<name> (or ~/.config/<name>) is used.
-	// The <EnvPrefix>_CONFIG environment variable, when set, takes
-	// precedence over ConfigPath. See ConfigFile.
+	// See ConfigFile.
 	ConfigPath string
 
 	// Prompter handles interactive user input. Defaults to a TextPrompter
