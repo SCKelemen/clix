@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `clix/ext/prompt`: keys sent in the kitty keyboard protocol (CSI u), which Ghostty and other terminals keep sending after a program that turned the protocol on crashed, now read as their usual encoding would: Ctrl-C cancels, Esc clears or cancels, and Shift-Tab, Alt-Backspace and the Ctrl-letter editing keys work. They were ignored before, so a prompt could not be cancelled. Key release events (kitty's event types) are ignored instead of acting as presses.
+
+### Added
+
+- Key-sequence fixtures captured in Ghostty 1.3.1, with application cursor keys and the kitty keyboard protocol on as well as off, replayed by `TestTerminalKeyFixtures`; and an opt-in live test suite (`CLIX_LIVE_TERMINALS=ghostty,cmux`, macOS) that drives prompts, a survey and shell completion in Ghostty and cmux. See "Testing in real terminals" in the README.
+
 ## [2.6.0] - 2026-11-19
 
 ### Added

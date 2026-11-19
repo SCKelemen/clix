@@ -483,6 +483,16 @@ Raw mode keys:
 
 Text is edited by user-perceived character: `José 日本`, combining accents and emoji sequences are never split, and the cursor is placed by display width (East Asian wide characters take two columns). Pasted text is inserted without acting on it (bracketed paste is on while a prompt is open); a single-line prompt keeps the first line of a multi-line paste. Esc is told apart from Alt+key and from escape sequences by a 50 ms pause (as in Neovim); a paste stays a paste even when it stalls. A prompt opened inside another prompt (for example from `Validate`) shares its raw mode, and SIGINT or SIGTERM always puts the terminal back as it was before the outermost prompt. Keys a prompt does not use, such as unbound function keys, are ignored. Option lists taller than the terminal scroll in a window and redraw when the terminal is resized. Outside UTF-8 locales (decided by `LC_ALL`, `LC_CTYPE` and `LANG`), symbols fall back to ASCII. There is no type-to-filter in select prompts.
 
+A prompt keeps working when another program, for example one that crashed, left application cursor keys (DECCKM) or the kitty keyboard protocol on: arrows and Home/End read the same in both cursor modes, and kitty's CSI u keys read as their usual encoding would (Ctrl-C still cancels, Esc still clears or cancels), with key releases ignored. Prompts do not change either mode.
+
+#### Tested terminals
+
+Raw-mode key decoding is checked against the sequences these terminals send:
+
+- **Ghostty 1.3.1**, verified live on macOS. Every key, typed text and paste of a key matrix was captured from Ghostty's own key encoder in three modes (as a prompt sets up the terminal, with application cursor keys on, and with the kitty keyboard protocol on) and is replayed in CI from [`ext/prompt/testdata/keys/ghostty-1.3.1.json`](ext/prompt/testdata/keys/ghostty-1.3.1.json). Text, select, multi-select, confirm and secret prompts, a survey, paste, Esc and Ctrl-C cancellation (with the terminal settings restored), NO_COLOR, `TERM=xterm-ghostty` and shell completion in zsh, bash 3.2 and bash 5 with Ghostty's shell integration loaded were run in Ghostty itself.
+- **cmux 0.62.2**: the live suite drives cmux through its CLI, with screen reads for rendering, resizing and completion listings, but needs to run from a terminal inside cmux (see [Contributing](#contributing)); it has not been run yet, so cmux has no captured fixture.
+- **xterm, iTerm2, Terminal.app, kitty, rxvt, tmux, screen and the Linux console**, through fixtures: table tests of the sequences they send, in [`ext/prompt/keys_test.go`](ext/prompt/keys_test.go).
+
 Line mode answers:
 
 - **Text**: the line, trimmed of surrounding spaces (secrets are not trimmed). An empty line gives the default.
@@ -1132,6 +1142,19 @@ We welcome issues and pull requests. To keep the review cycle short:
 4. `examples/bubbles`, `examples/lipgloss`, `examples/multicli`, and `examples/survey` are separate modules: run `go build ./...`, `go vet ./...`, and `go test ./...` inside each one, and keep its `go.mod` tidy with `go mod tidy`.
 5. Run `golangci-lint run ./...`. CI pins golangci-lint v2.15.0 and lints the whole root module, which has no findings, so any finding fails the job; fix it in code rather than adding an exclusion to [`.golangci.yml`](.golangci.yml).
 6. Include tests and docs for new behavior, and add an entry under `Unreleased` in [`CHANGELOG.md`](CHANGELOG.md).
+
+### Testing in real terminals
+
+The prompt and completion tests run in pseudo-terminals everywhere. An opt-in suite also runs them in real terminal emulators on macOS; it is skipped unless `CLIX_LIVE_TERMINALS` names the terminals, so CI never runs it:
+
+```bash
+CLIX_LIVE_TERMINALS=ghostty go test -run TestLive -v ./ext/prompt ./ext/autocomplete
+```
+
+- `TestLiveKeyCapture` runs a key probe in the terminal (set up exactly as a raw-mode prompt sets it up) and sends a key matrix through the terminal's own key API in three modes; the bytes must match the committed fixture in `ext/prompt/testdata/keys`, and `CLIX_LIVE_CAPTURE=1` rewrites it. `TestLivePrompts` drives a demo app's prompts and a survey and checks the answers, that secrets never reach the terminal, NO_COLOR, and that `stty -a` is unchanged after every run, including cancelled ones. `TestLiveCompletion` completes in zsh and bash with the terminal's shell integration loaded.
+- The tests open their own windows (Ghostty) or workspaces (cmux), check the title or marker the program inside shows before sending anything, send keys only to them by ID, and close them at the end. A new window takes the keyboard focus, so do not type while the suite runs.
+- Ghostty is driven through AppleScript: macOS asks once whether the terminal you run the tests from may control Ghostty (System Settings > Privacy & Security > Automation).
+- cmux is driven through its `cmux` CLI. Start it with `open -a cmux` and run the tests from a terminal inside cmux: cmux's default socket mode ("cmux processes only") refuses other processes, and the tests skip when `cmux ping` fails.
 
 If you plan a larger change, feel free to open an issue first so we can discuss the approach.
 
