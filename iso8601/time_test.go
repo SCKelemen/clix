@@ -234,6 +234,7 @@ func TestParseTimeRFC3339Examples(t *testing.T) {
 }
 
 func TestParseTimeRejected(t *testing.T) {
+	newYork := mustLoad(t, "America/New_York") // local mean time -4:56:02 until 1883
 	tests := []struct {
 		in     string
 		loc    *time.Location
@@ -292,6 +293,8 @@ func TestParseTimeRejected(t *testing.T) {
 		{"2026-11-19T10:59:60Z", nil, 17, `leap second is only valid at 23:59:60 UTC on the last day of a month`},
 		{"2026-11-19T23:59:60Z", nil, 17, `leap second is only valid at 23:59:60 UTC on the last day of a month`},
 		{"2016-12-31T23:59:60+01:00", nil, 17, `leap second is only valid at 23:59:60 UTC on the last day of a month`},
+		{"1850-12-31T19:02:60", newYork, 17, `leap second is only valid at 23:59:60 UTC on the last day of a month`},
+		{"2026-12-31T23:59:60", time.FixedZone("", 30), 17, `leap second is only valid at 23:59:60 UTC on the last day of a month`},
 		{"2026-11-19T10:00:00+24:00", nil, 20, `offset hour 24 is out of range 00-23`},
 		{"2026-11-19T10:00:00+01:60", nil, 23, `offset minute 60 is out of range 00-59`},
 		{"2026-11-19T10:00:00+1", nil, 21, `expected 2-digit offset hour, found end of input`},

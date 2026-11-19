@@ -100,8 +100,10 @@ func ParseTime(s string, loc *time.Location) (time.Time, error) {
 	if tod.sec == 60 {
 		// ITU-R TF.460-6 §2.1 places a leap second at the end of a UTC
 		// month, so it is valid only at 23:59:60 UTC on a month's last day.
+		// Checking the second matters when loc's offset has a seconds part,
+		// such as local mean time: there, :59 local is not :59 UTC.
 		u := t.UTC()
-		if u.Hour() != 23 || u.Minute() != 59 || u.Day() != daysIn(u.Month(), u.Year()) {
+		if u.Hour() != 23 || u.Minute() != 59 || u.Second() != 59 || u.Day() != daysIn(u.Month(), u.Year()) {
 			return time.Time{}, p.errorf(tod.secPos, "leap second is only valid at 23:59:60 UTC on the last day of a month")
 		}
 	}
