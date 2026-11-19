@@ -131,6 +131,37 @@ func TestFlagsRegisteredDuringRunCannotTakeNames(t *testing.T) {
 	assertValidate(t, app, `o: clix: a flag registered during Run: -q is used by extension #1 (clix_test.extensionFunc)'s --quiet; quick is available as --quick only`)
 }
 
+// A Run started by a handler ended the outer Run's running state, so a
+// flag the outer handler registered after it counted as the app's and
+// took -v from ext/version.
+func TestFlagsRegisteredAfterNestedRunCannotTakeNames(t *testing.T) {
+	for _, nested := range []bool{false, true} {
+		app, _ := newTestApp(t, "o")
+		app.AddExtension(version.Extension{Version: "1.0"})
+		var late bool
+		sub := clix.NewCommand("sub", clix.WithCommandRun(func(ctx *clix.Context) error {
+			if nested {
+				if err := app.Run(ctx, []string{"ls"}); err != nil {
+					return err
+				}
+			}
+			app.Flags().BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "late", Short: "v"}, Value: &late})
+			return nil
+		}))
+		app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(noop)))
+		app.Root.AddCommand(sub)
+		if err := app.Run(bg, []string{"sub"}); err != nil {
+			t.Fatal(err)
+		}
+		if f := app.Flags().Lookup("version"); f == nil || f.Short != "v" {
+			t.Errorf("nested=%v: a flag registered during Run took -v from ext/version", nested)
+		}
+		if f := app.Flags().Lookup("late"); f == nil || f.Short != "" {
+			t.Errorf("nested=%v: --late has -%s", nested, f.Short)
+		}
+	}
+}
+
 // A flag added to an extension's command belongs to that extension,
 // whenever it is registered; while another extension's Extend runs, it
 // belongs to that one. Two extensions of the same type are told apart by

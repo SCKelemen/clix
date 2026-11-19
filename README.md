@@ -311,7 +311,13 @@ func TestCLIDefinition(t *testing.T) {
 
 #### Running more than once
 
-`Run` can be called repeatedly on one `App`, as tests and REPLs do: every run first restores each flag, and its bound variable, to the value it held before the first run. `Run` is not safe for concurrent use on one `App`; build one `App` per goroutine.
+`Run` can be called repeatedly on one `App`, as tests and REPLs do. Each run first undoes what the previous run did: a flag that run set, from any source, goes back with its bound variable to the value it had when that run started, so `rm --force` followed by `rm` does not keep `--force`. A value your program assigned to a bound variable between two runs is kept instead. `Run` tells that it was assigned because it differs from what the previous run left, so assigning exactly that value (`region = "eu"` after a run with `--region eu`) is undone like the rest; pass such a value on the command line, or make it the flag's `Default`.
+
+Built-in values are put back exactly. A custom `Value` (see `FlagSet.Var`) is put back by its `Reset` method, which `Run` calls whenever the previous run called `Set` on it, whatever its `String` returns, so a secret that prints as `<redacted>` is reset too. `Run` never passes `String`'s text back to `Set`, so a custom value that should not start from its zero state needs a `Default`, which every run applies again. A custom `Value` without `Reset` keeps what a run set, and `Validate` reports that.
+
+A handler may call `Run` itself, for an alias command or an interactive shell. The nested run starts from the outer run's values, with no flag set yet, and when it returns it puts back everything it changed, so the handler continues with its own values, `Changed` and `Source`, and nothing leaks into later runs. A custom value that the nested run set is reset rather than restored.
+
+`Run` is not safe for concurrent use on one `App`; build one `App` per goroutine.
 
 #### Typed configuration access (optional schema)
 

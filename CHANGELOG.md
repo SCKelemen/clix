@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `App.CaseSensitive` matches command names and aliases exactly.
 - `FlagSet.Var` (`VarOptions`, `WithValue`, `WithVarDefault`) registers a flag with a custom `Value`; a value with `SetBool`, or `IsBoolFlag()` returning true, is a switch.
 - `FlagSet.StringSliceVar` (`StringSliceValue`, `StringSliceVarOptions`, `WithStringSliceValue`, `WithStringSliceDefault`) and `FlagSet.StringSlice`: repeatable string flags. Text from the command line or the environment is split on commas with surrounding spaces trimmed, and an item in double quotes may contain commas; a YAML list in the config file is used item by item.
-- A `Reset()` method on the built-in values. A custom `Value` with one is reset between runs of one `App`.
+- A `Reset()` method on the built-in values. A custom `Value` with one is reset between runs of one `App` whenever a run called `Set` on it, whatever its `String` returns.
 - `BoolVarOptions.Default` and `WithBoolDefault`.
 - `FlagSet.Lookup`, `FlagSet.Changed` (set on the command line), `Flag.Source` and `FlagSet.Duration`.
 - `Context.Int`, `Int64`, `Float64`, `Duration` and `EffectiveDuration`.
@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Root and group flags were second-class: a `Required` flag on `app.Flags()` or on a group was never enforced for subcommands, environment variables and the config file never filled a group's flags, and `Context` getters could not see them. Commands with `IsExtensionCommand` set skip the required flags of the commands above them.
-- Values leaked between runs of one `App`: `rm --force` followed by `rm` still had `force` set. Each `Run` now undoes what the previous `Run` set in every flag and its bound variable, unless the program assigned the variable since, so values set between runs are kept. Built-in values are put back exactly; a custom `Value` needs a `Reset` method.
+- Values leaked between runs of one `App`: `rm --force` followed by `rm` still had `force` set. Each `Run` now undoes what the previous `Run` set in every flag and its bound variable, unless the program assigned the variable since (noticed as a value different from what the previous `Run` left), so values set between runs are kept. Built-in values are put back exactly; a custom `Value` needs a `Reset` method, which is called whenever the previous `Run` called `Set` on it. `Run` never passes `String`'s text back to `Set`, so a value whose `String` is redacted or is not text `Set` accepts (`map[team:a]`) is reset too. A `Run` called from a handler (an alias command, a shell) starts from the outer `Run`'s values and puts back everything it changed when it returns, so the outer handler keeps its values, `Changed` and `Source`, flags it registers afterwards still count as registered during `Run`, and nothing leaks into later runs.
 - Flags registered with `app.Flags()` before `app.Root` was replaced were silently dropped (and `--project p1 ls` failed with `unknown command: moln p1`); they now move to the new root.
 - `app.Flags().SetStrict(true)` was undone by every `Flags()` call, which also raced with handlers calling it concurrently.
 - A first word equal to the root's name was always skipped, so `echo Echo` lost its argument and a child named like the app was unreachable. It is now skipped only when nothing else can use it.

@@ -195,6 +195,7 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 		if bf := switchOf(flag.Value); bf != nil {
 			// A bare switch means "true"; Validate sees it exactly as if
 			// --name=true had been written.
+			flag.touched = true
 			if err := bf.SetBool(true); err != nil {
 				return usageErrorf("invalid value for %s: %w", flag.Name, err)
 			}
@@ -213,7 +214,7 @@ func setFromArg(flag *Flag, name, value string, hasValue bool, next func() (stri
 		value = v
 	}
 
-	if err := flag.Value.Set(value); err != nil {
+	if err := flag.setValue(value); err != nil {
 		return usageErrorf("invalid value for %s: %w", flag.Name, err)
 	}
 	if flag.Validate != nil {

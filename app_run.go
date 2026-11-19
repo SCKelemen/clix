@@ -24,8 +24,12 @@ import (
 // supported: each Run first undoes what the previous Run set in every flag
 // and its destination variable, so values parsed by one Run never leak
 // into the next, while a value the program assigned between two Runs is
-// kept. Custom values need a Reset method for this (see FlagSet.Var). To
-// run commands in parallel, build one App per goroutine.
+// kept. Custom values need a Reset method for this (see FlagSet.Var). A
+// handler may call Run itself (an alias command, an interactive shell):
+// that nested Run starts from the values the outer Run has, and when it
+// returns it puts back everything it changed, so the handler continues
+// with its own values, Changed and Source. To run commands in parallel,
+// build one App per goroutine.
 func (a *App) Run(ctx context.Context, args []string) error {
 	if a.Root == nil {
 		return errors.New("clix: no root command configured")
@@ -57,13 +61,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	rootFlags := a.Root.Flags
 
 	// Undo what the previous Run set (unless the program changed it
-	// since), and record what this one changes.
-	if err := a.startRun(); err != nil {
-		return err
-	}
-	a.running = true
-	defer func() { a.running = false }()
-	defer a.finishRun()
+	// since), and record what this one changes. A nested Run (started by
+	// a handler) puts back what it changed when it ends.
+	end := a.startRun()
+	defer end()
 
 	// Find the command first, then parse every flag exactly once: flags bind
 	// to the innermost command that defines them and fall back to the root.
@@ -642,7 +643,7 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 // setAndValidate parses raw into flag and then runs the flag's Validate
 // function, mirroring what the command-line parser does.
 func setAndValidate(flag *Flag, raw string) error {
-	if err := flag.Value.Set(raw); err != nil {
+	if err := flag.setValue(raw); err != nil {
 		return err
 	}
 	if flag.Validate != nil {
@@ -750,7 +751,7 @@ func (a *App) trySetFromDefault(flag *Flag) error {
 	if !flag.hasDefault() {
 		return nil
 	}
-	if err := flag.Value.Set(flag.Default); err != nil {
+	if err := flag.setValue(flag.Default); err != nil {
 		return fmt.Errorf("clix: invalid default %q for --%s: %w", flag.Default, flag.Name, err)
 	}
 	return nil

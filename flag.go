@@ -128,12 +128,13 @@ type Flag struct {
 	source Source // Internal: where a non-CLI value came from (env, config, or prompt) when set
 
 	// Internal: what the last Run did to the value (see App.startRun).
-	undoRun    func() error // puts Value back as it was before the last Run; nil when it cannot
-	beforeRun  string       // Value.String() when the last Run started
-	afterRun   string       // Value.String() when the last Run ended
-	runChanged bool         // the last Run changed the value
-	tracked    bool         // beforeRun was recorded (false for a flag registered during a Run)
-	leakNoted  bool         // a carried-over value was recorded in the FlagSet's errors
+	undoRun    func() // puts Value back as it was before the last Run; nil when it cannot
+	beforeRun  string // Value.String() when the last Run started
+	afterRun   string // Value.String() when the last Run ended
+	touched    bool   // the Run called Set on the value, from any source (see Flag.setValue)
+	runChanged bool   // the last Run changed the value
+	tracked    bool   // beforeRun was recorded (false for a flag registered during a Run)
+	leakNoted  bool   // a carried-over value was recorded in the FlagSet's errors
 
 	yieldsShort bool // Internal: the built-in --help, which gives up -h to any other flag
 	badDefault  bool // Internal: Default does not parse, so the flag has no default
