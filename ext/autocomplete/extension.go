@@ -2,23 +2,29 @@ package autocomplete
 
 import (
 	"fmt"
-	"sort"
+	"io"
+	"os"
 	"strings"
 
 	"github.com/SCKelemen/clix/v2"
 )
 
-// Extension adds the autocomplete command to a clix app.
-// This provides shell completion script generation for bash, zsh, and fish.
+// Extension adds shell completion to a clix app.
+// It supports bash (3.2 and later), zsh, fish and PowerShell.
 //
 // The extension adds:
 //
-//	cli autocomplete [bash|zsh|fish] - Generate completion script for the specified shell
+//	cli autocomplete [bash|zsh|fish|powershell] - Print the completion script for the shell
+//	cli __complete ...                          - Hidden: print candidates (called by the scripts)
 //
-// The shell may also be given as --shell.
+// The shell may also be given as --shell; pwsh is accepted for powershell.
 //
-// The generated scripts include all commands, groups, flags, and aliases
-// from your application's command tree.
+// The scripts are thin wrappers that ask the program itself for the
+// candidates (see NewCompleteCommand), so completion always matches the
+// installed version and follows the command tree exactly: commands and
+// aliases where they are valid (never hidden ones), the flags in scope at
+// the cursor, and flag and argument values from completion hooks
+// registered with clix.FlagSet.SetCompletion.
 //
 // Example:
 //
@@ -31,13 +37,18 @@ import (
 //	app.AddExtension(autocomplete.Extension{})
 //	// Now your app has: myapp autocomplete [shell]
 //
-//	// Users can generate and install completion:
-//	//   myapp autocomplete bash > /etc/bash_completion.d/myapp
-//	//   myapp autocomplete zsh > ~/.zsh/completions/_myapp
+//	// Users can load completion in the current shell:
+//	//   source <(myapp autocomplete bash)          # bash
+//	//   source <(myapp autocomplete zsh)           # zsh, after compinit
+//	//   myapp autocomplete fish | source           # fish
+//	// or install it:
+//	//   myapp autocomplete bash > ~/.local/share/bash-completion/completions/myapp
+//	//   myapp autocomplete zsh > "${fpath[1]}/_myapp"
 //	//   myapp autocomplete fish > ~/.config/fish/completions/myapp.fish
+//	//   myapp autocomplete powershell > myapp.ps1  # then dot-source it from $PROFILE
 type Extension struct {
 	// Extension has no configuration options.
-	// Simply add it to your app to enable autocomplete command generation.
+	// Simply add it to your app to enable shell completion.
 }
 
 // Extend implements clix.Extension.
@@ -50,7 +61,7 @@ func (Extension) Extend(app *clix.App) error {
 	if findChild(app.Root, "autocomplete") == nil {
 		app.Root.AddCommand(NewAutocompleteCommand(app))
 	}
-
+	ensureCompleteCommand(app)
 	return nil
 }
 
@@ -62,190 +73,93 @@ func findChild(cmd *clix.Command, name string) *clix.Command {
 	return nil
 }
 
-// NewAutocompleteCommand provides shell completion scripts.
+// ensureCompleteCommand adds the hidden __complete command to the app's
+// root unless the root already has one.
+func ensureCompleteCommand(app *clix.App) {
+	if app.Root != nil && findChild(app.Root, completeName) == nil {
+		app.Root.AddCommand(NewCompleteCommand(app))
+	}
+}
+
+// NewAutocompleteCommand provides shell completion scripts. The scripts
+// call the hidden __complete command (see NewCompleteCommand), so
+// NewAutocompleteCommand also adds that command to app.Root when it is not
+// there yet.
 func NewAutocompleteCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("autocomplete")
 	cmd.Short = "Generate shell completion script"
-	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish]", app.Name)
+	cmd.Usage = fmt.Sprintf("%s autocomplete [bash|zsh|fish|powershell]", app.Name)
+	cmd.Long = installHelp(app.Name)
 	cmd.IsExtensionCommand = true
 
 	var shell string
 	cmd.Flags.StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
 			Name:       "shell",
-			Usage:      "Shell type (bash, zsh, fish)",
+			Usage:      "Shell type (bash, zsh, fish, powershell)",
 			Positional: true,
 		},
 		Value: &shell,
 	})
+	cmd.Flags.SetCompletion("shell", clix.CompleteValues(shells...))
 
 	cmd.Run = func(ctx *clix.Context) error {
 		if shell == "" {
 			// Show help if no shell provided
 			helper := clix.HelpRenderer{App: app, Command: cmd}
-			return helper.Render(app.Out)
+			return helper.Render(output(app))
 		}
-		shell = strings.ToLower(shell)
-		script, err := generateCompletionScript(app, shell)
+		text, err := script(app.Name, shell)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(app.Out, script)
-		return nil
+		if app.Root != nil && findChild(app.Root, completeName) == nil {
+			// The script would have nothing to call.
+			_, _ = fmt.Fprintf(errOutput(app), "warning: %s has no %s command; add autocomplete.NewCompleteCommand(app) to the root command\n", app.Name, completeName)
+		}
+		// Only the script goes to standard output, so it can be redirected
+		// to a file or sourced as it is.
+		_, err = io.WriteString(output(app), text)
+		return err
 	}
+	ensureCompleteCommand(app)
 	return cmd
 }
 
-func generateCompletionScript(app *clix.App, shell string) (string, error) {
-	commands := collectCompletionEntries(app.Root)
-	switch shell {
-	case "bash":
-		return bashCompletion(app.Name, commands), nil
-	case "zsh":
-		return zshCompletion(app.Name, commands), nil
-	case "fish":
-		return fishCompletion(app.Name, commands), nil
-	default:
-		return "", fmt.Errorf("unsupported shell: %s", shell)
-	}
+// installHelp returns the autocomplete command's long help: how to load
+// and install each script.
+func installHelp(name string) string {
+	return strings.NewReplacer("@NAME@", name, "@ZFUNC@", "_"+identifier(name)).Replace(`Print a shell completion script on standard output.
+
+Completion asks @NAME@ itself for candidates, so it always matches the
+installed version: commands where they are valid, the flags in scope, and
+values for flags and arguments.
+
+bash (3.2 or later):
+  source <(@NAME@ autocomplete bash)
+  # or install it for bash-completion:
+  @NAME@ autocomplete bash > ~/.local/share/bash-completion/completions/@NAME@
+
+zsh:
+  source <(@NAME@ autocomplete zsh)    # after compinit
+  # or install it as @ZFUNC@ in a directory on $fpath, before compinit runs:
+  @NAME@ autocomplete zsh > "${fpath[1]}/@ZFUNC@"
+
+fish:
+  @NAME@ autocomplete fish | source
+  # or install it:
+  @NAME@ autocomplete fish > ~/.config/fish/completions/@NAME@.fish
+
+PowerShell:
+  @NAME@ autocomplete powershell > @NAME@.ps1
+  # then dot-source it from your profile ($PROFILE):
+  . /path/to/@NAME@.ps1`)
 }
 
-type completionEntry struct {
-	Token string
-	Help  string
-}
-
-// collectCompletionEntries gathers command names, aliases, and flags from
-// the command tree. Hidden commands (and everything below them) are left
-// out, matching help output.
-func collectCompletionEntries(cmd *clix.Command) []completionEntry {
-	entries := make(map[string]string)
-	var walk func(*clix.Command)
-	walk = func(c *clix.Command) {
-		entries[c.Name] = c.Short
-		for _, alias := range c.Aliases {
-			entries[alias] = c.Short
-		}
-		if c.Flags != nil {
-			for _, flag := range c.Flags.Flags() {
-				entries["--"+flag.Name] = flag.Usage
-				if flag.Short != "" {
-					entries["-"+flag.Short] = flag.Usage
-				}
-			}
-		}
-		for _, child := range c.VisibleChildren() {
-			if child == nil || child.Hidden {
-				continue
-			}
-			walk(child)
-		}
+// errOutput returns the app's error output.
+func errOutput(app *clix.App) io.Writer {
+	if app.Err != nil {
+		return app.Err
 	}
-	walk(cmd)
-
-	keys := make([]string, 0, len(entries))
-	for token := range entries {
-		keys = append(keys, token)
-	}
-	sort.Strings(keys)
-
-	result := make([]completionEntry, 0, len(keys))
-	for _, token := range keys {
-		result = append(result, completionEntry{Token: token, Help: entries[token]})
-	}
-
-	return result
-}
-
-func bashCompletion(name string, entries []completionEntry) string {
-	var tokens []string
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Token, "-") {
-			tokens = append(tokens, entry.Token)
-		}
-	}
-	for _, entry := range entries {
-		if !strings.HasPrefix(entry.Token, "-") {
-			tokens = append(tokens, entry.Token)
-		}
-	}
-	options := strings.Join(tokens, " ")
-	return fmt.Sprintf(`_%s_completions() {
-    local cur="${COMP_WORDS[COMP_CWORD]}"
-    COMPREPLY=( $(compgen -W "%s" -- "$cur") )
-}
-complete -F _%s_completions %s`, name, options, name, name)
-}
-
-func zshCompletion(name string, entries []completionEntry) string {
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("#compdef %s\n", name))
-	builder.WriteString("_arguments '*: :->cmds'\ncase $state in\n  cmds)\n    _values \"Commands\" ")
-	for _, entry := range entries {
-		if strings.HasPrefix(entry.Token, "-") {
-			continue
-		}
-		builder.WriteString(zshValue(entry))
-		builder.WriteString(" ")
-	}
-	builder.WriteString(";;\n  *)\n    _values 'Flags' ")
-	for _, entry := range entries {
-		if !strings.HasPrefix(entry.Token, "-") {
-			continue
-		}
-		builder.WriteString(zshValue(entry))
-		builder.WriteString(" ")
-	}
-	builder.WriteString(";;\nesac")
-	return builder.String()
-}
-
-// zshValue renders an entry as a single-quoted _values item, "name[help]".
-func zshValue(entry completionEntry) string {
-	// Inside _values items, backslash, brackets, and colons are special.
-	escape := strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`, `:`, `\:`)
-	return shellSingleQuote(escape.Replace(entry.Token) + "[" + escape.Replace(entry.Help) + "]")
-}
-
-// shellSingleQuote quotes s for POSIX-style shells such as bash and zsh.
-// A single quote cannot appear inside single quotes, so each one becomes
-// '\” (close, escaped quote, reopen).
-func shellSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
-// fishQuote quotes s for fish, where only \\ and \' are escapes inside
-// single quotes.
-func fishQuote(s string) string {
-	return "'" + strings.NewReplacer(`\`, `\\`, `'`, `\'`).Replace(s) + "'"
-}
-
-func fishCompletion(name string, entries []completionEntry) string {
-	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("complete -c %s -f\n", name))
-	for _, entry := range entries {
-		desc := entry.Help
-		if strings.HasPrefix(entry.Token, "--") {
-			builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -l %s", name, fishQuote(strings.TrimPrefix(entry.Token, "--"))))
-			if desc != "" {
-				builder.WriteString(" -d " + fishQuote(desc))
-			}
-			builder.WriteString("\n")
-			continue
-		}
-		if strings.HasPrefix(entry.Token, "-") {
-			builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -s %s", name, fishQuote(strings.TrimPrefix(entry.Token, "-"))))
-			if desc != "" {
-				builder.WriteString(" -d " + fishQuote(desc))
-			}
-			builder.WriteString("\n")
-			continue
-		}
-		builder.WriteString(fmt.Sprintf("complete -c %s -f -n '__fish_use_subcommand' -a %s", name, fishQuote(entry.Token)))
-		if desc != "" {
-			builder.WriteString(" -d " + fishQuote(desc))
-		}
-		builder.WriteString("\n")
-	}
-	return builder.String()
+	return os.Stderr
 }
