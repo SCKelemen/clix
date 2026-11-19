@@ -70,13 +70,6 @@ func (o multiSelectOption) Apply(cfg *clix.PromptConfig) {
 	cfg.MultiSelect = true
 }
 
-// confirmOption implements PromptOption for confirmation prompts.
-type confirmOption struct{}
-
-func (o confirmOption) Apply(cfg *clix.PromptConfig) {
-	cfg.Confirm = true
-}
-
 // continueTextOption implements PromptOption for setting continue text.
 type continueTextOption struct {
 	text string

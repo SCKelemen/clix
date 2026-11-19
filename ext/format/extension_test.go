@@ -10,25 +10,35 @@ import (
 	"github.com/SCKelemen/clix/v2/ext/format"
 )
 
-func newAppWithFormat() *clix.App {
+func newAppWithFormat(t *testing.T) *clix.App {
+	t.Helper()
 	app := clix.NewApp("test")
 	app.AddExtension(format.Extension{})
 	// Apply extensions eagerly so flags are registered before Parse.
-	app.ApplyExtensions()
+	if err := app.ApplyExtensions(); err != nil {
+		t.Fatal(err)
+	}
 	return app
+}
+
+func parse(t *testing.T, app *clix.App, args ...string) {
+	t.Helper()
+	if _, err := app.Flags().Parse(args); err != nil {
+		t.Fatalf("Parse(%q): %v", args, err)
+	}
 }
 
 func TestOutputFormat(t *testing.T) {
 	t.Run("default format is text", func(t *testing.T) {
-		app := newAppWithFormat()
+		app := newAppWithFormat(t)
 		if format.OutputFormat(app) != "text" {
 			t.Errorf("expected default format 'text', got %q", format.OutputFormat(app))
 		}
 	})
 
 	t.Run("format can be set to json", func(t *testing.T) {
-		app := newAppWithFormat()
-		app.Flags().Parse([]string{"--format=json"})
+		app := newAppWithFormat(t)
+		parse(t, app, "--format=json")
 
 		if f := format.OutputFormat(app); f != "json" {
 			t.Errorf("expected format 'json', got %q", f)
@@ -36,8 +46,8 @@ func TestOutputFormat(t *testing.T) {
 	})
 
 	t.Run("format can be set to yaml", func(t *testing.T) {
-		app := newAppWithFormat()
-		app.Flags().Parse([]string{"--format=yaml"})
+		app := newAppWithFormat(t)
+		parse(t, app, "--format=yaml")
 
 		if f := format.OutputFormat(app); f != "yaml" {
 			t.Errorf("expected format 'yaml', got %q", f)
@@ -45,8 +55,10 @@ func TestOutputFormat(t *testing.T) {
 	})
 
 	t.Run("invalid format defaults to text", func(t *testing.T) {
-		app := newAppWithFormat()
-		app.Flags().Parse([]string{"--format=invalid"})
+		app := newAppWithFormat(t)
+		if _, err := app.Flags().Parse([]string{"--format=invalid"}); err == nil {
+			t.Error("Parse(--format=invalid) = nil, want an error")
+		}
 
 		if f := format.OutputFormat(app); f != "text" {
 			t.Errorf("expected invalid format to default to 'text', got %q", f)
@@ -54,8 +66,8 @@ func TestOutputFormat(t *testing.T) {
 	})
 
 	t.Run("format is case insensitive", func(t *testing.T) {
-		app := newAppWithFormat()
-		app.Flags().Parse([]string{"--format=JSON"})
+		app := newAppWithFormat(t)
+		parse(t, app, "--format=JSON")
 
 		if f := format.OutputFormat(app); f != "json" {
 			t.Errorf("expected format to be case insensitive 'json', got %q", f)
@@ -71,11 +83,11 @@ func TestOutputFormat(t *testing.T) {
 }
 
 func TestFormatOutputViaExtension(t *testing.T) {
-	app := newAppWithFormat()
+	app := newAppWithFormat(t)
 	app.Out = &bytes.Buffer{}
 
 	t.Run("format map as json", func(t *testing.T) {
-		app.Flags().Parse([]string{"--format=json"})
+		parse(t, app, "--format=json")
 		data := map[string]interface{}{
 			"name":  "test",
 			"value": 42,
@@ -100,7 +112,7 @@ func TestFormatOutputViaExtension(t *testing.T) {
 	})
 
 	t.Run("format map as text", func(t *testing.T) {
-		app.Flags().Parse([]string{"--format=text"})
+		parse(t, app, "--format=text")
 		data := map[string]string{
 			"name":  "test",
 			"value": "42",

@@ -417,7 +417,7 @@ type StringVarOptions struct {
 // merge applies the non-zero fields of v on top of o, so a struct passed
 // after functional options refines them instead of discarding them.
 func (o *StringVarOptions) merge(v StringVarOptions) {
-	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	v.ApplyFlag(&o.FlagOptions)
 	if v.Default != "" {
 		o.Default = v.Default
 	}
@@ -529,7 +529,7 @@ type DurationVarOptions struct {
 // merge applies the non-zero fields of v on top of o, so a struct passed
 // after functional options refines them instead of discarding them.
 func (o *DurationVarOptions) merge(v DurationVarOptions) {
-	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	v.ApplyFlag(&o.FlagOptions)
 	if v.Default != "" {
 		o.Default = v.Default
 	}
@@ -573,7 +573,7 @@ type BoolVarOptions struct {
 // merge applies the non-zero fields of v on top of o, so a struct passed
 // after functional options refines them instead of discarding them.
 func (o *BoolVarOptions) merge(v BoolVarOptions) {
-	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	v.ApplyFlag(&o.FlagOptions)
 	if v.Default {
 		o.Default = true
 	}
@@ -678,7 +678,7 @@ type IntVarOptions struct {
 // merge applies the non-zero fields of v on top of o, so a struct passed
 // after functional options refines them instead of discarding them.
 func (o *IntVarOptions) merge(v IntVarOptions) {
-	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	v.ApplyFlag(&o.FlagOptions)
 	if v.Default != "" {
 		o.Default = v.Default
 	}
@@ -749,7 +749,7 @@ type Int64VarOptions struct {
 // merge applies the non-zero fields of v on top of o, so a struct passed
 // after functional options refines them instead of discarding them.
 func (o *Int64VarOptions) merge(v Int64VarOptions) {
-	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	v.ApplyFlag(&o.FlagOptions)
 	if v.Default != "" {
 		o.Default = v.Default
 	}
@@ -820,7 +820,7 @@ type Float64VarOptions struct {
 // merge applies the non-zero fields of v on top of o, so a struct passed
 // after functional options refines them instead of discarding them.
 func (o *Float64VarOptions) merge(v Float64VarOptions) {
-	v.FlagOptions.ApplyFlag(&o.FlagOptions)
+	v.ApplyFlag(&o.FlagOptions)
 	if v.Default != "" {
 		o.Default = v.Default
 	}

@@ -424,9 +424,9 @@ func configUnsetCommand(app *clix.App) *clix.Command {
 			}
 		}
 		if removed {
-			fmt.Fprintf(app.Out, "%s removed\n", keyPath)
+			_, _ = fmt.Fprintf(app.Out, "%s removed\n", keyPath)
 		} else {
-			fmt.Fprintf(app.Out, "%s removed (no value stored)\n", keyPath)
+			_, _ = fmt.Fprintf(app.Out, "%s removed (no value stored)\n", keyPath)
 		}
 		return nil
 	}
@@ -443,8 +443,8 @@ func configResetCommand(app *clix.App) *clix.Command {
 		if err := removeConfigFile(app); err != nil {
 			return err
 		}
-		fmt.Fprintln(app.Out, "Configuration cleared")
-		return nil
+		_, err := fmt.Fprintln(app.Out, "Configuration cleared")
+		return err
 	}
 	return cmd
 }

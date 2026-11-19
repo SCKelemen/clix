@@ -129,7 +129,7 @@ func buildGCloudLongHelp(groups []struct {
 			if displayed == 0 {
 				b.WriteString("  " + group.Category + "\n")
 			}
-			b.WriteString(fmt.Sprintf("      %-22s %s\n", entry.Name, entry.Description))
+			fmt.Fprintf(&b, "      %-22s %s\n", entry.Name, entry.Description)
 			displayed++
 		}
 		if displayed > 0 {
@@ -146,7 +146,7 @@ func buildGCloudLongHelp(groups []struct {
 			if displayed == 0 {
 				b.WriteString("  " + cat.Category + "\n")
 			}
-			b.WriteString(fmt.Sprintf("      %-22s %s\n", entry.Name, entry.Description))
+			fmt.Fprintf(&b, "      %-22s %s\n", entry.Name, entry.Description)
 			displayed++
 		}
 		if displayed > 0 {

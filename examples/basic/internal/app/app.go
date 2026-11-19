@@ -27,7 +27,9 @@ func New() *clix.App {
 	root := clix.NewCommand("demo")
 	root.Short = "Root of the demo application"
 	root.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, strings.Trim(demoBanner, "\n"))
+		if _, err := fmt.Fprintln(ctx.App.Out, strings.Trim(demoBanner, "\n")); err != nil {
+			return err
+		}
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
 	root.Children = []*clix.Command{

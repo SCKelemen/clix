@@ -24,13 +24,6 @@ func buttonInactiveStyle(theme clix.PromptTheme) clix.TextStyle {
 	return theme.ButtonInactiveStyle
 }
 
-func buttonHoverStyle(theme clix.PromptTheme) clix.TextStyle {
-	if theme.Buttons.Hover != nil {
-		return theme.Buttons.Hover
-	}
-	return theme.ButtonHoverStyle
-}
-
 func placeholderStyle(theme clix.PromptTheme) clix.TextStyle {
 	if theme.PlaceholderStyle != nil {
 		return theme.PlaceholderStyle

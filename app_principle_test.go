@@ -307,8 +307,8 @@ func TestPositionalIntegration(t *testing.T) {
 		})
 
 		cmd.Run = func(ctx *Context) error {
-			fmt.Fprintf(ctx.App.Out, "Hello %s!\n", name)
-			return nil
+			_, err := fmt.Fprintf(ctx.App.Out, "Hello %s!\n", name)
+			return err
 		}
 
 		root.AddCommand(cmd)
@@ -929,15 +929,15 @@ func TestCommandWithChildrenBehavior(t *testing.T) {
 		var handlerExecuted bool
 		auth.Run = func(ctx *Context) error {
 			handlerExecuted = true
-			fmt.Fprintln(ctx.App.Out, "Auth handler executed!")
-			return nil
+			_, err := fmt.Fprintln(ctx.App.Out, "Auth handler executed!")
+			return err
 		}
 
 		login := NewCommand("login")
 		login.Short = "Login command"
 		login.Run = func(ctx *Context) error {
-			fmt.Fprintln(ctx.App.Out, "Login executed!")
-			return nil
+			_, err := fmt.Fprintln(ctx.App.Out, "Login executed!")
+			return err
 		}
 		auth.AddCommand(login)
 
@@ -967,16 +967,16 @@ func TestCommandWithChildrenBehavior(t *testing.T) {
 
 		auth := NewCommand("auth")
 		auth.Run = func(ctx *Context) error {
-			fmt.Fprintln(ctx.App.Out, "Auth handler executed!")
-			return nil
+			_, err := fmt.Fprintln(ctx.App.Out, "Auth handler executed!")
+			return err
 		}
 
 		var loginExecuted bool
 		login := NewCommand("login")
 		login.Run = func(ctx *Context) error {
 			loginExecuted = true
-			fmt.Fprintln(ctx.App.Out, "Login executed!")
-			return nil
+			_, err := fmt.Fprintln(ctx.App.Out, "Login executed!")
+			return err
 		}
 		auth.AddCommand(login)
 

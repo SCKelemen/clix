@@ -151,7 +151,8 @@ func (m *ConfigManager) Load(path string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	// Opened only for reading, so a Close error loses nothing.
+	defer func() { _ = file.Close() }()
 
 	var doc yaml.Node
 	decoder := yaml.NewDecoder(file)

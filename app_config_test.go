@@ -30,9 +30,13 @@ func TestUnwritableConfigHomeDoesNotBreakRun(t *testing.T) {
 	if err := os.Chmod(dir, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(dir, 0o700) })
+	t.Cleanup(func() {
+		if err := os.Chmod(dir, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
 	if f, err := os.Create(filepath.Join(dir, "probe")); err == nil {
-		f.Close()
+		_ = f.Close()
 		t.Skip("directory is still writable (running as root?)")
 	}
 	t.Setenv("XDG_CONFIG_HOME", dir)

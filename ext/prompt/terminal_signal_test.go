@@ -39,11 +39,15 @@ func TestSignalInRawModeCancelsPromptWithoutExiting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { w.Close(); r.Close() })
+	t.Cleanup(func() { _ = w.Close(); _ = r.Close() })
 
 	ts := &TerminalState{}
 	ts.watchSignals()
-	defer ts.Restore()
+	defer func() {
+		if err := ts.Restore(); err != nil {
+			t.Error(err)
+		}
+	}()
 
 	done := make(chan error, 1)
 	go func() {
@@ -80,7 +84,7 @@ func TestReadKeyHonorsContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { w.Close(); r.Close() })
+	t.Cleanup(func() { _ = w.Close(); _ = r.Close() })
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()

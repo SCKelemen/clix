@@ -29,8 +29,8 @@ func NewCommand() *clix.Command {
 		Value: &checkoutNumber,
 	})
 	checkout.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Checking out PR #%s\n", checkoutNumber)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Checking out PR #%s\n", checkoutNumber)
+		return err
 	}
 
 	merge := clix.NewCommand("merge")
@@ -62,8 +62,8 @@ func NewCommand() *clix.Command {
 		if rebase {
 			strategy = "rebase"
 		}
-		fmt.Fprintf(ctx.App.Out, "Merging PR #%s using %s strategy\n", mergeNumber, strategy)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Merging PR #%s using %s strategy\n", mergeNumber, strategy)
+		return err
 	}
 	cmd.Children = []*clix.Command{
 		checkout,

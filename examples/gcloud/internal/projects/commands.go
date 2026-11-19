@@ -16,9 +16,9 @@ func NewCommand(project *string) *clix.Command {
 	list := clix.NewCommand("list")
 	list.Short = "List projects"
 	list.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "PROJECT_ID            NAME")
-		fmt.Fprintf(ctx.App.Out, "%s            Sample Project\n", valueOrDefault(project, "demo-project"))
-		return nil
+		_, _ = fmt.Fprintln(ctx.App.Out, "PROJECT_ID            NAME")
+		_, err := fmt.Fprintf(ctx.App.Out, "%s            Sample Project\n", valueOrDefault(project, "demo-project"))
+		return err
 	}
 
 	create := clix.NewCommand("create")
@@ -36,8 +36,8 @@ func NewCommand(project *string) *clix.Command {
 		Value: &projectID,
 	})
 	create.Run = func(ctx *clix.Context) error {
-		fmt.Fprintf(ctx.App.Out, "Creating project %s\n", projectID)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Creating project %s\n", projectID)
+		return err
 	}
 	cmd.Children = []*clix.Command{
 		list,

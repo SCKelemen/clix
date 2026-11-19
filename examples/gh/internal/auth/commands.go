@@ -54,22 +54,22 @@ func NewCommand() *clix.Command {
 		if web {
 			mode = "web"
 		}
-		fmt.Fprintf(ctx.App.Out, "Logging into %s as %s using %s flow...\n", hostname, username, mode)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Logging into %s as %s using %s flow...\n", hostname, username, mode)
+		return err
 	}
 
 	logout := clix.NewCommand("logout")
 	logout.Short = "Log out of GitHub"
 	logout.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "Signed out of GitHub.")
-		return nil
+		_, err := fmt.Fprintln(ctx.App.Out, "Signed out of GitHub.")
+		return err
 	}
 
 	refresh := clix.NewCommand("refresh")
 	refresh.Short = "Refresh stored credentials"
 	refresh.Run = func(ctx *clix.Context) error {
-		fmt.Fprintln(ctx.App.Out, "Refreshed authentication token.")
-		return nil
+		_, err := fmt.Fprintln(ctx.App.Out, "Refreshed authentication token.")
+		return err
 	}
 	cmd.Children = []*clix.Command{
 		login,

@@ -2,7 +2,6 @@ package clix
 
 import (
 	"context"
-	"os"
 	"testing"
 )
 
@@ -91,7 +90,6 @@ func TestNumberVarWithConfigAndEnv(t *testing.T) {
 	// Use a temporary home directory for config
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
-	defer os.Unsetenv("HOME")
 
 	app := NewApp("test")
 	var port int
@@ -108,7 +106,9 @@ func TestNumberVarWithConfigAndEnv(t *testing.T) {
 
 	// Set config value
 	app.Config.Set("port", "8080")
-	app.SaveConfig()
+	if err := app.SaveConfig(); err != nil {
+		t.Fatal(err)
+	}
 	app.configLoaded = false
 
 	// Test that config value is used

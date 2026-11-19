@@ -73,7 +73,7 @@ func TestTextPrompterHonorsContextOnIdlePipe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { w.Close(); r.Close() })
+	t.Cleanup(func() { _ = w.Close(); _ = r.Close() })
 	p := TextPrompter{In: r, Out: &bytes.Buffer{}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

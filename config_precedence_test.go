@@ -17,11 +17,15 @@ func TestConfigurationPrecedence(t *testing.T) {
 
 		app := NewApp("test")
 		configDir := filepath.Join(tempDir, "test")
-		os.MkdirAll(configDir, 0755)
+		if err := os.MkdirAll(configDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
 		configPath := filepath.Join(configDir, "config.yaml")
 
 		// Write config file with value
-		os.WriteFile(configPath, []byte("value: from-config\n"), 0644)
+		if err := os.WriteFile(configPath, []byte("value: from-config\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 
 		var value string
 		root := NewCommand("test")
@@ -59,7 +63,7 @@ func TestConfigurationPrecedence(t *testing.T) {
 
 		// Test 3: Config should override default (when no flag or env)
 		value = ""
-		os.Unsetenv("TEST_VALUE")
+		unsetenv(t, "TEST_VALUE")
 		app.configLoaded = false // Force reload
 		if err := app.Run(context.Background(), []string{}); err != nil {
 			t.Fatalf("run failed: %v", err)
@@ -71,7 +75,10 @@ func TestConfigurationPrecedence(t *testing.T) {
 		// Test 4: Default should be used when nothing else is set
 		value = ""
 		app.Config.Reset()
-		app.SaveConfig()         // Clear config file
+		// Clear the config file.
+		if err := app.SaveConfig(); err != nil {
+			t.Fatal(err)
+		}
 		app.configLoaded = false // Force reload
 		if err := app.Run(context.Background(), []string{}); err != nil {
 			t.Fatalf("run failed: %v", err)

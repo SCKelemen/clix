@@ -42,8 +42,8 @@ func NewCommand(project *string) *clix.Command {
 		if strings.EqualFold(setProp, "project") {
 			*project = setValue
 		}
-		fmt.Fprintf(ctx.App.Out, "Set %s to %s\n", setProp, setValue)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "Set %s to %s\n", setProp, setValue)
+		return err
 	}
 
 	get := clix.NewCommand("get")
@@ -62,11 +62,11 @@ func NewCommand(project *string) *clix.Command {
 	})
 	get.Run = func(ctx *clix.Context) error {
 		if strings.EqualFold(getProp, "project") {
-			fmt.Fprintf(ctx.App.Out, "project = %s\n", valueOrDefault(project, ""))
-			return nil
+			_, err := fmt.Fprintf(ctx.App.Out, "project = %s\n", valueOrDefault(project, ""))
+			return err
 		}
-		fmt.Fprintf(ctx.App.Out, "%s is not set\n", getProp)
-		return nil
+		_, err := fmt.Fprintf(ctx.App.Out, "%s is not set\n", getProp)
+		return err
 	}
 	cmd.Children = []*clix.Command{
 		set,
