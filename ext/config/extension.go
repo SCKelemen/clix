@@ -22,6 +22,7 @@ import (
 //   - cli config set <key_path> <value>       - Persist a value at the given path
 //   - cli config unset <key_path>             - Remove a value from persisted config (no-op if missing)
 //   - cli config reset                        - Remove all persisted configuration
+//   - cli config configurations ...           - Named configurations (with Configurations set)
 //
 // The key and value may also be passed as --key and --value.
 // Key paths use dot notation (e.g. "project.default", "api.timeout").
@@ -70,19 +71,33 @@ import (
 //	//   myapp config get project
 //	//   myapp config list
 type Extension struct {
-	// Extension has no configuration options.
-	// Simply add it to your app to enable config commands.
+	// Configurations turns on named configurations, like gcloud's
+	// configurations and kubectl's contexts (see
+	// clix.App.EnableConfigurations): a global --configuration flag, the
+	// <PREFIX>_CONFIGURATION environment variable, and the
+	// "config configurations" commands (list, create, activate, describe,
+	// delete, rename). The other config commands then work on the
+	// configuration in effect. The existing config file is the "default"
+	// configuration.
+	Configurations bool
 }
 
 // Extend implements clix.Extension.
-func (Extension) Extend(app *clix.App) error {
+func (e Extension) Extend(app *clix.App) error {
 	if app.Root == nil {
 		return nil
+	}
+	if e.Configurations {
+		app.EnableConfigurations()
 	}
 
 	// Only add if not already present
 	if findChild(app.Root, "config") == nil {
-		app.Root.AddCommand(NewConfigCommand(app))
+		cmd := NewConfigCommand(app)
+		if e.Configurations {
+			cmd.AddCommand(NewConfigurationsCommand(app))
+		}
+		app.Root.AddCommand(cmd)
 	}
 
 	return nil
@@ -118,6 +133,12 @@ func NewConfigCommand(app *clix.App) *clix.Command {
 // (for example, one that is not valid YAML): its values are unknown, and
 // saving would replace it. Only "config reset" runs then.
 func requireLoadable(app *clix.App) error {
+	if _, _, err := app.Configuration(); err != nil {
+		if errors.Is(err, clix.ErrConfigurationNotFound) {
+			return fmt.Errorf("%w (run %q to see them)", err, app.Name+" config configurations list")
+		}
+		return err
+	}
 	if err := app.ConfigLoadError(); err != nil {
 		return fmt.Errorf("%w (run %q to remove the file)", err, app.Name+" config reset")
 	}
@@ -192,19 +213,7 @@ func redactError(err error, value string) error {
 // promptValue asks for the value of key, with echo off for a sensitive key,
 // re-asking until checkValue accepts the answer.
 func promptValue(ctx *clix.Context, app *clix.App, key string, sensitive bool) (string, error) {
-	prompter := app.Prompter
-	if prompter == nil {
-		var in io.Reader = os.Stdin
-		if app.In != nil {
-			in = app.In
-		}
-		var out io.Writer = os.Stderr
-		if app.Err != nil {
-			out = app.Err
-		}
-		prompter = clix.TextPrompter{In: in, Out: out}
-	}
-	answer, err := prompter.Prompt(ctx, clix.PromptRequest{
+	answer, err := prompterFor(app).Prompt(ctx, clix.PromptRequest{
 		Label:  "Value",
 		Theme:  app.DefaultTheme,
 		Secret: sensitive,
@@ -223,6 +232,23 @@ func promptValue(ctx *clix.Context, app *clix.App, key string, sensitive bool) (
 		return "", fmt.Errorf("no input for --value: %w", err)
 	}
 	return answer, err
+}
+
+// prompterFor returns the app's Prompter, or a TextPrompter on its input
+// and error output when it has none.
+func prompterFor(app *clix.App) clix.Prompter {
+	if app.Prompter != nil {
+		return app.Prompter
+	}
+	var in io.Reader = os.Stdin
+	if app.In != nil {
+		in = app.In
+	}
+	var out io.Writer = os.Stderr
+	if app.Err != nil {
+		out = app.Err
+	}
+	return clix.TextPrompter{In: in, Out: out}
 }
 
 func configListCommand(app *clix.App) *clix.Command {
@@ -569,6 +595,11 @@ func removeConfigFile(app *clix.App) error {
 	if err != nil {
 		return err
 	}
+	if name, _, _ := app.Configuration(); name != clix.DefaultConfiguration {
+		// A named configuration is emptied, not removed: removing its file
+		// would delete the configuration itself.
+		return emptyConfigFile(app, path)
+	}
 	target, err := filepath.EvalSymlinks(path)
 	switch {
 	case err == nil:
@@ -592,6 +623,19 @@ func removeConfigFile(app *clix.App) error {
 	}
 	app.Config.Reset()
 	return nil
+}
+
+// emptyConfigFile replaces the named configuration's file at path with an
+// empty configuration, atomically and through a symbolic link (see
+// clix.ConfigManager.Save), unless it is not a regular file.
+func emptyConfigFile(app *clix.App, path string) error {
+	if target, err := filepath.EvalSymlinks(path); err == nil {
+		if info, err := os.Lstat(target); err == nil && !info.Mode().IsRegular() {
+			return fmt.Errorf("config file %s is not a regular file (%s); not clearing it", target, describeMode(info.Mode()))
+		}
+	}
+	app.Config.Reset()
+	return app.Config.Save(path)
 }
 
 // describeMode names the kind of a file that is not a regular file.

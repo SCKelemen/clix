@@ -55,8 +55,13 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	// Load configuration up front, but report a broken config file only after
-	// --help and --version have had a chance to run.
-	configErr := a.ensureConfigLoaded(ctx)
+	// --help and --version have had a chance to run. With named
+	// configurations the file depends on --configuration, so it is loaded
+	// after parsing instead.
+	var configErr error
+	if !a.configurations {
+		configErr = a.ensureConfigLoaded(ctx)
+	}
 
 	rootFlags := a.Root.Flags
 
@@ -73,6 +78,9 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		return err
 	}
 	cmd := path[len(path)-1]
+	if a.configurations {
+		configErr = a.ensureConfigLoaded(ctx)
+	}
 	if cmd != a.Root {
 		// Root flags given while another command runs are app flags.
 		for _, f := range rootFlags.flags {
@@ -530,20 +538,37 @@ func (a *App) prompter() Prompter {
 	return TextPrompter{In: in, Out: a.stderr()}
 }
 
+// ensureConfigLoaded loads the config file once. With named
+// configurations it loads again when another configuration is selected,
+// dropping the values of the previous one first.
 func (a *App) ensureConfigLoaded(ctx context.Context) error {
-	if a.configLoaded {
-		return a.configLoadErr
-	}
-	a.configLoaded = true
-
 	path, err := a.configFilePath()
-	if err != nil {
-		// Without a home directory there is no config file to read; that is
-		// not an error for commands that do not save configuration.
-		return nil
+	var selection *configurationError
+	if errors.As(err, &selection) {
+		// No configuration's values apply, not even the last one loaded.
+		if a.configLoaded && a.Config != nil {
+			a.Config.Reset()
+		}
+		a.configLoaded, a.configLoadedPath, a.configLoadErr = false, "", nil
+		return selection.err
+	}
+	if a.configLoaded && (path == a.configLoadedPath || !a.configurations) {
+		// Without named configurations the file is loaded once per App,
+		// as it always was.
+		return a.configLoadErr
 	}
 	if a.Config == nil {
 		a.Config = NewConfigManager(a.Name)
+	} else if a.configLoaded {
+		a.Config.Reset()
+	}
+	a.configLoaded, a.configLoadedPath = true, path
+
+	if err != nil {
+		// Without a home directory there is no config file to read; that is
+		// not an error for commands that do not save configuration.
+		a.configLoadErr = nil
+		return nil
 	}
 	a.configLoadErr = a.Config.Load(path)
 	return a.configLoadErr

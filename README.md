@@ -820,7 +820,7 @@ app.Root = clix.NewCommand("myapp")
 
 // Add extensions for optional features
 app.AddExtension(help.Extension{})         // Adds: myapp help [command...]
-app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset
+app.AddExtension(config.Extension{})       // Adds: myapp config list|get|set|unset|reset (Configurations: true adds named configurations)
 app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [bash|zsh|fish|powershell]
 app.AddExtension(format.Extension{})       // Adds: --format / -f (-f unless your app uses it): json|yaml|text, default text
 app.AddExtension(version.Extension{        // Adds: myapp version, --version / -v (-v unless your app uses it)
@@ -886,6 +886,41 @@ app.Config.RegisterSchema(clix.ConfigSchema{
 ```
 
 With a schema, `config set project.retries 5` succeeds while `config set project.retries nope` fails with a helpful error.
+
+##### Named configurations
+
+`config.Extension{Configurations: true}` adds named configurations, like gcloud's configurations and kubectl's contexts: one set of config values per account, project or environment, and a way to switch between them.
+
+```text
+myapp config configurations create work      # creates it and activates it (--no-activate to not)
+myapp config set project acme-prod           # goes into "work"
+myapp config configurations activate default # switch back
+myapp --configuration work deploy            # one command with "work"
+MYAPP_CONFIGURATION=work myapp deploy        # the same, for a shell or a CI job
+myapp config configurations list             # NAME and IS_ACTIVE (JSON or YAML with --format)
+myapp config configurations describe [name]  # name, is_active and the values, secrets [redacted]
+myapp config configurations rename work prod # or: rename work --new-name prod
+myapp config configurations delete prod...   # asks first on a terminal; --yes to not ask
+```
+
+The configuration a command uses is the one given with the Ambient `--configuration` flag, else the one named by `<PREFIX>_CONFIGURATION`, else the one last activated, else `default`. `config list`, `get`, `set`, `unset` and `reset` work on it, and so do flags that read the config file; `reset` empties a named configuration rather than deleting it. The layout follows gcloud's, inside the config directory (`App.ConfigPath`'s directory when it is set):
+
+```text
+~/.config/myapp/
+  config.yaml                     the "default" configuration
+  configurations/config_work.yaml one file per other configuration
+  active_config                   the name of the activated configuration
+```
+
+- **The existing `config.yaml` is the `default` configuration**, read in place: turning the option on moves no file and loses no value, and apps without the option are unchanged.
+- **Activation is atomic**: `active_config` is written to a temporary file and renamed over the old one. New files have mode 0600 in directories created with mode 0700.
+- **Names** are a lowercase letter followed by lowercase letters, digits and hyphens (as in gcloud), at most 64 characters, so a name can never reach outside the `configurations` directory. A name in `--configuration`, the environment variable or `active_config` is checked the same way.
+- **Symbolic links** are followed for reading and writing (`active_config` and configuration files may point into a dotfiles repository); `rename` renames a link itself, and `delete` removes only the link, never the file it points to.
+- **A missing configuration** named by `--configuration` or `<PREFIX>_CONFIGURATION` is a usage error (exit status 2), and one named by `active_config` an error (1). The config commands, help, version and completion still run (see `AllowConfigErrors`), so the selection can be repaired.
+- `default`, the activated configuration and the one the command uses cannot be deleted or renamed; activate another one first, or use `config reset` to clear `default`.
+- `--configuration` values and the names after `activate`, `describe`, `delete` and `rename` complete to the existing configurations. An app flag named `--configuration` wins over the extension's, as app flags always do; then only the environment variable and `active_config` select.
+
+The same operations are methods on `App` for programs and tests: `EnableConfigurations`, `Configuration` (the name in effect and its `Source`), `Configurations`, `ConfigurationFile`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` and `ConfigurationEnvVar`. `ConfigFile` and `SaveConfig` use the configuration in effect; `ConfigDir` is still the config directory.
 
 #### Autocomplete Extension (`clix/ext/autocomplete`)
 
@@ -1012,7 +1047,8 @@ Key methods:
 - `Flags() *FlagSet` - App-level (root command) flags, visible to every command
 - `AddExtension(ext Extension)` - Register an extension
 - `ApplyExtensions() error` - Apply all registered extensions
-- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does)
+- `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does). With named configurations, `ConfigFile` is the file of the configuration in effect
+- `EnableConfigurations()`, `Configuration()`, `Configurations()`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` - Named configurations (see [Named configurations](#named-configurations))
 - `IsInteractive() bool` - Whether a missing required flag will be prompted for (see Non-interactive use)
 - `SaveConfig() error` - Persist `Config` values to the configuration file
 

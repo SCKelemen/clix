@@ -9,12 +9,35 @@ import (
 const configFileName = "config.yaml"
 
 // configFilePath resolves the config file location without touching the
-// filesystem: App.ConfigPath, or config.yaml in the default directory.
+// filesystem: the selected configuration's file when named configurations
+// are enabled (see EnableConfigurations), and otherwise the classic file.
+func (a *App) configFilePath() (string, error) {
+	if !a.configurations {
+		return a.baseConfigFilePath()
+	}
+	name, _, err := a.Configuration()
+	if err != nil {
+		return "", &configurationError{err: err}
+	}
+	return a.configurationPath(name)
+}
+
+// configurationError marks a configuration that cannot be selected, as
+// opposed to a config file location that cannot be found (no home
+// directory), which is not an error for Run.
+type configurationError struct{ err error }
+
+func (e *configurationError) Error() string { return e.err.Error() }
+func (e *configurationError) Unwrap() error { return e.err }
+
+// baseConfigFilePath resolves the classic config file location without
+// touching the filesystem: App.ConfigPath, or config.yaml in the default
+// directory.
 //
 // There is deliberately no environment variable for it: <EnvPrefix>_CONFIG
 // is what an app's own --config flag reads, and that file need not be clix
 // YAML.
-func (a *App) configFilePath() (string, error) {
+func (a *App) baseConfigFilePath() (string, error) {
 	if a.ConfigPath != "" {
 		return a.ConfigPath, nil
 	}
@@ -45,13 +68,14 @@ func (a *App) defaultConfigDir() (string, error) {
 // directory containing that file is returned.
 //
 // Run does not call ConfigDir, so a missing or read-only home directory
-// never prevents commands such as --help from running.
+// never prevents commands such as --help from running. With named
+// configurations it is still this directory, which holds the
+// configurations (see EnableConfigurations).
 func (a *App) ConfigDir() (string, error) {
-	path, err := a.configFilePath()
+	dir, err := a.configDirPath()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
@@ -63,7 +87,10 @@ func (a *App) ConfigDir() (string, error) {
 // path directly. It does not create the file.
 //
 // The location is App.ConfigPath when set, and otherwise config.yaml in
-// $XDG_CONFIG_HOME/<name> or ~/.config/<name>. Run does not call ConfigFile.
+// $XDG_CONFIG_HOME/<name> or ~/.config/<name>. With named configurations
+// (see EnableConfigurations) it is the file of the configuration in
+// effect, and selecting one that does not exist is an error. Run does not
+// call ConfigFile.
 func (a *App) ConfigFile() (string, error) {
 	path, err := a.configFilePath()
 	if err != nil {
