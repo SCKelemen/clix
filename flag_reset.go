@@ -55,6 +55,16 @@ func (a *App) finishRun() {
 // eachFlagOnce calls fn for every flag in effect under root, visiting a
 // command shared by several groups once.
 func eachFlagOnce(root *Command, fn func(*FlagSet, *Flag)) {
+	eachFlagSetOnce(root, func(fs *FlagSet) {
+		for _, f := range fs.flags {
+			fn(fs, f)
+		}
+	})
+}
+
+// eachFlagSetOnce calls fn for the flag set of every command under root,
+// visiting a command shared by several groups once.
+func eachFlagSetOnce(root *Command, fn func(*FlagSet)) {
 	seen := map[*Command]bool{}
 	var walk func(*Command)
 	walk = func(c *Command) {
@@ -63,9 +73,7 @@ func eachFlagOnce(root *Command, fn func(*FlagSet, *Flag)) {
 		}
 		seen[c] = true
 		if c.Flags != nil {
-			for _, f := range c.Flags.flags {
-				fn(c.Flags, f)
-			}
+			fn(c.Flags)
 		}
 		for _, child := range c.Children {
 			walk(child)

@@ -99,3 +99,19 @@ func TestClusterBeforeCommandDoesNotEatTheCommand(t *testing.T) {
 		}
 	}
 }
+
+// A numeric short such as -1 written before the command that defines it
+// was a word ("unknown command: m -1"), while -f worked.
+func TestNumericShortBeforeCommand(t *testing.T) {
+	for _, args := range [][]string{{"-1", "deploy"}, {"deploy", "-1"}, {"-1f", "deploy"}} {
+		app, _ := newTestApp(t, "m")
+		var one, force bool
+		c := clix.NewCommand("deploy", clix.WithCommandRun(noop))
+		c.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "one", Short: "1"}, Value: &one})
+		c.Flags.BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "force", Short: "f"}, Value: &force})
+		app.Root.AddCommand(c)
+		if err := app.Run(bg, args); err != nil || !one || force != strings.Contains(args[0], "f") {
+			t.Errorf("Run(%q) = %v, one = %v, force = %v", args, err, one, force)
+		}
+	}
+}

@@ -1,6 +1,7 @@
 package clix
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -36,8 +37,7 @@ func (fs *FlagSet) Parse(args []string) ([]string, error) {
 		uses, ok := resolveFlagToken(current, []*FlagSet{fs}, nil)
 		if !ok {
 			if fs.strict && !isNumberArg(current) {
-				name, _, _ := strings.Cut(current, "=")
-				return nil, usageErrorf("unknown flag: %s", name)
+				return nil, usageErrorf("unknown flag: %s", unknownFlagName(current, []*FlagSet{fs}, nil))
 			}
 			positionals = append(positionals, current)
 			continue
@@ -137,7 +137,9 @@ func isNumberArg(arg string) bool {
 	if c := arg[1]; (c < '0' || c > '9') && c != '.' {
 		return false
 	}
-	if _, err := strconv.ParseFloat(arg, 64); err == nil {
+	if _, err := strconv.ParseFloat(arg, 64); err == nil || errors.Is(err, strconv.ErrRange) {
+		// A number too large for a float64, such as -1e999, is still a
+		// number.
 		return true
 	}
 	_, err := strconv.ParseInt(arg, 0, 64)

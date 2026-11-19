@@ -406,7 +406,7 @@ moln [--project/-p] [--verbose/-v]
 **Tokens.** From left to right:
 
 - `--` ends flag parsing. Everything after it is a positional argument, including `-x` and `--help`.
-- A token that starts with `-` is a flag, except a lone `-` (the conventional "stdin" argument) and a negative number such as `-5`, `-1.5` or `-1e3` that is neither a registered flag name nor a cluster of short flags. Those are words, like any other.
+- A token that starts with `-` is a flag, except a lone `-` (the conventional "stdin" argument) and a negative number such as `-5`, `-1.5` or `-1e3` (even one too large for a float64) that no command in the tree registers as a flag, such as `-1` for `--one`. Those are words, like any other.
 - A flag that takes a value and has no `=value` consumes the next token as its value, whatever it looks like: `--count -5` is -5 and `--name --force` sets the name to `--force`.
 - Every other token is a word: a command name while the path is being matched, a positional argument after that.
 
@@ -414,7 +414,7 @@ moln [--project/-p] [--verbose/-v]
 
 - Values: `--name value`, `--name=value`, `-n value`, `-n=value` and `-nvalue`. `--name=` sets the empty string.
 - Boolean flags never consume the next token: `--force` is true, `--force=false` is false, and in `deploy --force false` the word `false` is a positional argument.
-- One-letter short flags can be clustered: `-fv` is `-f -v`. The first letter that takes a value takes the rest of the token as its value (`-frus` sets `--region` to `us`), or the next token if it is the last letter (`-fr us`). A cluster with a letter that is not a flag is an unknown flag.
+- One-letter short flags can be clustered: `-fv` is `-f -v`. The first letter that takes a value takes the rest of the token as its value (`-frus` sets `--region` to `us`), or the next token if it is the last letter (`-fr us`). A cluster with a letter that is not a flag fails with `unknown flag: -z (in -fz)`.
 - Repeating a flag replaces its value, so the last one wins, except slice flags (`StringSliceVar`), which append: `-t a -t b,c` is `[a b c]`. A slice value is split on commas with the spaces around each item trimmed, and an item in double quotes may contain commas: `--tag '"a,b", c'` is `[a,b c]`. Environment variables follow the same rule.
 
 **Where a flag may appear, and which flag a name means.** A flag may be written before the path, between path segments or after it. Its name is looked up on the command in effect at that point (the deepest command matched so far), then on each ancestor up to the root. A cluster's letters are looked up the same way, so `deploy -fv` sets `deploy --force` and the root's `--verbose`.
@@ -428,7 +428,7 @@ moln [--project/-p] [--verbose/-v]
 **Unknown flags and extra arguments.**
 
 - Whether a flag is unknown is decided by the command that runs (the leaf), wherever the flag is written. Commands are strict by default, so `moln deploy --bogus` and `moln --bogus deploy` fail with `unknown flag: --bogus`.
-- The root flag set is not strict unless you call `app.Flags().SetStrict(true)`. When the root itself runs, an unknown flag is a positional argument.
+- The root flag set is not strict unless you call `app.Flags().SetStrict(true)`. When the root itself runs, an unknown flag fills one of its positional arguments if it takes any, and otherwise fails with `unknown flag: --bogus`.
 - Positional arguments fill the command's `Positional` flags in registration order, skipping flags already given by name. Any left over fail with `unexpected arguments: ...`.
 
 **Groups, and commands with both Run and children.**

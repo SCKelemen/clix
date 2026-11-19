@@ -65,7 +65,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	// Find the command first, then parse every flag exactly once: flags bind
 	// to the innermost command that defines them and fall back to the root.
-	path, positionals, stray, err := a.parseCommandLine(args)
+	path, positionals, unknown, stray, err := a.parseCommandLine(args)
 	if err != nil {
 		return err
 	}
@@ -110,6 +110,14 @@ func (a *App) Run(ctx context.Context, args []string) error {
 			return err
 		}
 		if len(excess) > 0 {
+			// An unknown flag the non-strict root let through is still an
+			// unknown flag, not just an extra argument.
+			for i := len(positionals) - len(excess); i < len(positionals); i++ {
+				if unknown[i] {
+					name, _, _ := strings.Cut(positionals[i], "=")
+					return usageErrorf("unknown flag: %s", name)
+				}
+			}
 			return usageErrorf("unexpected arguments: %s", strings.Join(excess, " "))
 		}
 	}
@@ -201,9 +209,12 @@ func (a *App) Run(ctx context.Context, args []string) error {
 // root -f, and a group's flag also works after the leaf. A bare "--" ends
 // flag parsing and everything after it is positional.
 //
-// It returns the matched command, the positional arguments, and the first
-// word that did not match a child command (stray), if any.
-func (a *App) parseCommandLine(args []string) (path []*Command, positionals []string, stray string, err error) {
+// It returns the matched command path, the positional arguments, and the
+// first word that did not match a child command (stray), if any.
+//
+// unknown marks the positionals that are unknown flags a non-strict flag
+// set let through.
+func (a *App) parseCommandLine(args []string) (path []*Command, positionals []string, unknown map[int]bool, stray string, err error) {
 	root := a.Root
 	path = []*Command{root}
 	scope := make([]int, len(args))    // depth on path of the command in effect for each flag token, plus one
@@ -222,8 +233,10 @@ scan:
 			break scan
 		case isFlagArg(tok):
 			uses, ok := resolveFlagToken(tok, flagChain(path), nil)
-			if !ok && isNumberArg(tok) {
-				// "-5" is a word, like any other positional.
+			if !ok && isNumberArg(tok) && !a.mayBeFlag(tok) {
+				// "-5" is a word, like any other positional, unless some
+				// command registers it as a flag (-1 for --one), which a
+				// command named later may own.
 				stray = tok
 				break scan
 			}
@@ -287,13 +300,16 @@ scan:
 		}
 		uses, ok := resolveFlagToken(tok, flagChain(path[:depth]), late)
 		if !ok {
-			name, _, _ := strings.Cut(tok, "=")
 			switch {
 			case isNumberArg(tok):
 				positionals = append(positionals, tok)
 			case cmd.Flags.strict:
-				return nil, nil, "", usageErrorf("unknown flag: %s", name)
+				return nil, nil, nil, "", usageErrorf("unknown flag: %s", unknownFlagName(tok, flagChain(path[:depth]), late))
 			default:
+				if unknown == nil {
+					unknown = make(map[int]bool)
+				}
+				unknown[len(positionals)] = true
 				positionals = append(positionals, tok)
 			}
 			continue
@@ -305,7 +321,7 @@ scan:
 			// in pass 1, so the next token was not set aside as -p's value
 			// and may be the command itself.
 			if u.needsNext && i+1 < scanned && !isValue[i+1] {
-				return nil, nil, "", usageErrorf("%s needs a value: write %s=VALUE, or put the flags after the command", u.name, tok)
+				return nil, nil, nil, "", usageErrorf("%s needs a value: write %s=VALUE, or put the flags after the command", u.name, tok)
 			}
 			err := setFromArg(u.flag, u.name, u.value, u.hasValue, func() (string, bool) {
 				if i+1 >= len(args) {
@@ -315,12 +331,57 @@ scan:
 				return args[i], true
 			})
 			if err != nil {
-				return nil, nil, "", err
+				return nil, nil, nil, "", err
 			}
 		}
 	}
 
-	return path, positionals, stray, nil
+	return path, positionals, unknown, stray, nil
+}
+
+// mayBeFlag reports whether some command in the tree registers tok's name
+// as a flag, or every letter of it as a short flag.
+func (a *App) mayBeFlag(tok string) bool {
+	name, _, _ := strings.Cut(tok, "=")
+	found := false
+	eachFlagSetOnce(a.Root, func(fs *FlagSet) {
+		if found || fs.index[name] != nil {
+			found = true
+			return
+		}
+	})
+	if found {
+		return true
+	}
+	for _, r := range name[1:] {
+		short := "-" + string(r)
+		has := false
+		eachFlagSetOnce(a.Root, func(fs *FlagSet) { has = has || fs.index[short] != nil })
+		if !has {
+			return false
+		}
+	}
+	return true
+}
+
+// unknownFlagName names an unknown flag token in an error: the letter that
+// is not a flag when tok is a cluster whose first letter is one ("-z (in
+// -fz)"), and otherwise the token up to any "=".
+func unknownFlagName(tok string, sets, late []*FlagSet) string {
+	name, _, _ := strings.Cut(tok, "=")
+	if len(name) < 3 || name[1] == '-' {
+		return name
+	}
+	for i, r := range name[1:] {
+		short := "-" + string(r)
+		if lookupArg(short, sets...) == nil && lookupArg(short, late...) == nil {
+			if i == 0 {
+				return name
+			}
+			return short + " (in " + name + ")"
+		}
+	}
+	return name
 }
 
 // flagChain returns the flag sets of the commands on path, innermost

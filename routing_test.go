@@ -195,6 +195,8 @@ func TestRoutingMatrix(t *testing.T) {
 		{name: "negative positionals after --", args: []string{"calc", "--", "-5", "-1.5"}, ran: "moln calc", set: map[string]string{"moln calc --x": "-5" + cmdFlag, "moln calc --y": "-1.5" + cmdFlag}},
 		{name: "negative number as a string value", args: []string{"deploy", "--name", "-1.5"}, ran: deploy, set: map[string]string{deploy + " --name": "-1.5" + cmdFlag}},
 		{name: "negative number in a group", args: []string{"-5"}, err: "unknown command: moln -5", kind: "usage"},
+		{name: "overflowing negative number is a positional", args: []string{"deploy", "-1e999"}, ran: deploy, set: map[string]string{deploy + " --target": "-1e999" + cmdFlag}},
+		{name: "overflowing negative number for a float", args: []string{"calc", "-1e999"}, err: "invalid value for positional argument x", kind: "usage"},
 
 		// Short clusters and attached values, across the command chain.
 		{name: "cluster", args: []string{"deploy", "-fv"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, "moln --verbose": "true" + appFlag}},
@@ -203,12 +205,13 @@ func TestRoutingMatrix(t *testing.T) {
 		{name: "cluster with an attached value", args: []string{"deploy", "-vfrus"}, ran: deploy, set: map[string]string{"moln --verbose": "true" + appFlag, deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
 		{name: "cluster with an attached value after a value flag", args: []string{"deploy", "-frus"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
 		{name: "cluster with =", args: []string{"deploy", "-fr=us"}, ran: deploy, set: map[string]string{deploy + " --force": "true" + cmdFlag, deploy + " --region": "us" + cmdFlag}},
-		{name: "cluster with an unknown letter", args: []string{"deploy", "-fz"}, err: "unknown flag: -fz", kind: "usage"},
+		{name: "cluster with an unknown letter", args: []string{"deploy", "-fz"}, err: "unknown flag: -z (in -fz)", kind: "usage"},
+		{name: "cluster with an unknown first letter", args: []string{"deploy", "-zf"}, err: "unknown flag: -zf", kind: "usage"},
 
 		// Unknown flags and excess positionals.
 		{name: "unknown flag on a command", args: []string{"deploy", "--bogus"}, err: "unknown flag: --bogus", kind: "usage"},
 		{name: "unknown flag before the command", args: []string{"--bogus", "deploy"}, err: "unknown flag: --bogus", kind: "usage"},
-		{name: "unknown flag on the non-strict root", args: []string{"--bogus"}, err: "unexpected arguments: --bogus", kind: "usage"},
+		{name: "unknown flag on the non-strict root", args: []string{"--bogus"}, err: "unknown flag: --bogus", kind: "usage"},
 		{name: "excess positionals", args: []string{"deploy", "a", "b"}, err: "unexpected arguments: b", kind: "usage"},
 
 		// --help and -h.
