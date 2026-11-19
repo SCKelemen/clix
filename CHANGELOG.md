@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Context.Progress(label)` returns a `*Progress` indicator for long waits, with `Update(fraction, msg)`, `Done(msg)` and `Fail(msg)`. It writes to `App.Err` only. On a terminal it draws a spinner with the label, message and percentage, cut to the terminal width, hides the cursor and ends with `✓ label: msg` or `✗ label: msg`. Color follows `NO_COLOR` and `CLICOLOR`; `TERM=dumb` draws ASCII without escape sequences, and non-UTF-8 locales draw ASCII. Elsewhere it prints one plain line, `label...done`. `App.ProgressMode` (`ProgressAuto`, `ProgressPlain`, `ProgressQuiet`) chooses the plain line or nothing instead. An indicator ends at the first of `Done`, `Fail`, the end of its context, or its command's handlers returning (`Run` ends it with `Done` or `Fail`). It steps aside while a prompt draws (any prompter that calls `NewPromptConfig`), and puts the cursor back on Ctrl-C: under `App.Main` through the cancelled context, and otherwise on Unix by catching SIGINT and SIGTERM, restoring the terminal and delivering the signal again. See "Progress for long waits" in the README.
 - Key-sequence fixtures captured in Ghostty 1.3.1, with application cursor keys and the kitty keyboard protocol on as well as off, replayed by `TestTerminalKeyFixtures`; and an opt-in live test suite (`CLIX_LIVE_TERMINALS=ghostty,cmux`, macOS) that drives prompts, a survey and shell completion in Ghostty and cmux. See "Testing in real terminals" in the README.
 
 ### Fixed
