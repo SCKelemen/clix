@@ -80,7 +80,7 @@ func TestExtensionsDoNotTakeShortNames(t *testing.T) {
 		t.Fatalf("format = %q", got)
 	}
 	err := app.Flags().Err()
-	if err == nil || !strings.Contains(err.Error(), "--version cannot use -v") || !strings.Contains(err.Error(), "--format cannot use -f") {
+	if err == nil || !strings.Contains(err.Error(), "extension version.Extension: -v is used by the app's --verbose; version is available as --version only") || !strings.Contains(err.Error(), "extension format.Extension: -f is used by the app's --force") {
 		t.Fatalf("Err() = %v, want both short-name conflicts", err)
 	}
 }

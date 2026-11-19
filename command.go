@@ -84,6 +84,7 @@ type Command struct {
 	PostRun Hook
 
 	parent *Command
+	owner  // the app, or the extension whose Extend added the command
 }
 
 // CommandOption configures a command using the functional options pattern.
@@ -213,24 +214,17 @@ func (c *Command) prepare(parent *Command) {
 	}
 }
 
-// addHelpFlag registers the built-in --help switch on fs. It takes -h only
-// when no other flag has it, and gives -h up to a flag registered later
-// (such as --host), so help never takes a short name from a user's flag.
+// addHelpFlag registers the built-in --help switch on fs. It asks for -h,
+// but gives it up to any other flag that wants it (such as --host), so
+// help never takes a short name from a user's flag.
 func addHelpFlag(fs *FlagSet) {
-	short := "h"
-	if _, taken := fs.index["-h"]; taken {
-		short = ""
-	}
-	fs.BoolVar(BoolVarOptions{
-		FlagOptions: FlagOptions{
-			Name:  "help",
-			Short: short,
-			Usage: "Show help information",
-		},
-	})
-	if f := fs.lookup("help"); f != nil {
-		f.yieldsShort = true
-	}
+	flag := FlagOptions{
+		Name:  "help",
+		Short: "h",
+		Usage: "Show help information",
+	}.newFlag(&BoolValue{}, "")
+	flag.yieldsShort = true
+	fs.addFlag(flag)
 }
 
 // Path returns the command path from the root.
@@ -241,36 +235,77 @@ func (c *Command) Path() string {
 	return fmt.Sprintf("%s %s", c.parent.Path(), c.Name)
 }
 
-// findChild returns the first matching child command or group by name or
+// findChild returns the matching child command or group by name or
 // alias, ignoring ASCII case.
 func (c *Command) findChild(name string) *Command {
 	return c.findChildMatch(name, false)
 }
 
-// findChildMatch returns the first child whose name or alias matches name.
+// findChildMatch returns the child whose name or alias matches name.
 // Names match exactly when caseSensitive is set, and otherwise ignoring
 // ASCII case only: "DELETE" matches "delete", but non-ASCII letters must
 // match exactly, so "ſtatus" (U+017F) does not match "status" and a Kelvin
 // sign does not match "k".
+//
+// When several children match, the app's command beats one added by an
+// extension, and between extensions the one added first wins; between
+// commands of the same owner the first in Children wins. A command added
+// by an extension whose Name is also a name or alias of a better-owned
+// sibling is shadowed: it is not reachable at all, and it is left out of
+// VisibleChildren (help and completion).
 func (c *Command) findChildMatch(name string, caseSensitive bool) *Command {
-	match := equalFoldASCII
-	if caseSensitive {
-		match = func(a, b string) bool { return a == b }
-	}
+	match := nameMatcher(caseSensitive)
+	var best *Command
 	for _, child := range c.Children {
-		if child == nil {
+		if child == nil || !answersTo(child, name, match) {
 			continue
 		}
-		if match(child.Name, name) {
-			return child
+		if best != nil && best.rank <= child.rank {
+			continue
 		}
-		for _, alias := range child.Aliases {
-			if match(alias, name) {
-				return child
-			}
+		if c.shadowedBy(child, match) != nil {
+			continue
+		}
+		best = child
+	}
+	return best
+}
+
+// nameMatcher returns the comparison command routing uses.
+func nameMatcher(caseSensitive bool) func(a, b string) bool {
+	if caseSensitive {
+		return func(a, b string) bool { return a == b }
+	}
+	return equalFoldASCII
+}
+
+// answersTo reports whether cmd has name as its Name or one of its Aliases.
+func answersTo(cmd *Command, name string, match func(a, b string) bool) bool {
+	if match(cmd.Name, name) {
+		return true
+	}
+	for _, alias := range cmd.Aliases {
+		if match(alias, name) {
+			return true
 		}
 	}
-	return nil
+	return false
+}
+
+// shadowedBy returns the sibling of child, owned by the app or by an
+// extension added earlier than child's, that answers to child's Name, or
+// nil. Such a child is unreachable.
+func (c *Command) shadowedBy(child *Command, match func(a, b string) bool) *Command {
+	var best *Command
+	for _, other := range c.Children {
+		if other == nil || other == child || other.rank >= child.rank {
+			continue
+		}
+		if answersTo(other, child.Name, match) && (best == nil || other.rank < best.rank) {
+			best = other
+		}
+	}
+	return best
 }
 
 // equalFoldASCII reports whether a and b are equal when ASCII letters are
@@ -317,11 +352,13 @@ func (c *Command) match(args []string) (*Command, []string) {
 	return current, rest
 }
 
-// VisibleChildren returns a sorted slice of child commands and groups that are not hidden.
+// VisibleChildren returns a sorted slice of child commands and groups that
+// are not hidden and not shadowed by a command of a better owner (see
+// findChildMatch).
 func (c *Command) VisibleChildren() []*Command {
 	var cmds []*Command
 	for _, child := range c.Children {
-		if child == nil || child.Hidden {
+		if child == nil || child.Hidden || c.shadowedBy(child, equalFoldASCII) != nil {
 			continue
 		}
 		cmds = append(cmds, child)

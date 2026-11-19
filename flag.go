@@ -36,11 +36,13 @@ import (
 //	})
 type FlagSet struct {
 	name      string
-	flags     []*Flag
+	all       []*Flag // every registered flag, in order, including ones that lost a name conflict
+	flags     []*Flag // the flags in effect: the winners in all
 	index     map[string]*Flag
 	strict    bool    // If true, unknown flags cause errors instead of being treated as positionals
 	strictSet bool    // SetStrict was called, so the App must not change strict
-	errs      []error // Registration problems, such as duplicate flag names
+	errs      []error // Registration problems, such as an unparsable default
+	conflicts []error // Name conflicts found by reindex
 }
 
 // NewFlagSet initialises an empty flag set.
@@ -125,8 +127,43 @@ type Flag struct {
 
 	restore func() // Internal: puts Value back as it was before the first Run
 
-	yieldsShort bool // Internal: the built-in --help, which gives up -h to a later flag
+	yieldsShort bool // Internal: the built-in --help, which gives up -h to any other flag
 	badDefault  bool // Internal: Default does not parse, so the flag has no default
+
+	wantShort  string // Internal: the short name requested at registration
+	registered bool   // Internal: wantShort has been recorded
+	owner             // Internal: the app or the extension that registered the flag
+}
+
+// owner records who defined a flag or command: the app, or the extension
+// whose Extend was running (see App.ApplyExtensions). The zero value is
+// the app.
+type owner struct {
+	rank      int    // 0 for the app, 1+i for the extension added i-th
+	ownerName string // %T of the extension, or "" for the app
+	claimed   bool   // the owner has been recorded
+}
+
+// claim records o as the owner, unless one was recorded already.
+func (w *owner) claim(rank int, name string) {
+	if !w.claimed {
+		w.rank, w.ownerName, w.claimed = rank, name, true
+	}
+}
+
+// describe names the owner for error messages: "the app" or
+// "extension version.Extension".
+func (w owner) describe() string {
+	if w.rank == 0 {
+		return "the app"
+	}
+	return "extension " + w.ownerName
+}
+
+// possessive is describe in the possessive: "the app's" or
+// "extension version.Extension's".
+func (w owner) possessive() string {
+	return w.describe() + "'s"
 }
 
 // hasDefault reports whether the flag has a Default that its Value
@@ -787,18 +824,10 @@ func (fs *FlagSet) Float64Var(opts ...FlagOption) {
 
 // addFlag registers flag in the set.
 //
-// A flag whose long name is already registered is not added: the first
-// registration wins, and the conflict is recorded so it can be reported by
-// Err. Registration does not panic on duplicates because existing programs
-// that happen to register a name twice must keep working.
-//
-// A short name is never taken from the flag that has it: a later flag with
-// the same short name is registered without one (its long name still
-// works), and the conflict is recorded in Err. This way an extension
-// applied at Run, such as a --version with -v, cannot take -v from an
-// app's own --verbose. The one exception is the built-in --help, which
-// gives -h up to a flag registered later, so a command may use -h for
-// --host.
+// Registration never panics on a name conflict, because existing programs
+// that happen to register a name twice must keep working. Conflicts are
+// resolved by who defined the flags, not by when (see reindex), and are
+// recorded so Err and App.Validate can report them.
 func (fs *FlagSet) addFlag(flag *Flag) {
 	if flag.Name == "" {
 		panic("flag requires a name")
@@ -811,62 +840,122 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 			panic("boolean flag cannot be positional: " + flag.Name)
 		}
 	}
-	if fs.index == nil {
-		fs.index = make(map[string]*Flag)
+	if !flag.registered {
+		flag.wantShort, flag.registered = flag.Short, true
 	}
-	if _, exists := fs.index["--"+flag.Name]; exists {
-		fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s redefined in flag set %q; keeping the first definition", flag.Name, fs.name))
-		return
-	}
-	if flag.Short != "" {
-		if previous, taken := fs.index["-"+flag.Short]; taken && previous != flag {
-			if previous.yieldsShort {
-				previous.Short = ""
-			} else {
-				fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s cannot use -%s in flag set %q because --%s already has it; it is available only as --%s", flag.Name, flag.Short, fs.name, previous.Name, flag.Name))
-				flag.Short = ""
-			}
+	fs.all = append(fs.all, flag)
+	fs.reindex()
+}
+
+// reindex decides which flags are in effect and which flag owns each short
+// name, and records the conflicts.
+//
+// Conflicts are resolved by owner, not by registration order: the app's
+// flags beat flags added by extensions, and between extensions the one
+// added first (with the lower AddExtension index) wins. Between flags of
+// the same owner the first registration wins. So an extension such as
+// ext/version can never take -v from an app's --verbose, whether it is
+// applied before or after the app registers its flags.
+//
+//   - Long names: the losing flag is dropped from parsing and help.
+//   - Short names: the losing flag keeps only its long name.
+//   - The built-in --help always gives -h up to any other flag (such as
+//     --host), without a conflict.
+func (fs *FlagSet) reindex() {
+	fs.conflicts = nil
+	byName := make(map[string]*Flag, len(fs.all))
+	for _, f := range fs.all {
+		if w, ok := byName[f.Name]; !ok || f.rank < w.rank {
+			byName[f.Name] = f
 		}
 	}
-	fs.flags = append(fs.flags, flag)
-	fs.index["--"+flag.Name] = flag
-	if flag.Short != "" {
-		fs.index["-"+flag.Short] = flag
+	flags := make([]*Flag, 0, len(fs.all))
+	for _, f := range fs.all {
+		w := byName[f.Name]
+		if w == f {
+			flags = append(flags, f)
+			continue
+		}
+		f.Short = ""
+		if w.rank == f.rank {
+			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %sflag --%s redefined in flag set %q; keeping the first definition", extPrefix(f.owner), f.Name, fs.name))
+		} else {
+			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %s: flag --%s in flag set %q is also defined by %s; %s --%s is used and this one is ignored", f.describe(), f.Name, fs.name, w.describe(), w.possessive(), w.Name))
+		}
 	}
+
+	byShort := make(map[string]*Flag)
+	for _, f := range flags {
+		if f.wantShort == "" {
+			continue
+		}
+		if w, ok := byShort[f.wantShort]; !ok || shortBeats(f, w) {
+			byShort[f.wantShort] = f
+		}
+	}
+	index := make(map[string]*Flag, 2*len(flags))
+	for _, f := range flags {
+		index["--"+f.Name] = f
+		f.Short = ""
+		if f.wantShort == "" {
+			continue
+		}
+		w := byShort[f.wantShort]
+		if w == f {
+			f.Short = f.wantShort
+			index["-"+f.Short] = f
+			continue
+		}
+		switch {
+		case f.yieldsShort:
+			// The built-in --help gives -h up silently.
+		case w.rank == f.rank:
+			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %sflag --%s cannot use -%s in flag set %q because --%s already has it; it is available only as --%s", extPrefix(f.owner), f.Name, f.wantShort, fs.name, w.Name, f.Name))
+		default:
+			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %s: -%s is used by %s --%s; %s is available as --%s only", f.describe(), f.wantShort, w.possessive(), w.Name, f.Name, f.Name))
+		}
+	}
+	fs.flags, fs.index = flags, index
+}
+
+// shortBeats reports whether f, rather than w, gets a short name both
+// want: any flag beats the built-in --help, then the better owner wins,
+// then the earlier registration (w, which was seen first).
+func shortBeats(f, w *Flag) bool {
+	if f.yieldsShort != w.yieldsShort {
+		return w.yieldsShort
+	}
+	return f.rank < w.rank
+}
+
+// extPrefix returns "extension X: " for a flag added by an extension, so
+// same-owner conflicts still say whose they are.
+func extPrefix(o owner) string {
+	if o.rank == 0 {
+		return ""
+	}
+	return o.describe() + ": "
 }
 
 // adoptFlags moves every flag except --help from old, the flag set of a
-// root command that was replaced, into fs. A flag whose long name fs
-// already defines stays in old, and the conflict is recorded in fs.Err.
-// Registration problems recorded on old carry over, and so does an
-// explicit SetStrict when fs has none.
-func (fs *FlagSet) adoptFlags(old *FlagSet, rootName string) {
-	if fs.index == nil {
-		fs.index = make(map[string]*Flag)
-	}
+// root command that was replaced, into fs. Conflicts with flags fs already
+// has are resolved as for any registration (see reindex): between flags
+// of the same owner, the new root's own definition wins. Registration
+// problems recorded on old carry over, and so does an explicit SetStrict
+// when fs has none.
+func (fs *FlagSet) adoptFlags(old *FlagSet) {
 	fs.errs = append(fs.errs, old.errs...)
 	old.errs = nil
 	var kept []*Flag
-	for _, f := range old.flags {
+	for _, f := range old.all {
 		if f.Name == "help" {
-			kept = append(kept, f)
-			continue
-		}
-		if fs.lookup(f.Name) != nil {
-			fs.errs = append(fs.errs, fmt.Errorf("clix: flag --%s was registered on the previous root command, and the new root %q defines it too; keeping the new root's definition", f.Name, rootName))
 			kept = append(kept, f)
 			continue
 		}
 		fs.addFlag(f)
 	}
-	old.flags = kept
-	old.index = make(map[string]*Flag, 2*len(kept))
-	for _, f := range kept {
-		old.index["--"+f.Name] = f
-		if f.Short != "" {
-			old.index["-"+f.Short] = f
-		}
-	}
+	old.all = kept
+	old.reindex()
 	if old.strictSet && !fs.strictSet {
 		fs.strict, fs.strictSet = old.strict, true
 	}
@@ -883,17 +972,21 @@ func (fs *FlagSet) lookup(name string) *Flag {
 }
 
 // Err reports problems found while registering flags, such as a long flag
-// name that was defined more than once. It returns nil when registration
+// name that was defined more than once, a short name that another flag
+// has, or a default that does not parse. Conflicts between the app's flags
+// and an extension's name both owners. It returns nil when registration
 // succeeded. Duplicate definitions are ignored rather than causing a panic,
 // so call Err (for example, in a test) to detect them.
 func (fs *FlagSet) Err() error {
 	if fs == nil {
 		return nil
 	}
-	return errors.Join(fs.errs...)
+	return errors.Join(append(append([]error(nil), fs.errs...), fs.conflicts...)...)
 }
 
-// Flags returns all registered flags.
+// Flags returns the registered flags that are in effect, in registration
+// order. A flag that lost its long name to another flag (see Err) is left
+// out.
 func (fs *FlagSet) Flags() []*Flag {
 	return append([]*Flag(nil), fs.flags...)
 }

@@ -17,11 +17,14 @@ import (
 //
 // It reports:
 //   - problems recorded while registering flags (see FlagSet.Err): a long
-//     name defined twice, a short name that was already taken, a Default
+//     name defined twice, a short name that another flag has, a Default
 //     the flag cannot parse, and a root flag that conflicted with the new
 //     root when Root was replaced;
 //   - two children of one command that share a name or alias (matched the
-//     way Run matches them), where the first one always wins;
+//     way Run matches them), and which one Run picks;
+//   - every override between the app and an extension, or between two
+//     extensions, naming both owners: the app's flags and commands always
+//     win, and between extensions the one added first wins;
 //   - a flag whose long name is also defined on an ancestor command (other
 //     than --help): written before the command name it sets the ancestor's
 //     flag, after it the command's, so the bound variables and Context
@@ -50,7 +53,7 @@ func (a *App) Validate() error {
 // defines them.
 func (a *App) validateCommand(cmd *Command, inherited map[string]string, errs *[]error) {
 	path := cmd.Path()
-	for _, err := range cmd.Flags.errs {
+	for _, err := range append(append([]error(nil), cmd.Flags.errs...), cmd.Flags.conflicts...) {
 		*errs = append(*errs, fmt.Errorf("%s: %w", path, err))
 	}
 
@@ -68,22 +71,29 @@ func (a *App) validateCommand(cmd *Command, inherited map[string]string, errs *[
 		own[f.Name] = path
 	}
 
-	names := make(map[string]*Command)
+	match := nameMatcher(a.CaseSensitive)
 	for i, child := range cmd.Children {
 		if child == nil {
 			*errs = append(*errs, fmt.Errorf("%s: child %d is nil", path, i))
 			continue
 		}
-		for _, name := range append([]string{child.Name}, child.Aliases...) {
-			key := name
-			if !a.CaseSensitive {
-				key = asciiLower(name)
-			}
-			if prev, ok := names[key]; ok && prev != child {
-				*errs = append(*errs, fmt.Errorf("%s: %q names both %q and %q; Run always picks %q", path, name, prev.Name, child.Name, prev.Name))
+		if by := cmd.shadowedBy(child, match); by != nil {
+			*errs = append(*errs, fmt.Errorf("%s: %s: command %q is shadowed by %s %q; it is not reachable and is left out of help", path, child.describe(), child.Name, by.possessive(), by.Name))
+			continue
+		}
+		for _, name := range child.Aliases {
+			winner := cmd.findChildMatch(name, a.CaseSensitive)
+			if winner == nil || winner == child {
 				continue
 			}
-			names[key] = child
+			if winner.rank == child.rank {
+				*errs = append(*errs, fmt.Errorf("%s: %s%q names both %q and %q; Run always picks %q", path, extPrefix(child.owner), name, winner.Name, child.Name, winner.Name))
+			} else {
+				*errs = append(*errs, fmt.Errorf("%s: %s: alias %q of %q is used by %s %q; %q is available by its other names only", path, child.describe(), name, child.Name, winner.possessive(), winner.Name, child.Name))
+			}
+		}
+		if winner := cmd.findChildMatch(child.Name, a.CaseSensitive); winner != nil && winner != child {
+			*errs = append(*errs, fmt.Errorf("%s: %s%q names both %q and %q; Run always picks %q", path, extPrefix(child.owner), child.Name, winner.Name, child.Name, winner.Name))
 		}
 	}
 
@@ -92,16 +102,4 @@ func (a *App) validateCommand(cmd *Command, inherited map[string]string, errs *[
 			a.validateCommand(child, own, errs)
 		}
 	}
-}
-
-// asciiLower lowercases the ASCII letters of s and leaves every other byte
-// alone, matching equalFoldASCII.
-func asciiLower(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if 'A' <= c && c <= 'Z' {
-			b[i] = c + 'a' - 'A'
-		}
-	}
-	return string(b)
 }

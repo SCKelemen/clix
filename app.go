@@ -270,7 +270,7 @@ func (a *App) bindRoot() {
 		return
 	}
 	if old := a.boundFlags; old != nil && old != root.Flags {
-		root.Flags.adoptFlags(old, root.Name)
+		root.Flags.adoptFlags(old)
 	}
 	if !root.Flags.strictSet {
 		root.Flags.strict = false

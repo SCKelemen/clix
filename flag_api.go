@@ -165,9 +165,7 @@ func (fs *FlagSet) applyDefault(flag *Flag) {
 	}
 	if err := flag.Value.Set(flag.Default); err != nil {
 		flag.badDefault = true
-		if fs.lookup(flag.Name) == flag {
-			fs.errs = append(fs.errs, fmt.Errorf("clix: invalid default %q for flag --%s in flag set %q: %w", flag.Default, flag.Name, fs.name, err))
-		}
+		fs.errs = append(fs.errs, fmt.Errorf("clix: invalid default %q for flag --%s in flag set %q: %w", flag.Default, flag.Name, fs.name, err))
 	}
 }
 

@@ -1,5 +1,7 @@
 package clix
 
+import "fmt"
+
 // Extension is the interface that optional "batteries-included" features implement.
 // Extensions allow features to be added to an App without requiring imports in
 // the core package, keeping simple applications lightweight.
@@ -41,6 +43,13 @@ func (a *App) AddExtension(ext Extension) {
 // manually for testing or early initialization. Each extension is applied
 // exactly once, and ApplyExtensions is safe for concurrent use.
 //
+// Every flag and command registered while an extension's Extend runs
+// belongs to that extension; everything else belongs to the app. When
+// names collide, the app's definitions win over an extension's, and
+// between extensions the one added first wins, whatever the order of
+// registration (see FlagSet.Err and App.Validate, which report each
+// override).
+//
 // If an extension returns an error, the extensions after it are not
 // applied and the error is returned by this and every later call (and so
 // by every later Run): the App is left partly extended and must not run.
@@ -51,15 +60,59 @@ func (a *App) ApplyExtensions() error {
 		return a.extErr
 	}
 	for a.extApplied < len(a.extensions) {
-		ext := a.extensions[a.extApplied]
+		i := a.extApplied
+		ext := a.extensions[i]
 		a.extApplied++
 		if ext == nil {
 			continue
 		}
-		if err := ext.Extend(a); err != nil {
+		// What exists now was defined by the app (or by earlier
+		// extensions, which already claimed theirs); what is new after
+		// Extend belongs to this extension.
+		a.claimDefinitions(0, "")
+		err := ext.Extend(a)
+		a.claimDefinitions(i+1, fmt.Sprintf("%T", ext))
+		if err != nil {
 			a.extErr = err
 			return err
 		}
 	}
 	return nil
+}
+
+// claimDefinitions records rank and name as the owner of every command and
+// flag in the tree (and in a root flag set waiting to move to a replaced
+// Root) that has no owner yet, then re-resolves name conflicts.
+func (a *App) claimDefinitions(rank int, name string) {
+	if a.boundFlags != nil && a.boundFlags != a.rootFlagSet() {
+		claimFlags(a.boundFlags, rank, name)
+	}
+	claimTree(a.Root, rank, name)
+}
+
+func claimTree(cmd *Command, rank int, name string) {
+	if cmd == nil {
+		return
+	}
+	cmd.claim(rank, name)
+	claimFlags(cmd.Flags, rank, name)
+	for _, child := range cmd.Children {
+		claimTree(child, rank, name)
+	}
+}
+
+func claimFlags(fs *FlagSet, rank int, name string) {
+	if fs == nil {
+		return
+	}
+	changed := false
+	for _, f := range fs.all {
+		if !f.claimed {
+			f.claim(rank, name)
+			changed = changed || rank != 0
+		}
+	}
+	if changed {
+		fs.reindex()
+	}
 }
