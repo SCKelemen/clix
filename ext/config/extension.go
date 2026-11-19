@@ -233,6 +233,9 @@ func configUnsetCommand(app *clix.App) *clix.Command {
 func configResetCommand(app *clix.App) *clix.Command {
 	cmd := clix.NewCommand("reset")
 	cmd.Short = "Remove all persisted configuration"
+	// Reset is how a user recovers from a config file that does not parse,
+	// so it must run even when loading the file failed.
+	clix.AllowConfigErrors(cmd)
 	cmd.Run = func(ctx *clix.Context) error {
 		if err := removeConfigFile(app); err != nil {
 			return err
