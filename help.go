@@ -51,6 +51,7 @@ func (h HelpRenderer) Render(w io.Writer) error {
 
 	h.renderArguments(w, cmd)
 	h.renderFlags(w, cmd)
+	h.renderGlobalFlags(w, cmd)
 	h.renderChildren(w, cmd)
 
 	if cmd.Example != "" {
@@ -96,20 +97,64 @@ func (h HelpRenderer) renderFlags(w io.Writer, cmd *Command) {
 
 	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "FLAGS"))
 	for _, flag := range flags {
-		var names []string
-		if flag.Short != "" {
-			names = append(names, "-"+flag.Short)
-		}
-		names = append(names, "--"+flag.Name)
-		renderedNames := renderText(nameStyle, strings.Join(names, ", "))
-		usage := flag.Usage
-		if flag.Required {
-			usage += " (required)"
-		}
-		usage = renderText(usageStyle, usage)
-		fmt.Fprintf(w, "  %-20s %s\n", renderedNames, usage)
+		h.renderFlag(w, flag, flag.Short, nameStyle, usageStyle)
 	}
 	fmt.Fprintln(w)
+}
+
+// renderGlobalFlags lists the root (app-level) flags, which the parser also
+// accepts after a subcommand's name. A root flag that the command shadows
+// with its own flag of the same long name is left out, and a root flag's
+// short name is left out when the command's own flags claim it, because the
+// parser resolves both against the command first.
+func (h HelpRenderer) renderGlobalFlags(w io.Writer, cmd *Command) {
+	root := h.App.Root
+	if root == nil || cmd == root || root.Flags == nil {
+		return
+	}
+
+	type entry struct {
+		flag  *Flag
+		short string
+	}
+	var entries []entry
+	for _, flag := range root.Flags.Flags() {
+		if flag.Positional || cmd.Flags.lookup(flag.Name) != nil {
+			continue
+		}
+		short := flag.Short
+		if short != "" && lookupArg("-"+short, cmd.Flags) != nil {
+			short = ""
+		}
+		entries = append(entries, entry{flag: flag, short: short})
+	}
+	if len(entries) == 0 {
+		return
+	}
+
+	nameStyle, usageStyle := h.flagStylesFor(true)
+
+	fmt.Fprintln(w, renderText(h.App.Styles.SectionHeading, "GLOBAL FLAGS"))
+	for _, e := range entries {
+		h.renderFlag(w, e.flag, e.short, nameStyle, usageStyle)
+	}
+	fmt.Fprintln(w)
+}
+
+// renderFlag prints a flag as "-s, --name" followed by its usage.
+func (h HelpRenderer) renderFlag(w io.Writer, flag *Flag, short string, nameStyle, usageStyle TextStyle) {
+	var names []string
+	if short != "" {
+		names = append(names, "-"+short)
+	}
+	names = append(names, "--"+flag.Name)
+	renderedNames := renderText(nameStyle, strings.Join(names, ", "))
+	usage := flag.Usage
+	if flag.Required {
+		usage += " (required)"
+	}
+	usage = renderText(usageStyle, usage)
+	fmt.Fprintf(w, "  %-20s %s\n", renderedNames, usage)
 }
 
 func (h HelpRenderer) buildUsageLine(cmd *Command) string {
