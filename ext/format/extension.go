@@ -1,6 +1,7 @@
 package format
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/SCKelemen/clix/v2"
@@ -10,6 +11,17 @@ import (
 // Import this extension to opt in to output format selection; without it
 // the flag is not present and callers should default to clix.FormatText.
 //
+// The flag accepts json, yaml and text, in any case, and defaults to text
+// (as does an empty value).
+// Any other value, given on the command line, in the <PREFIX>_FORMAT
+// environment variable or under the "format" config key, is a usage error
+// that lists the valid formats.
+//
+// The app's own flags win over the extension's: when the app defines -f
+// (for example, for --force), the extension's flag is --format only, and
+// an app flag named --format replaces the extension's. App.Validate
+// reports both. Adding the extension twice registers the flag once.
+//
 // Example:
 //
 //	app := clix.NewApp("myapp")
@@ -17,19 +29,52 @@ import (
 //	// Now --format / -f is available globally
 type Extension struct{}
 
+// formats lists the values the --format flag accepts.
+var formats = []string{clix.FormatJSON, clix.FormatYAML, clix.FormatText}
+
 // Extend implements clix.Extension.
 func (Extension) Extend(app *clix.App) error {
-	var format = clix.FormatText
-	app.Flags().StringVar(clix.StringVarOptions{
+	if f := app.Flags().Lookup("format"); f != nil {
+		if _, ours := f.Value.(*formatValue); ours {
+			return nil // already added
+		}
+	}
+	app.Flags().Var(clix.VarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:  "format",
-			Short: "f",
-			Usage: "Output format (json, yaml, text)",
+			Name:     "format",
+			Short:    "f",
+			Usage:    "Output format (json, yaml, text)",
+			Validate: validateFormat,
 		},
 		Default: clix.FormatText,
-		Value:   &format,
+		Value:   &formatValue{},
 	})
 	return nil
+}
+
+// formatValue holds the --format flag's value. Its type marks the flag as
+// registered by this extension.
+type formatValue struct{ s string }
+
+func (v *formatValue) Set(s string) error {
+	v.s = s
+	return nil
+}
+
+func (v *formatValue) String() string { return v.s }
+
+// validateFormat accepts the formats in formats, ignoring case. An empty
+// value means the default, text.
+func validateFormat(value string) error {
+	if value == "" {
+		return nil
+	}
+	for _, f := range formats {
+		if strings.EqualFold(value, f) {
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown format %q (valid formats: %s)", value, strings.Join(formats, ", "))
 }
 
 // OutputFormat reads the --format flag from the app and validates it.
