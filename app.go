@@ -370,22 +370,20 @@ type Context struct {
 // resolveValue retrieves a configuration value following the precedence chain:
 // command flags > app flags > env > config > defaults.
 // Returns the raw string value, its source, and whether it was found.
+//
+// Flags are looked up on the executing command, then on each of its
+// ancestors (groups), then on the root, so a handler sees the flags of
+// every command on its path.
 func (ctx *Context) resolveValue(key string) (string, Source, bool) {
-	// First check values the user supplied directly: command-level flags,
-	// then root flags. A value typed at a prompt for a missing required flag
-	// counts as supplied directly but reports SourcePrompt.
-	if flag := ctx.commandFlags().lookup(key); flag != nil {
-		if flag.cliSet {
-			return flag.Value.String(), SourceCommandFlag, true
-		}
-		if flag.set && flag.source == SourcePrompt {
-			return flag.Value.String(), SourcePrompt, true
-		}
-	}
-	if ctx.App != nil {
-		if flag := ctx.App.Flags().lookup(key); flag != nil {
+	sets := ctx.pathFlags()
+
+	// First check values the user supplied directly, innermost command
+	// first. A value typed at a prompt for a missing required flag counts
+	// as supplied directly but reports SourcePrompt.
+	for _, fs := range sets {
+		if flag := fs.lookup(key); flag != nil {
 			if flag.cliSet {
-				return flag.Value.String(), SourceAppFlag, true
+				return flag.Value.String(), ctx.cliSource(fs), true
 			}
 			if flag.set && flag.source == SourcePrompt {
 				return flag.Value.String(), SourcePrompt, true
@@ -397,7 +395,7 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	// aliases, and the APP_KEY default, in that order.
 	if ctx.App != nil {
 		isFlag := false
-		for _, fs := range []*FlagSet{ctx.commandFlags(), ctx.App.Flags()} {
+		for _, fs := range sets {
 			if flag := fs.lookup(key); flag != nil {
 				isFlag = true
 				if _, val, ok := ctx.App.lookupFlagEnv(flag); ok {
@@ -420,24 +418,47 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 		}
 	}
 
-	// Finally check defaults from flags (only if flag exists but wasn't set)
-	// Check command flag default first
-	if ctx.Command != nil && ctx.Command.Flags != nil {
-		if flag := ctx.Command.Flags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
+	// Finally check defaults from flags (only if flag exists but wasn't
+	// set), innermost command first.
+	for _, fs := range sets {
+		if flag := fs.lookup(key); flag != nil && !flag.set && flag.Default != "" {
 			return flag.Default, SourceDefault, true
-		}
-	}
-	// Then check root flag default
-	if ctx.App != nil {
-		rootFlags := ctx.App.Flags()
-		if rootFlags != nil {
-			if flag := rootFlags.lookup(key); flag != nil && !flag.set && flag.Default != "" {
-				return flag.Default, SourceDefault, true
-			}
 		}
 	}
 
 	return "", 0, false
+}
+
+// pathFlags returns the flag sets of the executing command and each of its
+// ancestors, innermost first, ending with the root flag set.
+func (ctx *Context) pathFlags() []*FlagSet {
+	var sets []*FlagSet
+	add := func(fs *FlagSet) {
+		if fs == nil {
+			return
+		}
+		for _, seen := range sets {
+			if seen == fs {
+				return
+			}
+		}
+		sets = append(sets, fs)
+	}
+	for c := ctx.Command; c != nil; c = c.parent {
+		add(c.Flags)
+	}
+	add(ctx.App.rootFlagSet())
+	return sets
+}
+
+// cliSource reports how a command-line value in fs is labeled: values on
+// the root of an app whose executing command is not the root are app
+// flags, everything else is a command flag.
+func (ctx *Context) cliSource(fs *FlagSet) Source {
+	if fs != ctx.commandFlags() && fs == ctx.App.rootFlagSet() {
+		return SourceAppFlag
+	}
+	return SourceCommandFlag
 }
 
 // commandFlags returns the executing command's flag set, or nil.

@@ -105,12 +105,11 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	}
 
 	// Fill in flags the command line did not set, in precedence order:
-	// environment, then config file, then defaults.
-	if err := a.applyConfigToFlags(rootFlags); err != nil {
-		return err
-	}
-	if cmd.Flags != rootFlags {
-		if err := a.applyConfigToFlags(cmd.Flags); err != nil {
+	// environment, then config file, then defaults. Every command on the
+	// path takes part: the root, each group, and the command itself.
+	path := commandPath(cmd)
+	for _, c := range path {
+		if err := a.applyConfigToFlags(c.Flags); err != nil {
 			return err
 		}
 	}
@@ -120,11 +119,15 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	//    (only when the app is interactive; otherwise an error)
 	// 2. All required satisfied (from any source) → run
 	// 3. Some CLI flags passed + required missing → error
-	// Root (app-level) flags count as "flags passed" too: "mk --project p"
+	// Flags anywhere on the path count as "flags passed": "mk --project p"
 	// is a scripted invocation even though --project lives on the root.
-	missing := cmd.Flags.MissingRequired()
+	missing := missingRequired(cmd)
 	if len(missing) > 0 {
-		if cmd.Flags.AnyCLISet() || rootFlags.AnyCLISet() || !a.IsInteractive() {
+		anyCLI := false
+		for _, c := range path {
+			anyCLI = anyCLI || c.Flags.AnyCLISet()
+		}
+		if anyCLI || !a.IsInteractive() {
 			// Mode 3 (or nobody to ask): report what is missing.
 			return a.missingFlagsError(missing)
 		}
@@ -272,6 +275,39 @@ scan:
 	}
 
 	return cmd, positionals, stray, nil
+}
+
+// commandPath returns the commands from the root down to cmd.
+func commandPath(cmd *Command) []*Command {
+	var path []*Command
+	for c := cmd; c != nil; c = c.parent {
+		path = append(path, c)
+	}
+	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+		path[i], path[j] = path[j], path[i]
+	}
+	return path
+}
+
+// missingRequired returns the required flags without a value on cmd's
+// path, outermost command first. A command added by an extension
+// (IsExtensionCommand), and everything below it, only checks the flags
+// from that command down, so "app version" never asks for a required
+// --project on the root.
+func missingRequired(cmd *Command) []*Flag {
+	path := commandPath(cmd)
+	from := 0
+	for i := len(path) - 1; i >= 0; i-- {
+		if path[i].IsExtensionCommand {
+			from = i
+			break
+		}
+	}
+	var missing []*Flag
+	for _, c := range path[from:] {
+		missing = append(missing, c.Flags.MissingRequired()...)
+	}
+	return missing
 }
 
 // helpRequested reports whether --help was passed for cmd or any command on
