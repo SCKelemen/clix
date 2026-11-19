@@ -56,6 +56,14 @@ import (
 // It is indented by two spaces and followed by a newline, map keys are
 // sorted, invalid UTF-8 is replaced with U+FFFD, and nothing is written
 // when the value cannot be encoded.
+//
+// YAML output is encoded with go.yaml.in/yaml/v3, indented by two spaces.
+// Struct fields keep YAML's own rules: their keys are the lower-cased field
+// names or yaml tags (json tags are ignored), and a time.Duration field is
+// written as yaml writes it ("1m30s"). Elsewhere, at the top level and in
+// maps, slices, arrays and pointers, a time.Duration is an ISO 8601
+// duration ("PT1M30S", as in JSON) and a json.RawMessage is decoded into
+// the value it holds. time.Time is RFC 3339 everywhere.
 func FormatData(w io.Writer, data interface{}, format string) error {
 	switch strings.ToLower(format) {
 	case FormatJSON:
