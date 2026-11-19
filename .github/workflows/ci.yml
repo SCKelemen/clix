@@ -127,9 +127,7 @@ jobs:
 
       - name: Install shells (Linux)
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bash bash-completion zsh fish
+        run: .github/scripts/apt-install.sh bash bash-completion zsh fish
 
       # macOS keeps /bin/bash 3.2 and /bin/zsh; Homebrew adds bash 5.
       - name: Install shells (macOS)
