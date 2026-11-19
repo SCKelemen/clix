@@ -202,8 +202,10 @@ func TestVersionE2E_AppShortFlagWins(t *testing.T) {
 			if got := run(t, app, out, "--version"); got != "probe version 1.0.0\n" {
 				t.Errorf("--version printed %q", got)
 			}
-			if err := app.Validate(); err == nil || !strings.Contains(err.Error(), "-v") {
-				t.Errorf("App.Validate() = %v, want a report that --version lost -v", err)
+			// An extension flag that loses only its short name keeps its
+			// long name, so Validate does not report it.
+			if err := app.Validate(); err != nil {
+				t.Errorf("App.Validate() = %v, want nil: --version keeps its long name", err)
 			}
 		})
 	}

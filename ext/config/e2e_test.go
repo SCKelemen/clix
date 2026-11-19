@@ -116,7 +116,7 @@ func TestConfigE2E_DefaultPath(t *testing.T) {
 	app.AddExtension(Extension{})
 	run(t, app, out, "config", "set", "a", "1")
 	data, err := os.ReadFile(filepath.Join(xdg, "probe", "config.yaml"))
-	if err != nil || string(data) != "a: \"1\"\n" {
+	if err != nil || string(data) != "a: 1\n" {
 		t.Errorf("default config file: %q, %v", data, err)
 	}
 }
@@ -125,7 +125,7 @@ func TestConfigE2E_ConfigPath(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "elsewhere", "my.yaml")
 	app, out, _ := e2eApp(t, path)
 	run(t, app, out, "config", "set", "a", "1")
-	if data, err := os.ReadFile(path); err != nil || string(data) != "a: \"1\"\n" {
+	if data, err := os.ReadFile(path); err != nil || string(data) != "a: 1\n" {
 		t.Errorf("App.ConfigPath file: %q, %v", data, err)
 	}
 }
@@ -155,11 +155,11 @@ func TestConfigE2E_FileModes(t *testing.T) {
 	}
 }
 
-// What "config set" does to a hand-written file, as documented in the
-// README: the file is rewritten as a flat, key-sorted mapping of dotted keys
-// to strings. Comments, blank lines, nesting, anchors and merge keys are not
-// kept, a list of scalars becomes one comma-separated string, and null
-// values are dropped.
+// What "config set" does to a hand-written file (see
+// clix.ConfigManager.Save): the file is rewritten as a flat, key-sorted
+// mapping of dotted keys. Every value it did not change keeps its YAML form,
+// so numbers stay numbers and lists stay lists. Comments, blank lines,
+// nesting, anchors and merge keys are not kept, and null values are dropped.
 func TestConfigE2E_SetRewritesFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	orig := "# team defaults\napi:\n  timeout: 30   # seconds\nregions:\n  - eu\n  - us\nbase: &b\n  x: 1\nderived:\n  <<: *b\n  y: yes\nempty:\n"
@@ -168,7 +168,7 @@ func TestConfigE2E_SetRewritesFile(t *testing.T) {
 	}
 	app, out, _ := e2eApp(t, path)
 	run(t, app, out, "config", "set", "project", "p1")
-	want := "api.timeout: \"30\"\nbase.x: \"1\"\nderived.x: \"1\"\nderived.y: \"yes\"\nproject: p1\nregions: eu,us\n"
+	want := "api.timeout: 30\nbase.x: 1\nderived.x: 1\nderived.y: yes\nproject: p1\nregions:\n  - eu\n  - us\n"
 	if data, _ := os.ReadFile(path); string(data) != want {
 		t.Errorf("file after config set:\n%s\nwant:\n%s", data, want)
 	}

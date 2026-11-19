@@ -2,6 +2,7 @@ package clix_test
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -43,6 +44,50 @@ func TestExtensionFlagOnAppCommandDoesNotShadowTheApp(t *testing.T) {
 	}
 	assertValidate(t, app,
 		`o deploy: clix: extension #1 (clix_test.extensionFunc): flag --project is also defined by the app on "o"; the app's --project is used here too, and this one is ignored`,
+	)
+}
+
+// An extension's flag that loses its name to the app's root flag (see
+// above) is ignored, as Validate says: it was still required, so "deploy
+// --token x" set the root's --token and then failed with "missing
+// required flags: --token", and it was still filled, and validated, from
+// the environment and the config file, and listed in help.
+func TestShadowedExtensionFlagIsIgnored(t *testing.T) {
+	app, out := newTestApp(t, "lx")
+	writeConfigFile(t, app, "token: from-file\n")
+	var token, extToken string
+	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "token"}, Value: &token})
+	ran := false
+	app.Root.AddCommand(clix.NewCommand("deploy", clix.WithCommandRun(mark(&ran))))
+	app.AddExtension(extensionFunc(func(a *clix.App) error {
+		a.Root.ResolvePath([]string{"deploy"}).Flags.StringVar(clix.StringVarOptions{
+			FlagOptions: clix.FlagOptions{Name: "token", Required: true, Validate: func(string) error { return errors.New("rejected") }},
+			Value:       &extToken,
+		})
+		return nil
+	}))
+	if err := app.Run(bg, []string{"deploy", "--token", "x"}); err != nil || !ran || token != "x" || extToken != "" {
+		t.Fatalf("deploy --token x: %v, ran=%v, root token %q, extension's %q", err, ran, token, extToken)
+	}
+	t.Setenv("LX_TOKEN", "from-env")
+	ran = false
+	if err := app.Run(bg, []string{"deploy"}); err != nil || !ran || token != "from-env" || extToken != "" {
+		t.Fatalf("deploy with LX_TOKEN: %v, ran=%v, root token %q, extension's %q", err, ran, token, extToken)
+	}
+	t.Setenv("LX_TOKEN", "")
+	if err := app.Run(bg, []string{"deploy"}); err != nil || token != "from-file" || extToken != "" {
+		t.Fatalf("deploy with a config file: %v, root token %q, extension's %q", err, token, extToken)
+	}
+	out.Reset()
+	// Help lists the app's --token, the one in use, under GLOBAL FLAGS, and
+	// not the ignored one among deploy's own flags.
+	err := app.Run(bg, []string{"deploy", "--help"})
+	own, global, _ := strings.Cut(out.String(), "GLOBAL FLAGS")
+	if err != nil || strings.Contains(own, "--token") || strings.Contains(out.String(), "(required)") || !strings.Contains(global, "--token") {
+		t.Fatalf("deploy --help = %v, want the app's --token under GLOBAL FLAGS only:\n%s", err, out)
+	}
+	assertValidate(t, app,
+		`lx deploy: clix: extension #1 (clix_test.extensionFunc): flag --token is also defined by the app on "lx"; the app's --token is used here too, and this one is ignored`,
 	)
 }
 
@@ -131,6 +176,37 @@ func TestFlagsRegisteredDuringRunCannotTakeNames(t *testing.T) {
 	assertValidate(t, app, `o: clix: a flag registered during Run: -q is used by extension #1 (clix_test.extensionFunc)'s --quiet; quick is available as --quick only`)
 }
 
+// A Run started by a handler ended the outer Run's running state, so a
+// flag the outer handler registered after it counted as the app's and
+// took -v from ext/version.
+func TestFlagsRegisteredAfterNestedRunCannotTakeNames(t *testing.T) {
+	for _, nested := range []bool{false, true} {
+		app, _ := newTestApp(t, "o")
+		app.AddExtension(version.Extension{Version: "1.0"})
+		var late bool
+		sub := clix.NewCommand("sub", clix.WithCommandRun(func(ctx *clix.Context) error {
+			if nested {
+				if err := app.Run(ctx, []string{"ls"}); err != nil {
+					return err
+				}
+			}
+			app.Flags().BoolVar(clix.BoolVarOptions{FlagOptions: clix.FlagOptions{Name: "late", Short: "v"}, Value: &late})
+			return nil
+		}))
+		app.Root.AddCommand(clix.NewCommand("ls", clix.WithCommandRun(noop)))
+		app.Root.AddCommand(sub)
+		if err := app.Run(bg, []string{"sub"}); err != nil {
+			t.Fatal(err)
+		}
+		if f := app.Flags().Lookup("version"); f == nil || f.Short != "v" {
+			t.Errorf("nested=%v: a flag registered during Run took -v from ext/version", nested)
+		}
+		if f := app.Flags().Lookup("late"); f == nil || f.Short != "" {
+			t.Errorf("nested=%v: --late has -%s", nested, f.Short)
+		}
+	}
+}
+
 // A flag added to an extension's command belongs to that extension,
 // whenever it is registered; while another extension's Extend runs, it
 // belongs to that one. Two extensions of the same type are told apart by
@@ -156,8 +232,9 @@ func TestFlagsOnExtensionCommandsBelongToTheExtension(t *testing.T) {
 	if err := app.Run(bg, []string{"tools", "-m", "x"}); err != nil || mode != "x" || mute != "" {
 		t.Fatalf("err = %v, mode %q, mute %q", err, mode, mute)
 	}
+	// Extension #2's --mute keeps its long name, which is not reported;
+	// --mine belongs to extension #1, like --mode, so it is.
 	assertValidate(t, app,
-		`o tools: clix: extension #2 (clix_test.extensionFunc): -m is used by extension #1 (clix_test.extensionFunc)'s --mode; mute is available as --mute only`,
 		`o tools: clix: extension #1 (clix_test.extensionFunc): flag --mine cannot use -m in flag set "tools" because --mode already has it; it is available only as --mine`,
 	)
 }

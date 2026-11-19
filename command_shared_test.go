@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/SCKelemen/clix/v2"
+	"github.com/SCKelemen/clix/v2/ext/help"
 )
 
 // One *Command registered under two groups used to follow the parent of
@@ -61,5 +62,68 @@ func TestSharedCommandUsesTheMatchedPath(t *testing.T) {
 	}
 	if err := app.Validate(); err != nil {
 		t.Fatalf("a shared command is not a definition error: %v", err)
+	}
+}
+
+// Help from ext/help and ResolvePath named the group that listed a shared
+// command last: Run prepared the tree, which linked the command to that
+// group, and ResolvePath never linked it to the group it went through, so
+// "help 'alpha status'" printed "sh beta status".
+func TestSharedCommandPathFollowsResolvePath(t *testing.T) {
+	app, out := newTestApp(t, "sh")
+	shared := clix.NewCommand("status", clix.WithCommandRun(noop))
+	app.Root.AddCommand(clix.NewGroup("alpha", "A", shared))
+	app.Root.AddCommand(clix.NewGroup("beta", "B", shared))
+	app.AddExtension(help.Extension{})
+	for _, args := range [][]string{{"help", "alpha status"}, {"alpha", "status", "--help"}, {"beta", "status"}, {"help", "alpha status"}} {
+		out.Reset()
+		if err := app.Run(bg, args); err != nil {
+			t.Fatal(err)
+		}
+		if args[0] != "beta" && !strings.Contains(out.String(), "sh alpha status") {
+			t.Errorf("%q: help names the wrong path:\n%s", args, out)
+		}
+	}
+	for _, group := range []string{"alpha", "beta", "alpha"} {
+		if got := app.Root.ResolvePath([]string{group, "status"}); got == nil || got.Path() != "sh "+group+" status" {
+			t.Errorf("ResolvePath(%s status).Path() = %q", group, got.Path())
+		}
+	}
+
+	// Preparing the tree again (Validate, the next Run) keeps the path a
+	// command was last reached through.
+	if err := app.Run(bg, []string{"alpha", "status"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = app.Validate()
+	if got := shared.Path(); got != "sh alpha status" {
+		t.Errorf("after Validate, Path() = %q", got)
+	}
+}
+
+// A Run started by a handler that goes through the other group put the
+// outer handler's shared command on the other path.
+func TestNestedRunKeepsSharedCommandPath(t *testing.T) {
+	app, _ := newTestApp(t, "sh")
+	var before, after string
+	shared := clix.NewCommand("status")
+	shared.Run = func(ctx *clix.Context) error {
+		if before != "" {
+			return nil // the nested Run
+		}
+		before = ctx.Command.Path()
+		if err := app.Run(ctx, []string{"beta", "status"}); err != nil {
+			return err
+		}
+		after = ctx.Command.Path()
+		return nil
+	}
+	app.Root.AddCommand(clix.NewGroup("alpha", "A", shared))
+	app.Root.AddCommand(clix.NewGroup("beta", "B", shared))
+	if err := app.Run(bg, []string{"alpha", "status"}); err != nil {
+		t.Fatal(err)
+	}
+	if before != "sh alpha status" || after != before {
+		t.Errorf("Path() = %q before the nested Run, %q after", before, after)
 	}
 }

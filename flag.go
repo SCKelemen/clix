@@ -131,15 +131,18 @@ type Flag struct {
 	source Source // Internal: where a non-CLI value came from (env, config, or prompt) when set
 
 	// Internal: what the last Run did to the value (see App.startRun).
-	undoRun    func() error // puts Value back as it was before the last Run; nil when it cannot
-	beforeRun  string       // Value.String() when the last Run started
-	afterRun   string       // Value.String() when the last Run ended
-	runChanged bool         // the last Run changed the value
-	tracked    bool         // beforeRun was recorded (false for a flag registered during a Run)
-	leakNoted  bool         // a carried-over value was recorded in the FlagSet's errors
+	undoRun    func() // puts Value back as it was before the last Run; nil when it cannot
+	beforeRun  string // Value.String() when the last Run started
+	afterRun   string // Value.String() when the last Run ended
+	touched    bool   // the Run called Set on the value, from any source (see Flag.setValue)
+	runChanged bool   // the last Run changed the value
+	tracked    bool   // beforeRun was recorded (false for a flag registered during a Run)
+	leakNoted  bool   // a carried-over value was recorded in the FlagSet's errors
+	shadowed   bool   // the Run ignores the flag: a better owner's flag of that name on its path is used (see markShadowed)
 
-	yieldsShort bool // Internal: the built-in --help, which gives up -h to any other flag
-	badDefault  bool // Internal: Default does not parse, so the flag has no default
+	yieldsShort   bool   // Internal: the built-in --help, which gives up -h to any other flag
+	badDefault    string // Internal: a Default the Value rejected at registration; while Default is still that, the flag has no default
+	badDefaultErr error  // Internal: why the Value rejected badDefault
 
 	wantShort  string // Internal: the short name requested at registration
 	registered bool   // Internal: wantShort has been recorded
@@ -188,10 +191,11 @@ func (w owner) possessive() string {
 	return w.describe() + "'s"
 }
 
-// hasDefault reports whether the flag has a Default that its Value
-// accepts.
+// hasDefault reports whether the flag has a Default, other than one its
+// Value rejected at registration. A Default changed since (through
+// Lookup) counts again.
 func (f *Flag) hasDefault() bool {
-	return f.Default != "" && !f.badDefault
+	return f.Default != "" && f.Default != f.badDefault
 }
 
 // Value mirrors flag.Value but adds helpers for boolean flags.
@@ -899,7 +903,11 @@ func (fs *FlagSet) addFlag(flag *Flag) {
 // applied before or after the app registers its flags.
 //
 //   - Long names: the losing flag is dropped from parsing and help.
-//   - Short names: the losing flag keeps only its long name.
+//   - Short names: the losing flag keeps only its long name. That is
+//     recorded as a conflict only between flags of the same owner, or for
+//     a flag registered during Run: an extension's flag that yields a
+//     short name to a better owner is still reachable by its long name,
+//     and the app is meant to win, so there is nothing to fix.
 //   - The built-in --help always gives -h up to any other flag (such as
 //     --host), without a conflict.
 func (fs *FlagSet) reindex() {
@@ -948,8 +956,9 @@ func (fs *FlagSet) reindex() {
 			continue
 		}
 		switch {
-		case f.yieldsShort:
-			// The built-in --help gives -h up silently.
+		case f.yieldsShort, f.rank != w.rank && f.rank != runtimeRank:
+			// The built-in --help gives -h up silently, and so does an
+			// extension's flag to a better owner (see above).
 		case w.rank == f.rank:
 			fs.conflicts = append(fs.conflicts, fmt.Errorf("clix: %sflag --%s cannot use -%s in flag set %q because --%s already has it; it is available only as --%s", extPrefix(f.owner), f.Name, f.wantShort, fs.name, w.Name, f.Name))
 		default:
@@ -1013,16 +1022,30 @@ func (fs *FlagSet) lookup(name string) *Flag {
 }
 
 // Err reports problems found while registering flags, such as a long flag
-// name that was defined more than once, a short name that another flag
-// has, or a default that does not parse. Conflicts between the app's flags
-// and an extension's name both owners. It returns nil when registration
-// succeeded. Duplicate definitions are ignored rather than causing a panic,
+// name that was defined more than once, a short name that another flag of
+// the same owner has, or a default that does not parse. Conflicts between
+// the app's flags and an extension's name both owners; an extension's
+// flag that only loses a short name keeps its long name and is not
+// reported. It returns nil when registration succeeded. Duplicate definitions are ignored rather than causing a panic,
 // so call Err (for example, in a test) to detect them.
 func (fs *FlagSet) Err() error {
 	if fs == nil {
 		return nil
 	}
-	return errors.Join(append(append([]error(nil), fs.errs...), fs.conflicts...)...)
+	return errors.Join(fs.problems()...)
+}
+
+// problems returns what Err and App.Validate report: the problems
+// recorded while registering and running, defaults the flags rejected at
+// registration (unless changed since), and name conflicts.
+func (fs *FlagSet) problems() []error {
+	errs := append([]error(nil), fs.errs...)
+	for _, f := range fs.all {
+		if f.badDefault != "" && f.Default == f.badDefault {
+			errs = append(errs, fmt.Errorf("clix: invalid default %q for flag --%s in flag set %q: %w", f.Default, f.Name, fs.name, f.badDefaultErr))
+		}
+	}
+	return append(errs, fs.conflicts...)
 }
 
 // Flags returns the registered flags that are in effect, in registration

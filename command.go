@@ -199,19 +199,22 @@ func (c *Command) IsLeaf() bool {
 
 func (c *Command) prepare(parent *Command) {
 	c.parent = parent
-
-	if c.Flags == nil {
-		c.Flags = NewFlagSet(c.Name)
-	}
-
-	if c.Flags.lookup("help") == nil {
-		addHelpFlag(c.Flags)
-	}
+	c.prepareFlags()
 
 	for _, child := range c.Children {
 		if child != nil {
 			child.prepare(c)
 		}
+	}
+}
+
+// prepareFlags gives c a flag set and a --help flag if it lacks them.
+func (c *Command) prepareFlags() {
+	if c.Flags == nil {
+		c.Flags = NewFlagSet(c.Name)
+	}
+	if c.Flags.lookup("help") == nil {
+		addHelpFlag(c.Flags)
 	}
 }
 
@@ -398,7 +401,9 @@ func (c *Command) Commands() []*Command {
 	return cmds
 }
 
-// ResolvePath resolves a path like ["config", "set"] into a command.
+// ResolvePath resolves a path like ["config", "set"] into a command. A
+// command shared by several groups is linked to the group it was resolved
+// through, as Run does, so its Path (and help) names the path asked for.
 func (c *Command) ResolvePath(path []string) *Command {
 	cmd := c
 	for _, part := range path {
@@ -406,6 +411,7 @@ func (c *Command) ResolvePath(path []string) *Command {
 		if next == nil {
 			return nil
 		}
+		next.parent = cmd
 		cmd = next
 	}
 	return cmd

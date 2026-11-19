@@ -24,8 +24,12 @@ import (
 // supported: each Run first undoes what the previous Run set in every flag
 // and its destination variable, so values parsed by one Run never leak
 // into the next, while a value the program assigned between two Runs is
-// kept. Custom values need a Reset method for this (see FlagSet.Var). To
-// run commands in parallel, build one App per goroutine.
+// kept. Custom values need a Reset method for this (see FlagSet.Var). A
+// handler may call Run itself (an alias command, an interactive shell):
+// that nested Run starts from the values the outer Run has, and when it
+// returns it puts back everything it changed, so the handler continues
+// with its own values, Changed and Source. To run commands in parallel,
+// build one App per goroutine.
 func (a *App) Run(ctx context.Context, args []string) error {
 	if a.Root == nil {
 		return errors.New("clix: no root command configured")
@@ -57,13 +61,10 @@ func (a *App) Run(ctx context.Context, args []string) error {
 	rootFlags := a.Root.Flags
 
 	// Undo what the previous Run set (unless the program changed it
-	// since), and record what this one changes.
-	if err := a.startRun(); err != nil {
-		return err
-	}
-	a.running = true
-	defer func() { a.running = false }()
-	defer a.finishRun()
+	// since), and record what this one changes. A nested Run (started by
+	// a handler) puts back what it changed when it ends.
+	end := a.startRun()
+	defer end()
 
 	// Find the command first, then parse every flag exactly once: flags bind
 	// to the innermost command that defines them and fall back to the root.
@@ -273,6 +274,7 @@ scan:
 	for i := 1; i < len(path); i++ {
 		path[i].parent = path[i-1]
 	}
+	markShadowed(path)
 	cmd := path[len(path)-1]
 
 	// Pass 2: parse flags and collect positionals.
@@ -427,7 +429,8 @@ func (a *App) namesMatch(word, name string) bool {
 }
 
 // missingRequired returns the required flags without a value on path
-// (root first), outermost command first. A command added by an extension
+// (root first), outermost command first, leaving out the flags the Run
+// ignores (see markShadowed). A command added by an extension
 // (IsExtensionCommand), and everything below it, only checks the flags
 // from that command down, so "app version" never asks for a required
 // --project on the root.
@@ -441,7 +444,11 @@ func missingRequired(path []*Command) []*Flag {
 	}
 	var missing []*Flag
 	for _, c := range path[from:] {
-		missing = append(missing, c.Flags.MissingRequired()...)
+		for _, f := range c.Flags.MissingRequired() {
+			if !f.shadowed {
+				missing = append(missing, f)
+			}
+		}
 	}
 	return missing
 }
@@ -461,25 +468,34 @@ func helpRequested(path []*Command) bool {
 }
 
 // prepareTree links every command to its parent and gives each one a flag
-// set and a --help flag. It is idempotent, so Run calls it every time.
+// set and a --help flag. It is idempotent, so Run calls it every time. A
+// command shared by several groups keeps the parent it was last reached
+// through (by Run or ResolvePath) while that group still lists it, so
+// preparing never changes what Path reports.
 func (a *App) prepareTree() {
 	if a.Root == nil {
 		return
 	}
-	a.Root.prepare(nil)
-	seen := map[*Command]bool{}
-	var walk func(*Command)
-	walk = func(c *Command) {
-		if c == nil || seen[c] {
-			return
-		}
-		seen[c] = true
+	a.Root.parent = nil
+	listedBy := map[*Command][]*Command{}
+	eachCommandOnce(a.Root, func(c *Command) {
 		c.caseSensitive = a.CaseSensitive
+		c.prepareFlags()
 		for _, child := range c.Children {
-			walk(child)
+			if child != nil && child != a.Root {
+				listedBy[child] = append(listedBy[child], c)
+			}
+		}
+	})
+	for child, parents := range listedBy {
+		listed := false
+		for _, p := range parents {
+			listed = listed || p == child.parent
+		}
+		if !listed {
+			child.parent = parents[len(parents)-1]
 		}
 	}
-	walk(a.Root)
 }
 
 // stdout returns Out, or os.Stdout when Out is nil (for example, in a
@@ -535,14 +551,14 @@ func (a *App) ensureConfigLoaded(ctx context.Context) error {
 // trying environment variables, then the config file, then the flag's
 // default. It must run after parsing so command-line values keep the highest
 // precedence. A value that the flag rejects is reported as an error naming
-// its source.
+// its source. Flags the Run ignores (see markShadowed) are left alone.
 func (a *App) applyConfigToFlags(flags *FlagSet, tolerate bool) error {
 	if flags == nil {
 		return nil
 	}
 
 	for _, flag := range flags.flags {
-		if flag.cliSet {
+		if flag.cliSet || flag.shadowed {
 			continue
 		}
 
@@ -645,7 +661,7 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 // setAndValidate parses raw into flag and then runs the flag's Validate
 // function, mirroring what the command-line parser does.
 func setAndValidate(flag *Flag, raw string) error {
-	if err := flag.Value.Set(raw); err != nil {
+	if err := flag.setValue(raw); err != nil {
 		return err
 	}
 	if flag.Validate != nil {
@@ -753,7 +769,7 @@ func (a *App) trySetFromDefault(flag *Flag) error {
 	if !flag.hasDefault() {
 		return nil
 	}
-	if err := flag.Value.Set(flag.Default); err != nil {
+	if err := flag.setValue(flag.Default); err != nil {
 		return fmt.Errorf("clix: invalid default %q for --%s: %w", flag.Default, flag.Name, err)
 	}
 	return nil

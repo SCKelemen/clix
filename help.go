@@ -153,7 +153,10 @@ func (p helpPrinter) renderFlags(cmd *Command) {
 
 	p.heading("FLAGS")
 	for _, flag := range flags {
-		p.flagRow(flag, flag.Short, nameStyle, usageStyle)
+		if shadowedOn(cmd, flag) {
+			continue
+		}
+		p.flagRow(flag, shownShort(cmd, flag), nameStyle, usageStyle)
 	}
 	_, _ = fmt.Fprintln(p.w)
 }
@@ -207,18 +210,20 @@ type flagEntry struct {
 
 // reachableFlags returns the flags of ancestor that a token written after
 // cmd's name resolves to, skipping positional arguments.
+//
+// It asks the parser's own lookup over cmd's whole path, so help agrees with
+// it: a closer --help gives -h up to an ancestor's --host -h, and an
+// extension flag that loses to a better owner's further out is not the one
+// shown (see lookupArg).
 func reachableFlags(cmd, ancestor *Command) []flagEntry {
-	var closer []*FlagSet
-	for c := cmd; c != nil && c != ancestor; c = c.parent {
-		closer = append(closer, c.Flags)
-	}
+	chain := parentChain(cmd)
 	var entries []flagEntry
 	for _, flag := range ancestor.Flags.Flags() {
-		if flag.Positional || lookupArg("--"+flag.Name, closer...) != nil {
+		if flag.Positional || lookupArg("--"+flag.Name, chain...) != flag {
 			continue
 		}
 		short := flag.Short
-		if short != "" && lookupArg("-"+short, closer...) != nil {
+		if short != "" && lookupArg("-"+short, chain...) != flag {
 			short = ""
 		}
 		entries = append(entries, flagEntry{flag: flag, short: short})

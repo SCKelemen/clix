@@ -199,8 +199,10 @@ func TestFormatE2E_AppShortFlagWins(t *testing.T) {
 			if got, err := run(t, app, out, "get", "-f", "--format", "json"); err != nil || !force || !strings.Contains(got, `"force": true`) {
 				t.Errorf("get -f --format json: output %q, force %v, err %v", got, force, err)
 			}
-			if err := app.Validate(); err == nil || !strings.Contains(err.Error(), "-f") {
-				t.Errorf("App.Validate() = %v, want a report that --format lost -f", err)
+			// An extension flag that loses only its short name keeps its
+			// long name, so Validate does not report it.
+			if err := app.Validate(); err != nil {
+				t.Errorf("App.Validate() = %v, want nil: --format keeps its long name", err)
 			}
 		})
 	}

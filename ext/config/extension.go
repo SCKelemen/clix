@@ -39,8 +39,8 @@ import (
 // key from the config file (clix.Flag.CheckValue), so it cannot store a
 // value that would make later runs fail, and then rewrites the whole file
 // (see clix.ConfigManager.Save): a flat, key-sorted mapping of dotted keys
-// to strings, without the comments, nesting or lists of a hand-written
-// file. Without a value, an interactive `set` asks for it. `unset` writes
+// in which every value it did not change keeps its YAML form, without the
+// comments, nesting or anchors of a hand-written file. Without a value, an interactive `set` asks for it. `unset` writes
 // the file only when it removed something. `reset` deletes the file (the
 // target of a symlinked config path, keeping the link).
 //

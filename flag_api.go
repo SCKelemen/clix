@@ -106,11 +106,16 @@ func (o *VarOptions) merge(v VarOptions) {
 //
 // An App may be run more than once (in tests, a REPL, ...). Before the
 // next Run, what a Run set is undone, unless the program changed the
-// value since. For a custom Value that needs a Reset() method: Run calls
-// Reset and then, if the value held something before the previous Run,
-// Set with that text. A Value without Reset keeps what the previous Run
-// set (unless the flag has a Default, which is applied again), and the
-// carry-over is recorded in FlagSet.Err, so App.Validate reports it.
+// value since (which Run notices as a change in String). For a custom
+// Value that needs a Reset() method: when a Run called Set on the value,
+// from any source (the command line, the environment, the config file, a
+// prompt or the Default), the next Run calls Reset, whatever String
+// returns. Reset decides what the value goes back to; Run never passes
+// the old String back to Set. So a value that should start from something
+// other than its zero state needs a Default, which every Run applies
+// again, or a Reset that restores it. A Value without Reset keeps what the
+// previous Run set (unless the flag has a Default), and the carry-over is
+// recorded in FlagSet.Err, so App.Validate reports it.
 func (fs *FlagSet) Var(opts ...FlagOption) {
 	var varOpts VarOptions
 	for _, opt := range opts {
@@ -158,16 +163,15 @@ type varDefaultOption string
 func (o varDefaultOption) ApplyFlag(*FlagOptions) {}
 
 // applyDefault sets flag's value from its Default at registration. A
-// Default the value rejects (such as "eighty" for an int flag) is recorded
-// in Err, and the flag is treated as having no default, so a Required flag
-// is still missing.
+// Default the value rejects (such as "eighty" for an int flag) is reported
+// by Err, and the flag is treated as having no default, so a Required flag
+// is still missing, until the Default is changed (through Lookup).
 func (fs *FlagSet) applyDefault(flag *Flag) {
 	if flag.Default == "" {
 		return
 	}
 	if err := flag.Value.Set(flag.Default); err != nil {
-		flag.badDefault = true
-		fs.errs = append(fs.errs, fmt.Errorf("clix: invalid default %q for flag --%s in flag set %q: %w", flag.Default, flag.Name, fs.name, err))
+		flag.badDefault, flag.badDefaultErr = flag.Default, err
 	}
 }
 

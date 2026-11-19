@@ -57,8 +57,53 @@ func TestHelpDoesNotTakeShortH(t *testing.T) {
 	})
 }
 
+// Every command's own --help kept -h, and the nearest command's flag wins,
+// so after a command name -h showed help instead of setting the root's
+// (or a group's) --host.
+func TestHelpGivesShortHToAncestors(t *testing.T) {
+	app, out := newTestApp(t, "hh")
+	app.AddExtension(help.Extension{})
+	var host string
+	app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "host", Short: "h"}, Value: &host})
+	ran := false
+	ping := clix.NewCommand("ping", clix.WithCommandRun(mark(&ran)))
+	app.Root.AddCommand(ping)
+	dns := clix.NewGroup("dns", "DNS", clix.NewCommand("ls", clix.WithCommandRun(mark(&ran))))
+	app.Root.AddCommand(dns)
+	for _, argv := range []string{"-h example.com ping", "ping -h example.com", "ping -h=example.com", "dns ls -h example.com", "dns -h example.com ls"} {
+		host, ran = "", false
+		if err := app.Run(bg, strings.Fields(argv)); err != nil || !ran || host != "example.com" {
+			t.Errorf("%q: err=%v ran=%v host=%q", argv, err, ran, host)
+		}
+	}
+	out.Reset()
+	if err := app.Run(bg, []string{"ping", "--help"}); err != nil || !strings.Contains(out.String(), "--help") || strings.Contains(out.String(), "-h, --help") {
+		t.Errorf("ping --help = %v; help must list --help without -h:\n%s", err, out)
+	}
+
+	// Without an ancestor's -h, -h is help on every command.
+	other, out := newTestApp(t, "plain")
+	other.Root.AddCommand(clix.NewCommand("ping", clix.WithCommandRun(noop)))
+	if err := other.Run(bg, []string{"ping", "-h"}); err != nil || !strings.Contains(out.String(), "-h, --help") {
+		t.Errorf("ping -h = %v:\n%s", err, out)
+	}
+
+	// A group's -h wins over the root's below it.
+	scoped, _ := newTestApp(t, "sc")
+	var root, group string
+	scoped.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "host", Short: "h"}, Value: &root})
+	g := clix.NewGroup("g", "G", clix.NewCommand("c", clix.WithCommandRun(noop)))
+	g.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "hub", Short: "h"}, Value: &group})
+	scoped.Root.AddCommand(g)
+	if err := scoped.Run(bg, []string{"g", "c", "-h", "x"}); err != nil || group != "x" || root != "" {
+		t.Errorf("g c -h x: %v, group %q, root %q", err, group, root)
+	}
+}
+
 // Extensions applied at Run used to take short names from the app's own
-// flags: version's -v from --verbose and format's -f from --force.
+// flags: version's -v from --verbose and format's -f from --force. The
+// app is meant to win, and the extensions keep their long names, so Err
+// does not report it.
 func TestExtensionsDoNotTakeShortNames(t *testing.T) {
 	app, _ := newTestApp(t, "moln")
 	app.AddExtension(version.Extension{Version: "1.2.3"})
@@ -79,9 +124,11 @@ func TestExtensionsDoNotTakeShortNames(t *testing.T) {
 	if got := format.OutputFormat(app); got != "json" {
 		t.Fatalf("format = %q", got)
 	}
-	err := app.Flags().Err()
-	if err == nil || !strings.Contains(err.Error(), "extension #1 (version.Extension): -v is used by the app's --verbose; version is available as --version only") || !strings.Contains(err.Error(), "extension #2 (format.Extension): -f is used by the app's --force") {
-		t.Fatalf("Err() = %v, want both short-name conflicts", err)
+	if f := app.Flags().Lookup("version"); f == nil || f.Short != "" {
+		t.Fatalf("--version kept -%s", f.Short)
+	}
+	if err := app.Flags().Err(); err != nil {
+		t.Fatalf("Err() = %v", err)
 	}
 }
 

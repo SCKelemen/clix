@@ -5,9 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/SCKelemen/clix/v2"
+	configext "github.com/SCKelemen/clix/v2/ext/config"
 )
 
 // Save used to rename its temporary file over the path, which replaced a
@@ -165,5 +168,148 @@ func TestConfigSaveLinkLoop(t *testing.T) {
 	m.Set("k", "v")
 	if err := m.Save(a); err == nil {
 		t.Fatal("Save through a link loop succeeded")
+	}
+}
+
+// Save wrote every value as the text Load kept, so a key it did not change
+// changed type: 0x1F and 1_000 became strings an int flag rejects, 0755
+// (493) became the string "0755" (755), and [a, "b,c"] became "a,b,c",
+// three items.
+func TestConfigSaveKeepsUnchangedKeys(t *testing.T) {
+	for _, tc := range []struct {
+		name, yaml, kind string
+	}{
+		{"octal int", "mode: 0755\n", "int"},
+		{"hex int", "mode: 0x1F\n", "int"},
+		{"underscore int", "mode: 1_000\n", "int"},
+		{"quoted int", "mode: \"0755\"\n", "int"},
+		{"exponent float", "mode: 1e3\n", "float"},
+		{"list with a comma in an item", "tags: [a, \"b,c\"]\n", "slice"},
+		{"list with a quoted item", "tags: ['\"x\"', y]\n", "slice"},
+		{"block list", "tags:\n  - a\n  - b,c\n", "slice"},
+		{"tagged string", "mode: !!str 0x1F\n", "string"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			read := func(path string) (string, error) {
+				app, _ := newTestApp(t, "rt")
+				app.ConfigPath = path
+				var i int
+				var f float64
+				var s []string
+				var str string
+				var got string
+				cmd := clix.NewCommand("go", clix.WithCommandRun(func(*clix.Context) error {
+					got = map[string]string{"int": strconv.Itoa(i), "float": strconv.FormatFloat(f, 'g', -1, 64), "slice": strings.Join(s, "|"), "string": str}[tc.kind]
+					return nil
+				}))
+				switch tc.kind {
+				case "int":
+					cmd.Flags.IntVar(clix.IntVarOptions{FlagOptions: clix.FlagOptions{Name: "mode"}, Value: &i})
+				case "float":
+					cmd.Flags.Float64Var(clix.Float64VarOptions{FlagOptions: clix.FlagOptions{Name: "mode"}, Value: &f})
+				case "slice":
+					cmd.Flags.StringSliceVar(clix.StringSliceVarOptions{FlagOptions: clix.FlagOptions{Name: "tags"}, Value: &s})
+				case "string":
+					cmd.Flags.StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "mode"}, Value: &str})
+				}
+				app.Root.AddCommand(cmd)
+				err := app.Run(bg, []string{"go"})
+				return got, err
+			}
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(tc.yaml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			before, err := read(path)
+			if err != nil {
+				t.Fatalf("before Save: %v", err)
+			}
+			// What `config set other x` does.
+			m := clix.NewConfigManager("rt")
+			if err := m.Load(path); err != nil {
+				t.Fatal(err)
+			}
+			m.Set("other", "x")
+			if err := m.Save(path); err != nil {
+				t.Fatal(err)
+			}
+			body, _ := os.ReadFile(path)
+			if after, err := read(path); err != nil || after != before {
+				t.Errorf("after an unrelated Save the flag reads %q (%v), before it read %q; file:\n%s", after, err, before, body)
+			}
+			if !strings.Contains(string(body), strings.TrimSpace(strings.SplitN(tc.yaml, "\n", 2)[0])) {
+				t.Errorf("Save rewrote the key:\n%s", body)
+			}
+		})
+	}
+}
+
+// End to end: `app config set other x` made the next run of a command
+// whose int flags read hand-written 0x1F and 0755 fail with exit status 2.
+func TestConfigSetKeepsOtherKeys(t *testing.T) {
+	newApp := func(path string) (*clix.App, *int, *int) {
+		app, _ := newTestApp(t, "e2e")
+		app.ConfigPath = path
+		var mask, mode int
+		cmd := clix.NewCommand("go", clix.WithCommandRun(noop))
+		cmd.Flags.IntVar(clix.IntVarOptions{FlagOptions: clix.FlagOptions{Name: "mask"}, Value: &mask})
+		cmd.Flags.IntVar(clix.IntVarOptions{FlagOptions: clix.FlagOptions{Name: "mode"}, Value: &mode})
+		app.Root.AddCommand(cmd)
+		app.AddExtension(configext.Extension{})
+		return app, &mask, &mode
+	}
+	app, _ := newTestApp(t, "e2e")
+	path := writeConfigFile(t, app, "mask: 0x1F\nmode: 0755\n")
+	app, mask, mode := newApp(path)
+	if err := app.Run(bg, []string{"go"}); err != nil || *mask != 31 || *mode != 493 {
+		t.Fatalf("before: err=%v mask=%d mode=%d", err, *mask, *mode)
+	}
+	if err := app.Run(bg, []string{"config", "set", "other", "x"}); err != nil {
+		t.Fatalf("config set: %v", err)
+	}
+	app, mask, mode = newApp(path) // a new process
+	err := app.Run(bg, []string{"go"})
+	body, _ := os.ReadFile(path)
+	if err != nil || *mask != 31 || *mode != 493 {
+		t.Errorf("after config set other x: err=%v (exit %d) mask=%d mode=%d; file:\n%s", err, clix.ExitCode(err), *mask, *mode, body)
+	}
+}
+
+// A value given to Set reads back after Save exactly as before it: as the
+// same text, and as the same number for an int flag. Numbers and booleans
+// in canonical form are written as YAML numbers and booleans.
+func TestConfigSaveTypesNewValues(t *testing.T) {
+	values := map[string]string{
+		"retries": "5", "ratio": "1.5", "debug": "true", "name": "hello",
+		"mode": "0755", "mask": "0x1F", "version": "1.10", "big": "1_000",
+		"empty": "", "null": "null", "plus": "+5", "spaced": " a ", "colon": "a: b",
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	m := clix.NewConfigManager("x")
+	for k, v := range values {
+		m.Set(k, v)
+	}
+	if err := m.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(path)
+	for _, line := range []string{"retries: 5\n", "ratio: 1.5\n", "debug: true\n", "name: hello\n", `mode: "0755"`, `version: "1.10"`, `empty: ""`} {
+		if !strings.Contains(string(body), line) {
+			t.Errorf("file lacks %q:\n%s", line, body)
+		}
+	}
+	reloaded := clix.NewConfigManager("x")
+	if err := reloaded.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	for k, want := range values {
+		if got, ok := reloaded.Get(k); !ok || got != want {
+			t.Errorf("%s = %q (%v), want %q", k, got, ok, want)
+		}
+		gotN, gotOK := reloaded.Int(k)
+		wantN, wantOK := m.Int(k)
+		if gotN != wantN || gotOK != wantOK {
+			t.Errorf("Int(%s) = %d, %v after Save, %d, %v before", k, gotN, gotOK, wantN, wantOK)
+		}
 	}
 }

@@ -26,7 +26,7 @@ func (fs *FlagSet) MapPositionals(args []string) ([]string, error) {
 		if f.cliSet {
 			continue
 		}
-		if err := f.Value.Set(args[argIdx]); err != nil {
+		if err := f.setValue(args[argIdx]); err != nil {
 			return nil, usageErrorf("invalid value for positional argument %s: %w", f.Name, err)
 		}
 		if f.Validate != nil {

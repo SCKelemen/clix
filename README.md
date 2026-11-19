@@ -292,7 +292,7 @@ The other controls, all off by default:
 
 #### Config file values
 
-Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode: 0755` is `"0755"` and `date: 2024-01-02` is `"2024-01-02"`. Only int and float flags (and `Config.Int` and friends) read YAML's number, so `mode: 0755` sets an int flag to 493 and `0x1F` to 31. Nested maps flatten to dotted keys (`ports: {80: http}` is `ports.80`); a list of scalars is joined with commas (a slice flag gets its items one by one, so an item may contain a comma), and other lists flatten with indexes (`hosts.0.name`). A key written twice, for example nested and dotted, is an error that names the file. `Save` replaces the file atomically with mode 0600, and writes through a symbolic link instead of replacing it.
+Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode: 0755` is `"0755"` and `date: 2024-01-02` is `"2024-01-02"`. Only int and float flags (and `Config.Int` and friends) read YAML's number, so `mode: 0755` sets an int flag to 493 and `0x1F` to 31. Nested maps flatten to dotted keys (`ports: {80: http}` is `ports.80`); a list of scalars is joined with commas (a slice flag gets its items one by one, so an item may contain a comma), and other lists flatten with indexes (`hosts.0.name`). A key written twice, for example nested and dotted, is an error that names the file. `Save` (which `config set` and `config unset` call) never changes what a key reads: a key it did not change is written back as the file had it, so `mask: 0x1F` stays a number and `tags: [a, "b,c"]` a list of two items, and a new value is quoted when YAML would read it differently (`mode: "0755"`). It replaces the file atomically with mode 0600, and writes through a symbolic link instead of replacing it.
 
 #### Checking definitions in a test
 
@@ -311,7 +311,13 @@ func TestCLIDefinition(t *testing.T) {
 
 #### Running more than once
 
-`Run` can be called repeatedly on one `App`, as tests and REPLs do: every run first restores each flag, and its bound variable, to the value it held before the first run. `Run` is not safe for concurrent use on one `App`; build one `App` per goroutine.
+`Run` can be called repeatedly on one `App`, as tests and REPLs do. Each run first undoes what the previous run did: a flag that run set, from any source, goes back with its bound variable to the value it had when that run started, so `rm --force` followed by `rm` does not keep `--force`. A value your program assigned to a bound variable between two runs is kept instead. `Run` can tell an assignment from what the previous run left only by its value, so assigning exactly that value (`region = "eu"` after a run with `--region eu`) is undone like the rest; pass such a value on the command line, or make it the flag's `Default`.
+
+Built-in values are put back exactly. A custom `Value` (see `FlagSet.Var`) is put back by its `Reset` method, which `Run` calls whenever the previous run called `Set` on it, whatever its `String` returns, so a secret that prints as `<redacted>` is reset too. `Run` never passes `String`'s text back to `Set`, so a custom value that should not start from its zero state needs a `Default`, which every run applies again. A custom `Value` without `Reset` keeps what a run set, and `Validate` reports that.
+
+A handler may call `Run` itself, for an alias command or an interactive shell. The nested run starts from the outer run's values, with no flag set yet, and when it returns it puts back everything it changed, so the handler continues with its own values, `Changed` and `Source`, and nothing leaks into later runs. A custom value that the nested run set is reset rather than restored.
+
+`Run` is not safe for concurrent use on one `App`; build one `App` per goroutine.
 
 #### Typed configuration access (optional schema)
 
@@ -437,7 +443,7 @@ moln [--project/-p] [--verbose/-v]
 - A group followed by a word that is not a child fails with `unknown command: moln project nope`. The word `help` is not special there: `moln project help ls` is an unknown command, because the `help` command from `ext/help` only exists at the root.
 - A command with a `Run` handler and children runs its handler when the next word is not a child. `moln db users` runs `db` with `name` set to `users`; a command that takes no positional arguments fails with `unexpected arguments`.
 
-**Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `moln --help deploy`, `moln project --help ls` and `moln deploy -fh` all show help, even when required flags are missing or there are extra arguments. A command may use `-h` for its own flag (such as `--host`); the built-in help then has only `--help`.
+**Help.** `--help` or `-h`, on any command of the path and anywhere before `--`, shows help for the deepest command matched and runs nothing: `moln --help deploy`, `moln project --help ls` and `moln deploy -fh` all show help, even when required flags are missing or there are extra arguments. A flag that uses `-h` (such as `--host`) on the command or on any command above it keeps `-h` after the command name, and the built-in help there has only `--help`: with a root `--host -h`, `moln deploy -h example.com` sets the host.
 
 **Required flags.** Required flags on every command of the path, including groups and the root, need a value from the command line, the environment, the config file, a prompt or a default. A command with `IsExtensionCommand` set, and its subcommands, skip the required flags of the commands above them, so `moln version` never asks for `--project`.
 
@@ -805,12 +811,12 @@ if err := app.Run(context.Background(), nil); err != nil {
 Extensions never override your definitions. Everything registered while an extension's `Extend` runs belongs to that extension, and so does a flag added to an extension's command at any later time; everything else belongs to your app. When a flag's long name, a short name, or a command name or alias collides, your definition wins, and between two extensions the one added first with `AddExtension` wins. The order in which you register your own flags, add extensions or call `ApplyExtensions` does not matter.
 
 - A flag that loses its short name keeps its long name (your `-v` for `--verbose` leaves `ext/version` with `--version` only); a flag that loses its long name is dropped from parsing and help; a command that loses its name is unreachable and left out of help and completion.
-- This holds along the whole command path: if an extension adds `--project` to your `deploy` while your root defines `--project`, `deploy --project x` sets your root flag.
+- This holds along the whole command path: if an extension adds `--project` to your `deploy` while your root defines `--project`, `deploy --project x` sets your root flag, and the extension's flag is ignored: it is never required, filled from the environment or the config file, or listed in `deploy`'s help.
 - An extension's own commands keep their own flags: `config get --key k` uses ext/config's `--key` even if your root has a `--key`, and that is not reported, since there is nothing to fix.
 - A flag registered while the app is running (in a handler or hook) on a flag set no extension owns never takes a name from an existing flag.
-- The built-in `--help` gives `-h` up to any flag that wants it.
+- The built-in `--help` gives `-h` up to any flag that wants it, on the same command or on one above it, so a root `--host -h` is also `-h` after a command name.
 
-`FlagSet.Err` and `App.Validate` report every override and name both owners, numbering extensions in the order they were added, for example `extension #1 (version.Extension): -v is used by the app's --verbose; version is available as --version only`. Commands and flags that extensions added to the root move along if you replace `app.Root` after `ApplyExtensions`.
+`FlagSet.Err` and `App.Validate` report every override that costs a flag its long name or a command its name, and name both owners, numbering extensions in the order they were added, for example `extension #1 (format.Extension): flag --format in flag set "myapp" is also defined by the app; the app's --format is used and this one is ignored`. An extension's flag that only loses its short name, or an extension's command that only loses an alias, still works by its name, and the app is meant to win, so that is not reported: your own `-v` next to `ext/version` passes `Validate`. Commands and flags that extensions added to the root move along if you replace `app.Root` after `ApplyExtensions`.
 
 ### Available Extensions
 
@@ -1179,3 +1185,7 @@ Dependabot never changes a module path. A future major version would live at a n
 ## License
 
 `clix` is available under the [MIT License](LICENSE).
+
+## Packages
+
+- [`iso8601`](iso8601): parse and format ISO 8601 / RFC 3339 dates, times and durations, using only the standard library.

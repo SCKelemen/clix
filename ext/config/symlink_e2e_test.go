@@ -26,7 +26,7 @@ func TestConfigE2E_SymlinkedFile(t *testing.T) {
 	if fi, err := os.Lstat(link); err != nil || fi.Mode()&os.ModeSymlink == 0 {
 		t.Fatalf("the symlink was replaced (%v)", err)
 	}
-	if data, _ := os.ReadFile(target); string(data) != "a: \"1\"\nb: \"2\"\n" {
+	if data, _ := os.ReadFile(target); string(data) != "a: 1\nb: 2\n" {
 		t.Errorf("symlink target after set:\n%s", data)
 	}
 	run(t, app, out, "config", "reset")

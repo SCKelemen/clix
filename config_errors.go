@@ -47,7 +47,7 @@ func (a *App) configErrorAllowed(cmd *Command) bool {
 
 // valueUndo returns what puts flag back as it is now, when value errors are
 // tolerated for this run; otherwise nil.
-func valueUndo(flag *Flag, tolerate bool) func() error {
+func valueUndo(flag *Flag, tolerate bool) func() {
 	if !tolerate {
 		return nil
 	}
@@ -58,12 +58,12 @@ func valueUndo(flag *Flag, tolerate bool) func() error {
 // or the config file. Without tolerance (undo is nil) it returns err.
 // Otherwise the rejected value is undone, a warning goes to App.Err, and
 // the flag's default applies.
-func (a *App) valueError(flag *Flag, err error, tolerate bool, undo func() error) error {
+func (a *App) valueError(flag *Flag, err error, tolerate bool, undo func()) error {
 	if err == nil || !tolerate {
 		return err
 	}
 	if undo != nil {
-		_ = undo()
+		undo()
 	}
 	if w := a.Err; w != nil {
 		_, _ = fmt.Fprintf(w, "%s: ignoring %v\n", a.Name, err)
