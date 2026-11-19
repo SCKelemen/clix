@@ -214,8 +214,8 @@ If you need code generation, complex plugin systems, or a more flexible command 
 ## Examples
 
 - [`examples/basic`](examples/basic): End-to-end application demonstrating commands, flags, prompting, and configuration usage.
-- [`examples/gh`](examples/gh): A GitHub CLI-style hierarchy with familiar groups, commands, aliases, and interactive prompts.
-- [`examples/gcloud`](examples/gcloud): A Google Cloud CLI-inspired tree with large command groups, global flags, and configuration interactions.
+- [`examples/gh`](examples/gh): A GitHub CLI-style app: `pr list` as a table and with gh's `--json`, `--jq` and `--template`, user aliases (`gh alias set co 'pr checkout'`), a plugin on PATH ([`plugins/gh-hello`](examples/gh/plugins/gh-hello) runs as `gh hello`), command aliases, and interactive prompts.
+- [`examples/gcloud`](examples/gcloud): A Google Cloud CLI-style app with gcloud's large command catalog: named configurations (`gcloud config configurations`), an Ambient global `--project` flag that reads `CLOUDSDK_CORE_PROJECT` and the active configuration, the label flag group of `projects update`, a help topic (`gcloud help configurations`), and a progress indicator for `projects create`.
 - [`examples/lipgloss`](examples/lipgloss): Demonstrates prompt and help styling using [`lipgloss`](https://github.com/charmbracelet/lipgloss), including select, multi-select, and confirm prompts.
 - [`examples/multicli`](examples/multicli): Demonstrates sharing command implementations across multiple CLI applications with different hierarchies, similar to Google Cloud's gcloud/bq pattern.
 - [`examples/bubbles`](examples/bubbles): Implements a custom `clix.Prompter` with [Bubbles](https://github.com/charmbracelet/bubbles) components.

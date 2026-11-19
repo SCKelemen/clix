@@ -58,7 +58,7 @@ $ myapp repos list --template '{{range .}}{{.name}} ({{.stars}}){{"\n"}}{{end}}'
 clix (42)
 ```
 
-Without the extension there are no output flags; call `clix.FormatData` with a fixed format such as `clix.FormatJSON`. Handlers that call `clix.FormatData(ctx.App.Out, data, format.OutputFormat(ctx.App))` themselves honor `--format`, and `--json` as plain JSON, but not `--json`'s fields, `--jq` or `--template`; the `version` and `config list` extension commands work that way.
+[`examples/gh`](../examples/gh)'s `pr list` prints this way. Without the extension there are no output flags; call `clix.FormatData` with a fixed format such as `clix.FormatJSON`. Handlers that call `clix.FormatData(ctx.App.Out, data, format.OutputFormat(ctx.App))` themselves honor `--format`, and `--json` as plain JSON, but not `--json`'s fields, `--jq` or `--template`; the `version` and `config list` extension commands work that way.
 
 ### The format extension
 
