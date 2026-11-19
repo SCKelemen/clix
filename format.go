@@ -31,23 +31,31 @@ import (
 //   - Lists of plain values print one value per line; lists of objects
 //     print each object as a block of "key = value" lines, separated by a
 //     blank line.
-//   - Structs and other values are first converted with encoding/json/v2,
-//     so json struct tags, omitempty, omitzero and MarshalJSON methods decide
+//   - Structs and other values are first converted to JSON (as below), so
+//     json struct tags, omitempty, omitzero and MarshalJSON methods decide
 //     their keys and values; durations inside them print as "1m30s" and
-//     times in RFC 3339. A value encoding/json/v2 cannot handle prints with
-//     fmt's %v.
+//     times in RFC 3339. When a value cannot be converted as a whole (it
+//     holds a channel, a function or a NaN), it is walked field by field
+//     with the same json tag rules, so fields tagged json:"-" and
+//     unexported fields are never printed; only the parts JSON cannot
+//     encode print with fmt's %v.
 //
-// JSON output is encoded with encoding/json/v2, indented by two spaces and
-// followed by a newline:
+// JSON output is encoded with encoding/json/v2 using the semantics of
+// encoding/json (v1), so every value v1 encodes still encodes the same way
+// (struct tags, omitempty, ",string", MarshalJSON, embedded fields), except
+// for these deliberate differences:
 //
-//   - Map keys are sorted, so the output is the same on every run.
-//   - <, > and & are not escaped (they only need escaping inside HTML).
-//   - time.Duration is an ISO 8601 duration ("PT1M30S"), time.Time is
-//     RFC 3339 with fractional seconds only when they are non-zero.
-//   - Nil slices and maps are [] and {}, a nil []byte is "".
-//   - omitempty leaves out only values that would be null, "", {} or [];
-//     use omitzero to leave out zero numbers, false and zero structs.
-//   - Invalid UTF-8 in strings is replaced with U+FFFD instead of failing.
+//   - time.Duration is an ISO 8601 duration ("PT1M30S") instead of
+//     nanoseconds; time.Time is RFC 3339 with fractional seconds only when
+//     they are non-zero, for any year.
+//   - Nil slices and maps are [] and {}, and a nil []byte is "", instead of
+//     null.
+//   - <, >, & and U+2028/U+2029 are not escaped (they only need escaping
+//     inside HTML or JavaScript).
+//
+// It is indented by two spaces and followed by a newline, map keys are
+// sorted, invalid UTF-8 is replaced with U+FFFD, and nothing is written
+// when the value cannot be encoded.
 func FormatData(w io.Writer, data interface{}, format string) error {
 	switch strings.ToLower(format) {
 	case FormatJSON:
@@ -405,17 +413,165 @@ func textNode(v interface{}) interface{} {
 	if isTextScalar(v) {
 		return v
 	}
+	if out, ok := jsonTextNode(v); ok {
+		return out
+	}
+	return fallbackNode(reflect.ValueOf(v), 0)
+}
+
+// jsonTextNode converts v through JSON (see jsonTextOptions).
+func jsonTextNode(v interface{}) (interface{}, bool) {
 	data, err := marshalForText(v)
 	if err != nil {
-		return textFallback{v}
+		return nil, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.UseNumber()
 	var out interface{}
 	if err := dec.Decode(&out); err != nil {
-		return textFallback{v}
+		return nil, false
 	}
-	return out
+	return out, true
+}
+
+// maxFallbackDepth bounds fallbackNode on cyclic values.
+const maxFallbackDepth = 32
+
+// fallbackNode converts a value that JSON could not encode as a whole (it
+// holds a channel, a function, a NaN, a cycle, ...). It walks the value,
+// converting each part through JSON where it can, and follows the json
+// struct tag rules for struct fields, so a field tagged json:"-" (or an
+// unexported one) is never printed. Only the parts JSON cannot encode at
+// all print with %v.
+func fallbackNode(rv reflect.Value, depth int) interface{} {
+	if !rv.IsValid() {
+		return nil
+	}
+	if depth > maxFallbackDepth {
+		return "..."
+	}
+	if depth > 0 && rv.CanInterface() {
+		x := rv.Interface()
+		if isTextScalar(x) {
+			return x
+		}
+		if out, ok := jsonTextNode(x); ok {
+			return out
+		}
+	}
+	switch rv.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if rv.IsNil() {
+			return nil
+		}
+		return fallbackNode(rv.Elem(), depth+1)
+	case reflect.Map:
+		m := make(map[string]interface{}, rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			m[fmt.Sprint(iter.Key())] = fallbackNode(iter.Value(), depth+1)
+		}
+		return m
+	case reflect.Slice, reflect.Array:
+		list := make([]interface{}, rv.Len())
+		for i := range list {
+			list[i] = fallbackNode(rv.Index(i), depth+1)
+		}
+		return list
+	case reflect.Struct:
+		m := make(map[string]interface{})
+		fallbackFields(rv, m, depth)
+		return m
+	case reflect.Float32, reflect.Float64:
+		return rv.Float() // NaN and ±Inf, which JSON cannot encode
+	}
+	if rv.CanInterface() {
+		return textFallback{rv.Interface()}
+	}
+	// A field promoted from an unexported embedded struct cannot be read
+	// through Interface; read plain values by kind.
+	switch rv.Kind() {
+	case reflect.Bool:
+		return rv.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return rv.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return rv.Uint()
+	case reflect.String:
+		return rv.String()
+	}
+	return nil
+}
+
+// fallbackFields adds the fields of struct rv that encoding/json would
+// encode to m, under their JSON names: exported fields not tagged "-"
+// (json:"-," names a field "-"), omitempty fields only when not empty, and
+// the fields of untagged embedded structs in place.
+func fallbackFields(rv reflect.Value, m map[string]interface{}, depth int) {
+	t := rv.Type()
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+		tag := f.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		name, opts, _ := strings.Cut(tag, ",")
+		fv := rv.Field(i)
+		if f.Anonymous && name == "" {
+			ft := f.Type
+			if ft.Kind() == reflect.Pointer {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				if fv.Kind() == reflect.Pointer {
+					if fv.IsNil() {
+						continue
+					}
+					fv = fv.Elem()
+				}
+				fallbackFields(fv, m, depth+1)
+				continue
+			}
+		}
+		if !f.IsExported() {
+			continue
+		}
+		if name == "" {
+			name = f.Name
+		}
+		if _, exists := m[name]; exists {
+			continue // a shallower field wins, as in encoding/json
+		}
+		if hasJSONOption(opts, "omitempty") && isEmptyJSONValue(fv) {
+			continue
+		}
+		if hasJSONOption(opts, "omitzero") && fv.IsZero() {
+			continue
+		}
+		m[name] = fallbackNode(fv, depth+1)
+	}
+}
+
+func hasJSONOption(opts, option string) bool {
+	for _, o := range strings.Split(opts, ",") {
+		if o == option {
+			return true
+		}
+	}
+	return false
+}
+
+// isEmptyJSONValue is encoding/json's omitempty test.
+func isEmptyJSONValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
+		return v.Len() == 0
+	case reflect.Bool, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64, reflect.Interface, reflect.Pointer:
+		return v.IsZero()
+	}
+	return false
 }
 
 // textLine returns the one-line text of a scalar or fallback node.

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"math"
-	"strings"
 	"testing"
 	"time"
 )
@@ -43,7 +42,7 @@ func TestFormatJSONGolden(t *testing.T) {
 			"{\n  \"alpha\": {\n    \"c\": 3,\n    \"d\": 4\n  },\n  \"mid\": true,\n  \"zeta\": 1\n}\n"},
 		{"integer keys sort as strings", map[int]string{10: "a", 2: "b"}, "{\n  \"10\": \"a\",\n  \"2\": \"b\"\n}\n"},
 		{"struct with tags", jsonGoldenItem{Name: "a", Labels: map[string]string{"b": "2", "a": "1"}, Tags: []string{"x"}, Timeout: 90 * time.Second, At: at, Raw: []byte("hi")},
-			"{\n  \"name\": \"a\",\n  \"count\": 0,\n  \"labels\": {\n    \"a\": \"1\",\n    \"b\": \"2\"\n  },\n  \"tags\": [\n    \"x\"\n  ],\n  \"timeout\": \"PT1M30S\",\n  \"at\": \"2026-11-19T08:30:00Z\",\n  \"raw\": \"aGk=\"\n}\n"},
+			"{\n  \"name\": \"a\",\n  \"labels\": {\n    \"a\": \"1\",\n    \"b\": \"2\"\n  },\n  \"tags\": [\n    \"x\"\n  ],\n  \"timeout\": \"PT1M30S\",\n  \"at\": \"2026-11-19T08:30:00Z\",\n  \"raw\": \"aGk=\"\n}\n"},
 		{"nil and empty slices and maps", map[string]interface{}{
 			"nilSlice": []int(nil), "emptySlice": []int{}, "nilMap": map[string]int(nil), "emptyMap": map[string]int{},
 			"nilBytes": []byte(nil), "nilPointer": (*int)(nil), "nil": nil,
@@ -94,18 +93,20 @@ func TestFormatTextDurationsAndTimes(t *testing.T) {
 	if want := "at = 2026-11-19T08:30:00.0000005Z\ntimeout = 1m30s\n"; b.String() != want {
 		t.Errorf("text output %q, want %q", b.String(), want)
 	}
-	// omitempty follows encoding/json/v2: only null, "", {} and [] are
-	// left out, so a zero number stays; omitzero leaves it out.
+	// omitempty keeps the encoding/json (v1) meaning: zero numbers, false,
+	// "", nil and empty slices and maps are left out; omitzero also works.
 	type counts struct {
-		Empty int `json:"empty,omitempty"`
-		Zero  int `json:"zero,omitzero"`
+		Empty int  `json:"empty,omitempty"`
+		Zero  int  `json:"zero,omitzero"`
+		False bool `json:"false,omitempty"`
+		Kept  int  `json:"kept"`
 	}
 	b.Reset()
 	_ = FormatData(&b, counts{}, FormatText)
-	if b.String() != "empty = 0\n" {
+	if b.String() != "kept = 0\n" {
 		t.Errorf("text output of omitempty/omitzero zeros: %q", b.String())
 	}
-	if !strings.Contains(formatJSONString(t, counts{}), `"empty": 0`) {
-		t.Error("JSON omitted a zero int marked omitempty")
+	if got := formatJSONString(t, counts{}); got != "{\n  \"kept\": 0\n}\n" {
+		t.Errorf("JSON of omitempty/omitzero zeros: %q", got)
 	}
 }

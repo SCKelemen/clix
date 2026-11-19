@@ -1,20 +1,36 @@
 package clix
 
 import (
+	jsonv1 "encoding/json"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"io"
 	"time"
 )
 
+// jsonV1Semantics makes encoding/json/v2 encode Go values the way
+// encoding/json (v1) does, so values that v1 handled keep working: the
+// legacy omitempty, ",string" on booleans, MarshalJSON methods with pointer
+// receivers only on addressable values, structs without exported fields as
+// {}, duplicate names in MarshalJSON output, [N]byte as arrays, and v1's
+// rules for embedded fields and conflicting tags. The options after it
+// change only the formatting and the few representations FormatData
+// documents.
+var jsonV1Semantics = jsonv1.DefaultOptionsV1()
+
 // jsonOutputOptions configure JSON output (see FormatData). EscapeForHTML
-// is off, the encoding/json/v2 default: &, < and > are written as is, since
-// the escapes only matter when JSON is embedded in HTML and they make URLs
-// hard to read.
+// and EscapeForJS are off: &, <, > and U+2028/U+2029 are written as is,
+// since the escapes only matter when JSON is embedded in HTML or
+// JavaScript and they make URLs hard to read.
 var jsonOutputOptions = json.JoinOptions(
+	jsonV1Semantics,
 	json.Deterministic(true),
 	jsontext.WithIndent("  "),
+	jsontext.EscapeForHTML(false),
+	jsontext.EscapeForJS(false),
 	jsontext.AllowInvalidUTF8(true),
+	json.FormatNilSliceAsNull(false),
+	json.FormatNilMapAsNull(false),
 	json.WithMarshalers(json.JoinMarshalers(
 		json.MarshalToFunc(func(enc *jsontext.Encoder, d time.Duration) error {
 			return enc.WriteToken(jsontext.String(isoDuration(d)))
@@ -28,6 +44,7 @@ var jsonOutputOptions = json.JoinOptions(
 // jsonTextOptions configure the conversion of structs and other values for
 // text output, where durations keep their human form ("1m30s").
 var jsonTextOptions = json.JoinOptions(
+	jsonV1Semantics,
 	jsontext.AllowInvalidUTF8(true),
 	json.WithMarshalers(json.JoinMarshalers(
 		json.MarshalToFunc(func(enc *jsontext.Encoder, d time.Duration) error {
