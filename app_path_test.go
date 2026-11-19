@@ -118,3 +118,15 @@ func TestExtensionCommandsSkipAncestorRequired(t *testing.T) {
 		t.Fatalf("ran %d times, want 2", ran)
 	}
 }
+
+// A group's flag written after the leaf was an unknown flag: the parser
+// looked only at the leaf and the root.
+func TestGroupFlagAfterLeaf(t *testing.T) {
+	app, org, viaCtx, _ := newGroupApp(t, false)
+	if err := app.Run(bg, []string{"project", "ls", "--org", "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	if *org != "acme" || *viaCtx != "acme" {
+		t.Fatalf("org = %q, ctx = %q", *org, *viaCtx)
+	}
+}

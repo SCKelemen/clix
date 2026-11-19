@@ -170,15 +170,15 @@ func (a *App) Run(ctx context.Context, args []string) error {
 }
 
 // parseCommandLine resolves the command path in args and parses all flags
-// in a single pass.
+// in a single pass. README.md ("Routing") states these rules for users.
 //
 // The path is found first: words that name a child command descend into it,
 // and flag tokens are skipped (together with their value, when the flag is
 // known to take one). Parsing then binds each flag to the command in effect
-// where it appears, falling back to the root flag set, so a command's -f is
-// never shadowed by a root -f. Flags after the command name therefore resolve
-// against the command before the root. A bare "--" ends flag parsing and
-// everything after it is positional.
+// where it appears: the flag is looked up on that command, then on each of
+// its ancestors up to the root, so a command's -f is never shadowed by a
+// root -f, and a group's flag also works after the leaf. A bare "--" ends
+// flag parsing and everything after it is positional.
 //
 // It returns the matched command, the positional arguments, and the first
 // word that did not match a child command (stray), if any.
@@ -197,9 +197,14 @@ scan:
 		case tok == "--":
 			break scan
 		case isFlagArg(tok):
+			uses, ok := resolveFlagToken(tok, flagChain(cmd), nil)
+			if !ok && isNumberArg(tok) {
+				// "-5" is a word, like any other positional.
+				stray = tok
+				break scan
+			}
 			scope[i] = cmd
-			name, _, hasValue := strings.Cut(tok, "=")
-			if f := lookupArg(name, cmd.Flags, root.Flags); f != nil && !hasValue && takesValue(f) {
+			if ok && uses[len(uses)-1].needsNext {
 				i++ // skip the flag's value
 			}
 		default:
@@ -244,37 +249,54 @@ scan:
 		if sc == nil {
 			sc = cmd
 		}
-		name, value, hasValue := strings.Cut(tok, "=")
-		f := lookupArg(name, sc.Flags, root.Flags)
-		if f == nil && sc != cmd {
-			// A switch written before the command name, such as
-			// "app --force delete", can still belong to the command. Only
-			// accept it when it does not need a separate value, which pass 1
-			// could not have known to skip.
-			if g := lookupArg(name, cmd.Flags); g != nil && (hasValue || !takesValue(g)) {
-				f = g
-			}
+		// A switch written before the command name, such as
+		// "app --force delete", can still belong to the command (late).
+		// Only a flag that does not need a separate value is accepted that
+		// way, because pass 1 could not have known to skip the value.
+		var late []*FlagSet
+		if sc != cmd {
+			late = flagChain(cmd)
 		}
-		if f == nil {
-			if cmd.Flags.strict {
+		uses, ok := resolveFlagToken(tok, flagChain(sc), late)
+		if !ok {
+			name, _, _ := strings.Cut(tok, "=")
+			switch {
+			case isNumberArg(tok):
+				positionals = append(positionals, tok)
+			case cmd.Flags.strict:
 				return nil, nil, "", usageErrorf("unknown flag: %s", name)
+			default:
+				positionals = append(positionals, tok)
 			}
-			positionals = append(positionals, tok)
 			continue
 		}
-		err := setFromArg(f, name, value, hasValue, func() (string, bool) {
-			if i+1 >= len(args) {
-				return "", false
+		for _, u := range uses {
+			err := setFromArg(u.flag, u.name, u.value, u.hasValue, func() (string, bool) {
+				if i+1 >= len(args) {
+					return "", false
+				}
+				i++
+				return args[i], true
+			})
+			if err != nil {
+				return nil, nil, "", err
 			}
-			i++
-			return args[i], true
-		})
-		if err != nil {
-			return nil, nil, "", err
 		}
 	}
 
 	return cmd, positionals, stray, nil
+}
+
+// flagChain returns the flag sets of cmd and each of its ancestors,
+// innermost first, ending with the root's.
+func flagChain(cmd *Command) []*FlagSet {
+	var sets []*FlagSet
+	for c := cmd; c != nil; c = c.parent {
+		if c.Flags != nil {
+			sets = append(sets, c.Flags)
+		}
+	}
+	return sets
 }
 
 // skipsRootName reports whether word, the first word on the command line,
