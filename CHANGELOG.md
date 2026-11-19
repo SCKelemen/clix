@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- ISO 8601 flags, using the `iso8601` package:
+  - `FlagSet.TimeVar` binds a `time.Time` from any form `iso8601.ParseTime` reads: RFC 3339, a date alone, a time without an offset, the basic format, and week and ordinal dates. A value without an offset is read in `TimeVarOptions.Location` (`WithTimeLocation`), which defaults to UTC. A skipped or repeated local time is resolved as RFC 5545 §3.3.5 says.
+  - `FlagSet.ISODurationVar` binds a calendar-aware `iso8601.Duration` (`P1D`, `PT1H30M`, `P1Y2M`) and accepts ISO 8601 only.
+  - Getters: `Context.Time`, `EffectiveTime`, `ISODuration` and `EffectiveISODuration`, which return a flag's value exactly as bound, and `FlagSet.Time` and `FlagSet.ISODuration`.
+  - Also `TimeValue`, `ISODurationValue`, `TimeVarOptions`, `ISODurationVarOptions`, `WithTimeValue`, `WithTimeDefault`, `WithISODurationValue` and `WithISODurationDefault`.
+  - Both flags read the environment, the config file, prompts and defaults like other flags. Their errors are usage errors (exit status 2) that point at the offending character. Help shows the expected format after the flag's usage. Shell completion offers no values (no file names) unless `SetCompletion` sets a function.
+
+### Changed
+
+- `DurationVar` (and `Context.Duration` and `EffectiveDuration`) also accept ISO 8601 durations (`PT5M`, `P1DT12H`, `-PT2H`), the form `--format json` and `yaml` print, with a day counted as 24 hours. Years and months are rejected with an error that says why, since a `time.Duration` has a fixed length. Every value accepted before reads the same: an ISO 8601 duration starts with `P`, which no Go duration does. The value still prints in Go's syntax, and help is unchanged.
+
 ## [2.8.0] - 2026-11-19
 
 ### Added

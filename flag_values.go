@@ -71,14 +71,17 @@ func (b *BoolValue) Bool() bool {
 	return *b.target
 }
 
-// DurationValue implements Value using Go's duration parser.
+// DurationValue implements Value for time.Duration flags. It reads Go's
+// duration syntax and ISO 8601 durations (see DurationVar).
 type DurationValue struct {
 	target *time.Duration
 }
 
-// Set parses value with time.ParseDuration and stores the result.
+// Set parses value and stores the result: Go's syntax ("1m30s", see
+// time.ParseDuration), or an ISO 8601 duration ("PT1M30S") without years
+// or months, with a day counted as 24 hours.
 func (d *DurationValue) Set(value string) error {
-	dur, err := time.ParseDuration(value)
+	dur, err := parseDuration(value)
 	if err != nil {
 		return err
 	}

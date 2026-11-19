@@ -8,7 +8,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
+
+	"github.com/SCKelemen/clix/v2/iso8601"
 )
 
 // Run executes the application with the given context and arguments.
@@ -932,7 +933,7 @@ func promptValidator(flag *Flag) func(string) error {
 // the answer is applied.
 func checkValue(v Value, raw string) error {
 	var err error
-	switch v.(type) {
+	switch x := v.(type) {
 	case *BoolValue:
 		_, err = strconv.ParseBool(raw)
 	case *IntValue:
@@ -942,7 +943,11 @@ func checkValue(v Value, raw string) error {
 	case *Float64Value:
 		_, err = strconv.ParseFloat(raw, 64)
 	case *DurationValue:
-		_, err = time.ParseDuration(raw)
+		_, err = parseDuration(raw)
+	case *TimeValue:
+		_, err = iso8601.ParseTime(raw, x.location())
+	case *ISODurationValue:
+		_, err = iso8601.ParseDuration(raw)
 	}
 	return err
 }

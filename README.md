@@ -246,13 +246,13 @@ Global and command-level flags support:
 - **Environment variable defaults**: Automatically read from environment
 - **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml` (or `$XDG_CONFIG_HOME/<app>/config.yaml`); set `App.ConfigPath` to use another file
 - **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`), attached short values (`-fvalue`) and short clusters (`-xvf`); see [Routing](#routing)
-- **Type support**: `StringVar`, `BoolVar`, `IntVar`, `Int64Var`, `Float64Var`, `DurationVar` (`time.Duration`, parsed with `time.ParseDuration`), `StringSliceVar` (repeatable, comma-separated), and `Var` for your own `clix.Value` types
+- **Type support**: `StringVar`, `BoolVar`, `IntVar`, `Int64Var`, `Float64Var`, `DurationVar` (`time.Duration`, as `1m30s` or ISO 8601 `PT1M30S`), `TimeVar` (`time.Time`, ISO 8601) and `ISODurationVar` (`iso8601.Duration`, ISO 8601 with years, months and days), `StringSliceVar` (repeatable, comma-separated), and `Var` for your own `clix.Value` types; see [Times and durations](#times-and-durations)
 - **Custom validation**: Optional `Validate` function runs after parsing to reject invalid values
 - **Precedence**: Command flags > App flags > Environment variables > Config file > Defaults
 
 App-level flags live on the root command: `app.Flags()` returns the flag set of `app.Root`. Flags registered before you assign a custom root move to it when the app runs.
 
-Every command on the path takes part in a run: the root, each group, and the command itself. Environment variables and the config file fill all their flags, `Required` is enforced on all of them, and `Context` getters (`String`, `Bool`, `Int`, `Int64`, `Float64`, `Duration` and the `Effective...` variants, which also report the `Source`) see all of them, returning the parsed value whatever its source. `FlagSet.Lookup`, `FlagSet.Changed` (set on the command line) and `Flag.Source` answer the same questions for one flag.
+Every command on the path takes part in a run: the root, each group, and the command itself. Environment variables and the config file fill all their flags, `Required` is enforced on all of them, and `Context` getters (`String`, `Bool`, `Int`, `Int64`, `Float64`, `Duration`, `Time`, `ISODuration` and the `Effective...` variants, which also report the `Source`) see all of them, returning the parsed value whatever its source. `FlagSet.Lookup`, `FlagSet.Changed` (set on the command line) and `Flag.Source` answer the same questions for one flag.
 
 ```go
 var project string
@@ -349,6 +349,38 @@ An exactly-one group is written `(--file=FILE | --url=URL)` with "Exactly one of
 #### Config file values
 
 Config values keep the text written in the file: `tag: 1.10` is `"1.10"`, `mode: 0755` is `"0755"` and `date: 2024-01-02` is `"2024-01-02"`. Only int and float flags (and `Config.Int` and friends) read YAML's number, so `mode: 0755` sets an int flag to 493 and `0x1F` to 31. Nested maps flatten to dotted keys (`ports: {80: http}` is `ports.80`); a list of scalars is joined with commas (a slice flag gets its items one by one, so an item may contain a comma), and other lists flatten with indexes (`hosts.0.name`). A key written twice, for example nested and dotted, is an error that names the file. `Save` (which `config set` and `config unset` call) never changes what a key reads: a key it did not change is written back as the file had it, so `mask: 0x1F` stays a number and `tags: [a, "b,c"]` a list of two items, and a new value is quoted when YAML would read it differently (`mode: "0755"`). It replaces the file atomically with mode 0600, and writes through a symbolic link instead of replacing it.
+
+#### Times and durations
+
+Three flag types take times and durations, using the [`iso8601`](iso8601) package for ISO 8601 and its internet profile, RFC 3339:
+
+- **`TimeVar`** binds a `time.Time`. It accepts any form `iso8601.ParseTime` reads: RFC 3339 (`2026-11-19T08:30:00Z`, `2026-11-19T10:30:00.5+02:00`), a date alone (`2026-11-19`), a time without an offset (`2026-11-19T08:30`), the basic format (`20261119T083000Z`), and week and ordinal dates (`2026-W47-4`, `2026-323`). A date or time without an offset is read in `TimeVarOptions.Location` (`WithTimeLocation`). The default is UTC, so a value means the same instant on every machine, and `time.Local` reads it in the user's time zone. A date alone is the first instant of that day, and a local time that a daylight saving change skips or repeats is resolved as RFC 5545 §3.3.5 says: a skipped 02:30 is read with the offset before the gap, and a repeated 01:30 is its first occurrence. A value with an offset keeps it, whatever the Location.
+- **`ISODurationVar`** binds an `iso8601.Duration` such as `P1D`, `PT1H30M`, `P1Y2M` or `P2W`. It keeps years, months, weeks and days apart from the exact hours, minutes and seconds, because a calendar day is not always 24 hours. `every.AddTo(t)` steps through the calendar (P1D is the same wall-clock time the next day, even across a daylight saving change), and `every.Exact()` converts a duration without years or months to a `time.Duration`. It accepts ISO 8601 only, not `90m`.
+- **`DurationVar`** binds a `time.Duration` and accepts Go's syntax (`90s`, `1h30m`) as before, and also ISO 8601 (`PT5M`, `P1DT12H`, `-PT2H`), as `--format json` and `yaml` print durations. Years and months are rejected (`duration "P1M" has years or months, whose length depends on the calendar`), and a day is 24 hours. Every value it accepted before reads the same, and the value still prints as `5m0s`.
+
+```go
+var since time.Time
+var every iso8601.Duration
+cmd.Flags.TimeVar(clix.TimeVarOptions{
+        FlagOptions: clix.FlagOptions{Name: "since", Usage: "Show events since then"},
+        Location:    time.Local,
+        Value:       &since,
+})
+cmd.Flags.ISODurationVar(clix.ISODurationVarOptions{
+        FlagOptions: clix.FlagOptions{Name: "every", Usage: "Repeat this often"},
+        Default:     "P1D",
+        Value:       &every,
+})
+```
+
+They read the environment, the config file (`since: 2026-11-19` keeps its text), prompts and defaults like every flag, and `Validate` sees the text as given. `config set` checks values with the same parsers. Help shows the format after the usage:
+
+```text
+  --since    Show events since then (ISO 8601, such as 2026-11-19 or 2026-11-19T08:30:00Z; without an offset, in local time)
+  --every    Repeat this often (ISO 8601 duration, such as PT1H30M, P1D or P1M)
+```
+
+Shell completion offers nothing for a `TimeVar` or `ISODurationVar` value, rather than file names, unless you set a function with `SetCompletion`. `ctx.Time` and `ctx.ISODuration` (and `EffectiveTime`, `EffectiveISODuration`) return a flag's value exactly as bound, including its location. They read other keys with the same parsers, with UTC for a time without an offset, and `ctx.ISODuration` reads a `DurationVar` flag as exact time. `ctx.Duration` reads ISO 8601 too, so it works on an `ISODurationVar` flag without years or months. `FlagSet.Time` and `FlagSet.ISODuration` read one flag set.
 
 #### Checking definitions in a test
 
@@ -905,7 +937,7 @@ Styling is optional—applications without styling still work perfectly.
 Command handlers receive a `*clix.Context` that embeds `context.Context` and provides:
 - Access to the active command
 - Application instance and configuration
-- Resolved flag/config values via `String()` and `Bool()`, plus `EffectiveString()`, `EffectiveBool()`, `EffectiveInt()`, `EffectiveInt64()`, and `EffectiveFloat64()`, which also report the `clix.Source` (command flag, app flag, env var, config file, or default) the value came from
+- Resolved flag/config values via `String()` and `Bool()`, plus `EffectiveString()`, `EffectiveBool()`, `EffectiveInt()`, `EffectiveInt64()`, `EffectiveFloat64()`, `EffectiveDuration()`, `EffectiveTime()` and `EffectiveISODuration()`, which also report the `clix.Source` (command flag, app flag, env var, config file, or default) the value came from
 - Standard output/error streams
 - Standard context.Context functionality (cancellation, deadlines, values)
 
