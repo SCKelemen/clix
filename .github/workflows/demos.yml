@@ -263,6 +263,9 @@ jobs:
   # why the commit message carries [skip ci].
   commit:
     needs: generate-demos
+    # Pull requests only generate the GIFs; committing them is for main. On a
+    # PR, the token below may be unavailable (Dependabot) or unable to push.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: write
