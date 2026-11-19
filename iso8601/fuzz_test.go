@@ -3,6 +3,7 @@ package iso8601
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"testing"
 	"time"
@@ -217,6 +218,25 @@ func FuzzFracNanos(f *testing.F) {
 		}
 		if got, ok := d.Exact(); !ok || uint64(got) != want {
 			t.Fatalf("ParseDuration(%q) = %v, exactly %v; want %d ns", s, d, got, want)
+		}
+	})
+}
+
+// FuzzDurationExact checks Exact against a math/big sum: it succeeds
+// exactly when the total fits in a time.Duration, whatever the partial
+// sums do.
+func FuzzDurationExact(f *testing.F) {
+	f.Add(0, 106752, int64(-time.Hour))
+	f.Add(2000000, -13999993, int64(0))
+	f.Add(-1, 0, int64(math.MinInt64))
+	f.Fuzz(func(t *testing.T, weeks, days int, ns int64) {
+		d := Duration{Weeks: weeks, Days: days, Time: time.Duration(ns)}
+		sum := new(big.Int).Mul(big.NewInt(int64(weeks)), big.NewInt(int64(7*24*time.Hour)))
+		sum.Add(sum, new(big.Int).Mul(big.NewInt(int64(days)), big.NewInt(int64(24*time.Hour))))
+		sum.Add(sum, big.NewInt(ns))
+		got, ok := d.Exact()
+		if want := sum.IsInt64(); ok != want || (ok && int64(got) != sum.Int64()) {
+			t.Fatalf("%#v.Exact() = %d, %v; want %s, %v", d, got, ok, sum, want)
 		}
 	})
 }

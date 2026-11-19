@@ -310,6 +310,27 @@ func TestDurationExact(t *testing.T) {
 		{Duration{Weeks: math.MaxInt32}, 0, false},
 		{Duration{Days: 1, Time: math.MaxInt64}, 0, false},
 		{Duration{Days: -1, Time: math.MinInt64}, 0, false},
+		// A partial sum may overflow when the total does not.
+		{Duration{Days: 106752, Time: -time.Hour}, 9223369200000000000, true},
+		{Duration{Weeks: 15251, Days: -10}, 106747 * 24 * time.Hour, true},
+		{Duration{Weeks: 2000000, Days: -13999993}, 7 * 24 * time.Hour, true},
+		{Duration{Days: -106752, Time: time.Hour}, -9223369200000000000, true},
+		{Duration{Days: 1, Time: math.MinInt64}, math.MinInt64 + 24*time.Hour, true},
+		{Duration{Weeks: -15251, Days: -1}, 0, false},
+	}
+	if strconv.IntSize == 64 {
+		tests = append(tests,
+			struct {
+				d    Duration
+				want time.Duration
+				ok   bool
+			}{Duration{Weeks: math.MinInt, Days: math.MaxInt}, 0, false},
+			struct {
+				d    Duration
+				want time.Duration
+				ok   bool
+			}{Duration{Days: math.MinInt, Time: math.MaxInt64}, 0, false},
+		)
 	}
 	for _, tt := range tests {
 		got, ok := tt.d.Exact()

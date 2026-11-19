@@ -3,6 +3,7 @@ package iso8601
 import (
 	"errors"
 	"math"
+	"math/bits"
 	"strconv"
 	"time"
 )
@@ -480,30 +481,42 @@ func (d Duration) Exact() (time.Duration, bool) {
 	if d.Years != 0 || d.Months != 0 {
 		return 0, false
 	}
-	weeks, ok1 := scale(int64(d.Weeks), int64(7*24*time.Hour))
-	days, ok2 := scale(int64(d.Days), int64(24*time.Hour))
-	sum, ok3 := add64(weeks, days)
-	total, ok4 := add64(sum, int64(d.Time))
-	if !ok1 || !ok2 || !ok3 || !ok4 {
-		return 0, false
-	}
-	return time.Duration(total), true
+	// Sum in 128 bits, so that only the total, not a partial sum, has to
+	// fit in a time.Duration. Each product is below 2^113.
+	total := mul128(int64(d.Weeks), uint64(7*24*time.Hour)).
+		add(mul128(int64(d.Days), uint64(24*time.Hour))).
+		add(mul128(int64(d.Time), 1))
+	return total.duration()
 }
 
-// scale returns n×unit for a positive unit, reporting false on overflow.
-func scale(n, unit int64) (int64, bool) {
-	if n > math.MaxInt64/unit || n < math.MinInt64/unit {
-		return 0, false
+// int128 is a two's complement 128-bit integer.
+type int128 struct{ hi, lo uint64 }
+
+// mul128 returns a×b.
+func mul128(a int64, b uint64) int128 {
+	hi, lo := bits.Mul64(magnitude(a), b)
+	x := int128{hi, lo}
+	if a < 0 {
+		lo, borrow := bits.Sub64(0, x.lo, 0)
+		hi, _ := bits.Sub64(0, x.hi, borrow)
+		x = int128{hi, lo}
 	}
-	return n * unit, true
+	return x
 }
 
-// add64 returns a+b, reporting false on overflow.
-func add64(a, b int64) (int64, bool) {
-	if (b > 0 && a > math.MaxInt64-b) || (b < 0 && a < math.MinInt64-b) {
+func (x int128) add(y int128) int128 {
+	lo, carry := bits.Add64(x.lo, y.lo, 0)
+	hi, _ := bits.Add64(x.hi, y.hi, carry)
+	return int128{hi, lo}
+}
+
+// duration returns x and true if it fits in a time.Duration: that is, if
+// the high word is the sign extension of the low word.
+func (x int128) duration() (time.Duration, bool) {
+	if x.hi != uint64(int64(x.lo)>>63) {
 		return 0, false
 	}
-	return a + b, true
+	return time.Duration(int64(x.lo)), true
 }
 
 // AddTo returns t plus d. The calendar part is applied first, to t's wall
