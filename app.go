@@ -92,6 +92,11 @@ type App struct {
 	// Use lipgloss-compatible styles or custom TextStyle implementations.
 	Styles Styles
 
+	// CaseSensitive makes Run match command names and aliases exactly. By
+	// default they match ignoring ASCII case ("DELETE" runs "delete");
+	// non-ASCII letters always match exactly.
+	CaseSensitive bool
+
 	configLoaded  bool
 	configLoadErr error
 

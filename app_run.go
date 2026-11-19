@@ -207,12 +207,12 @@ scan:
 			if !sawWord {
 				sawWord = true
 				// The binary may be invoked as "app-name app-name child".
-				if strings.EqualFold(tok, root.Name) {
+				if a.namesMatch(tok, root.Name) {
 					isPath[i] = true
 					continue
 				}
 			}
-			child := cmd.findChild(tok)
+			child := cmd.findChildMatch(tok, a.CaseSensitive)
 			if child == nil {
 				stray = tok
 				break scan
@@ -276,6 +276,15 @@ scan:
 	}
 
 	return cmd, positionals, stray, nil
+}
+
+// namesMatch reports whether word names a command called name, using the
+// same rules as command routing (see CaseSensitive).
+func (a *App) namesMatch(word, name string) bool {
+	if a.CaseSensitive {
+		return word == name
+	}
+	return equalFoldASCII(word, name)
 }
 
 // commandPath returns the commands from the root down to cmd.

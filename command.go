@@ -3,7 +3,6 @@ package clix
 import (
 	"fmt"
 	"sort"
-	"strings"
 )
 
 // Handler is the function signature for executing a command.
@@ -250,20 +249,61 @@ func (c *Command) Path() string {
 	return fmt.Sprintf("%s %s", c.parent.Path(), c.Name)
 }
 
-// findChild returns the first matching child command or group by name or alias.
+// findChild returns the first matching child command or group by name or
+// alias, ignoring ASCII case.
 func (c *Command) findChild(name string) *Command {
-	name = strings.ToLower(name)
+	return c.findChildMatch(name, false)
+}
+
+// findChildMatch returns the first child whose name or alias matches name.
+// Names match exactly when caseSensitive is set, and otherwise ignoring
+// ASCII case only: "DELETE" matches "delete", but non-ASCII letters must
+// match exactly, so "ſtatus" (U+017F) does not match "status" and a Kelvin
+// sign does not match "k".
+func (c *Command) findChildMatch(name string, caseSensitive bool) *Command {
+	match := equalFoldASCII
+	if caseSensitive {
+		match = func(a, b string) bool { return a == b }
+	}
 	for _, child := range c.Children {
-		if strings.EqualFold(child.Name, name) {
+		if child == nil {
+			continue
+		}
+		if match(child.Name, name) {
 			return child
 		}
 		for _, alias := range child.Aliases {
-			if strings.EqualFold(alias, name) {
+			if match(alias, name) {
 				return child
 			}
 		}
 	}
 	return nil
+}
+
+// equalFoldASCII reports whether a and b are equal when ASCII letters are
+// compared without regard to case. Unlike strings.EqualFold it does not
+// apply Unicode case folding, so every non-ASCII byte must match exactly.
+func equalFoldASCII(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		x, y := a[i], b[i]
+		if x == y {
+			continue
+		}
+		if 'A' <= x && x <= 'Z' {
+			x += 'a' - 'A'
+		}
+		if 'A' <= y && y <= 'Z' {
+			y += 'a' - 'A'
+		}
+		if x != y {
+			return false
+		}
+	}
+	return true
 }
 
 // match walks the command tree and returns the deepest command that matches the
@@ -289,7 +329,7 @@ func (c *Command) match(args []string) (*Command, []string) {
 func (c *Command) VisibleChildren() []*Command {
 	var cmds []*Command
 	for _, child := range c.Children {
-		if child.Hidden {
+		if child == nil || child.Hidden {
 			continue
 		}
 		cmds = append(cmds, child)
