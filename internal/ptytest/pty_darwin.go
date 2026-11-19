@@ -20,7 +20,7 @@ func Open() (master, tty *os.File, err error) {
 	master = os.NewFile(uintptr(fd), "/dev/ptmx")
 	defer func() {
 		if err != nil {
-			master.Close()
+			_ = master.Close()
 		}
 	}()
 	if err := unix.IoctlSetInt(fd, unix.TIOCPTYGRANT, 0); err != nil {
@@ -30,6 +30,8 @@ func Open() (master, tty *os.File, err error) {
 		return nil, nil, err
 	}
 	var name [128]byte // TIOCPTYGNAME's parameter length
+	// x/sys/unix has no wrapper for TIOCPTYGNAME, which fills a buffer.
+	//nolint:staticcheck // SYS_IOCTL through Syscall is what creack/pty does too; test-only code.
 	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(fd), uintptr(unix.TIOCPTYGNAME), uintptr(unsafe.Pointer(&name[0]))); errno != 0 {
 		return nil, nil, errno
 	}

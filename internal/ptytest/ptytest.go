@@ -45,8 +45,8 @@ func New(t testing.TB) *Term {
 	}
 	go term.drain()
 	t.Cleanup(func() {
-		tty.Close()
-		master.Close()
+		_ = tty.Close()
+		_ = master.Close()
 		select {
 		case <-term.done:
 		case <-time.After(time.Second):

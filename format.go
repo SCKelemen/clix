@@ -107,16 +107,6 @@ func isoDuration(d time.Duration) string {
 	return b.String()
 }
 
-// isoTime formats t in RFC 3339, the profile of ISO 8601 for timestamps,
-// with fractional seconds only when they are non-zero.
-// https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
-//
-// TODO: switch to iso8601.FormatTime once
-// github.com/SCKelemen/clix/v2/iso8601 lands.
-func isoTime(t time.Time) string {
-	return t.Format(time.RFC3339Nano)
-}
-
 // formatYAML formats data as YAML using go.yaml.in/yaml/v3.
 // Close flushes any buffered output, so its error is reported too.
 func formatYAML(w io.Writer, data interface{}) error {

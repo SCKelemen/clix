@@ -627,7 +627,7 @@ func (p TextPrompter) promptText(ctx context.Context, cfg *PromptConfig) (string
 			if style == nil {
 				style = cfg.Theme.DefaultStyle
 			}
-			fmt.Fprintf(p.Out, " [%s]", st.render(style, cfg.NoDefaultPlaceholder))
+			_, _ = fmt.Fprintf(p.Out, " [%s]", st.render(style, cfg.NoDefaultPlaceholder))
 		}
 
 		if cfg.Theme.Hint != "" {
@@ -671,7 +671,7 @@ func (p TextPrompter) printError(st promptStyler, cfg *PromptConfig, msg string)
 	if msg != "" {
 		msg = st.render(cfg.Theme.ErrorStyle, msg)
 	}
-	fmt.Fprintf(p.Out, "%s%s\n", errPrefix, msg)
+	_, _ = fmt.Fprintf(p.Out, "%s%s\n", errPrefix, msg)
 }
 
 // promptConfirm handles yes/no confirmation prompts.
@@ -689,9 +689,9 @@ func (p TextPrompter) promptConfirm(ctx context.Context, cfg *PromptConfig) (str
 
 		// Show default in prompt
 		if defaultYes {
-			fmt.Fprint(p.Out, " (Y/n)")
+			_, _ = fmt.Fprint(p.Out, " (Y/n)")
 		} else {
-			fmt.Fprint(p.Out, " (y/N)")
+			_, _ = fmt.Fprint(p.Out, " (y/N)")
 		}
 
 		// Show hint if provided (may include "back" instruction from survey)

@@ -157,13 +157,13 @@ func TestReadKeyLoneEscape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pr.Close()
-	defer pw.Close()
-	pw.WriteString("\x1b")
+	defer func() { _ = pr.Close() }()
+	defer func() { _ = pw.Close() }()
+	_, _ = pw.WriteString("\x1b")
 	if k, _ := prompt.ReadKey(pr); k != prompt.KeyEscape {
 		t.Fatalf("got %#v", k)
 	}
-	pw.WriteString("x")
+	_, _ = pw.WriteString("x")
 	if k, _ := prompt.ReadKey(pr); k.Rune != 'x' {
 		t.Fatalf("key after Esc = %#v, want x", k)
 	}

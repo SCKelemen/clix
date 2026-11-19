@@ -73,15 +73,15 @@ func (p TerminalPrompter) startRaw() (s *rawSession, ok bool) {
 	}
 	s.resized, s.stopWinch = notifyResize()
 	s.updateSize()
-	io.WriteString(s.out, seqPasteOn)
+	_, _ = io.WriteString(s.out, seqPasteOn)
 	return s, true
 }
 
 // close restores the terminal.
 func (s *rawSession) close() {
-	io.WriteString(s.out, seqPasteOff)
+	_, _ = io.WriteString(s.out, seqPasteOff)
 	if s.cursorHidden {
-		io.WriteString(s.out, seqShowCursor)
+		_, _ = io.WriteString(s.out, seqShowCursor)
 	}
 	s.stopWinch()
 	_ = s.state.Restore()
@@ -97,7 +97,7 @@ func (s *rawSession) updateSize() {
 
 func (s *rawSession) hideCursor() {
 	if !s.cursorHidden {
-		io.WriteString(s.out, seqHideCursor)
+		_, _ = io.WriteString(s.out, seqHideCursor)
 		s.cursorHidden = true
 	}
 }
@@ -187,7 +187,7 @@ func (s *rawSession) draw(lines []string, cursorLine, cursorCol int) {
 	}
 	s.cursorRow = cursorRow
 	s.drawn = true
-	s.out.Write(b.Bytes())
+	_, _ = s.out.Write(b.Bytes())
 }
 
 func (s *rawSession) moveToTop(b *bytes.Buffer) {
@@ -203,17 +203,7 @@ func (s *rawSession) finish(lines ...string) {
 	s.draw(lines, len(lines)-1, 0)
 	var b bytes.Buffer
 	b.WriteString("\r\n")
-	s.out.Write(b.Bytes())
-	s.cursorRow = 0
-	s.drawn = false
-}
-
-// clear erases the frame and leaves the cursor where the prompt started.
-func (s *rawSession) clear() {
-	var b bytes.Buffer
-	s.moveToTop(&b)
-	b.WriteString(seqClearDown)
-	s.out.Write(b.Bytes())
+	_, _ = s.out.Write(b.Bytes())
 	s.cursorRow = 0
 	s.drawn = false
 }

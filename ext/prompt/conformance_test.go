@@ -29,7 +29,7 @@ var lineModes = []string{"text", "line", "dumb"}
 // runLine runs one prompt in a line mode with the given input lines and
 // returns the answer and everything the prompt wrote. In dumb mode the
 // output also holds the terminal's echo of the typed lines.
-func runLine(t *testing.T, mode, input string, opts ...clix.PromptOption) (string, error, string) {
+func runLine(t *testing.T, mode, input string, opts ...clix.PromptOption) (string, string, error) {
 	t.Helper()
 	switch mode {
 	case "text", "line":
@@ -39,7 +39,7 @@ func runLine(t *testing.T, mode, input string, opts ...clix.PromptOption) (strin
 			p = prompt.TerminalPrompter{In: strings.NewReader(input), Out: out}
 		}
 		v, err := p.Prompt(context.Background(), opts...)
-		return v, err, out.String()
+		return v, out.String(), err
 	case "dumb":
 		rawEnv(t)
 		t.Setenv("TERM", "dumb")
@@ -54,7 +54,7 @@ func runLine(t *testing.T, mode, input string, opts ...clix.PromptOption) (strin
 		}
 		r, ok := p.wait(t, 3*time.Second)
 		if !ok {
-			term.Write([]byte{4}) // Ctrl-D: end of input
+			_, _ = term.Write([]byte{4}) // Ctrl-D: end of input
 			r = p.mustFinish(t)
 		}
 		// Let the last output drain from the terminal before reading it.
@@ -68,20 +68,20 @@ func runLine(t *testing.T, mode, input string, opts ...clix.PromptOption) (strin
 			}
 			break
 		}
-		return r.val, r.err, out
+		return r.val, out, r.err
 	}
 	t.Fatalf("unknown mode %q", mode)
-	return "", nil, ""
+	return "", "", nil
 }
 
 // runRaw runs one prompt in raw mode, types keys, and returns the answer
 // and the final screen.
-func runRaw(t *testing.T, keys []string, opts ...clix.PromptOption) (string, error, string) {
+func runRaw(t *testing.T, keys []string, opts ...clix.PromptOption) (string, string, error) {
 	t.Helper()
 	p := raw(t, opts...)
 	p.typeKeys(t, keys...)
 	r := p.mustFinish(t)
-	return r.val, r.err, p.screen()
+	return r.val, p.screen(), r.err
 }
 
 func lowercase(s string) error {
@@ -96,14 +96,14 @@ func lowercase(s string) error {
 func TestConformanceLabelRendering(t *testing.T) {
 	for _, mode := range lineModes {
 		t.Run(mode, func(t *testing.T) {
-			v, err, out := runLine(t, mode, "bob\n", clix.WithLabel("Name"))
+			v, out, err := runLine(t, mode, "bob\n", clix.WithLabel("Name"))
 			if err != nil || v != "bob" || !strings.HasPrefix(out, "? Name: ") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
 		})
 	}
 	t.Run("raw", func(t *testing.T) {
-		v, err, screen := runRaw(t, []string{"b", "o", "b", "\r"}, clix.WithLabel("Name"))
+		v, screen, err := runRaw(t, []string{"b", "o", "b", "\r"}, clix.WithLabel("Name"))
 		if err != nil || v != "bob" || screen != "? Name: bob" {
 			t.Fatalf("got %q, %v, screen %q", v, err, screen)
 		}
@@ -113,7 +113,7 @@ func TestConformanceLabelRendering(t *testing.T) {
 func TestConformanceDefault(t *testing.T) {
 	for _, mode := range lineModes {
 		t.Run(mode, func(t *testing.T) {
-			v, err, out := runLine(t, mode, "\n", clix.WithLabel("Name"), clix.WithDefault("bob"))
+			v, out, err := runLine(t, mode, "\n", clix.WithLabel("Name"), clix.WithDefault("bob"))
 			if err != nil || v != "bob" || !strings.HasPrefix(out, "? Name [bob]: ") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
@@ -143,11 +143,11 @@ func TestConformanceDefault(t *testing.T) {
 func TestConformancePlaceholder(t *testing.T) {
 	for _, mode := range lineModes {
 		t.Run(mode, func(t *testing.T) {
-			v, err, out := runLine(t, mode, "\n", clix.WithLabel("Name"), clix.WithNoDefaultPlaceholder("optional"))
+			v, out, err := runLine(t, mode, "\n", clix.WithLabel("Name"), clix.WithNoDefaultPlaceholder("optional"))
 			if err != nil || v != "" || !strings.HasPrefix(out, "? Name [optional]: ") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
-			_, _, out = runLine(t, mode, "\n", clix.WithLabel("Name"), clix.WithNoDefaultPlaceholder("optional"), clix.WithDefault("bob"))
+			_, out, _ = runLine(t, mode, "\n", clix.WithLabel("Name"), clix.WithNoDefaultPlaceholder("optional"), clix.WithDefault("bob"))
 			if strings.Contains(out, "optional") {
 				t.Fatalf("placeholder shown with a default: %q", out)
 			}
@@ -166,14 +166,14 @@ func TestConformancePlaceholder(t *testing.T) {
 func TestConformanceSecretDefaultNotTrimmedOrShown(t *testing.T) {
 	for _, mode := range lineModes {
 		t.Run(mode, func(t *testing.T) {
-			v, err, out := runLine(t, mode, "\n", clix.WithLabel("Token"), clix.WithSecret(), clix.WithDefault("  keep  "))
+			v, out, err := runLine(t, mode, "\n", clix.WithLabel("Token"), clix.WithSecret(), clix.WithDefault("  keep  "))
 			if err != nil || v != "  keep  " || strings.Contains(out, "keep") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
 		})
 	}
 	t.Run("raw", func(t *testing.T) {
-		v, err, screen := runRaw(t, []string{"\r"}, clix.WithLabel("Token"), clix.WithSecret(), clix.WithDefault("  keep  "))
+		v, screen, err := runRaw(t, []string{"\r"}, clix.WithLabel("Token"), clix.WithSecret(), clix.WithDefault("  keep  "))
 		if err != nil || v != "  keep  " || strings.Contains(screen, "keep") {
 			t.Fatalf("got %q, %v, screen %q", v, err, screen)
 		}
@@ -185,7 +185,7 @@ func TestConformanceSecretDefaultNotTrimmedOrShown(t *testing.T) {
 func TestConformanceValidateReprompts(t *testing.T) {
 	for _, mode := range lineModes {
 		t.Run(mode, func(t *testing.T) {
-			v, err, out := runLine(t, mode, "BAD\ngood\n", clix.WithLabel("Name"), clix.WithValidate(lowercase))
+			v, out, err := runLine(t, mode, "BAD\ngood\n", clix.WithLabel("Name"), clix.WithValidate(lowercase))
 			if err != nil || v != "good" || !strings.Contains(out, "! must be lowercase") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
@@ -210,7 +210,7 @@ func TestConformanceValidateReprompts(t *testing.T) {
 func TestConformanceValidateEndOfInput(t *testing.T) {
 	for _, mode := range []string{"text", "line"} {
 		t.Run(mode, func(t *testing.T) {
-			_, err, _ := runLine(t, mode, "BAD\n", clix.WithLabel("Name"), clix.WithValidate(lowercase))
+			_, _, err := runLine(t, mode, "BAD\n", clix.WithLabel("Name"), clix.WithValidate(lowercase))
 			if err == nil || !strings.Contains(err.Error(), "must be lowercase") || !errors.Is(err, io.EOF) {
 				t.Fatalf("err = %v", err)
 			}
@@ -221,7 +221,7 @@ func TestConformanceValidateEndOfInput(t *testing.T) {
 func TestConformanceValidateRunsOnDefault(t *testing.T) {
 	for _, mode := range lineModes {
 		t.Run(mode, func(t *testing.T) {
-			v, err, out := runLine(t, mode, "\nok\n", clix.WithLabel("Name"), clix.WithDefault("BAD"), clix.WithValidate(lowercase))
+			v, out, err := runLine(t, mode, "\nok\n", clix.WithLabel("Name"), clix.WithDefault("BAD"), clix.WithValidate(lowercase))
 			if err != nil || v != "ok" || !strings.Contains(out, "must be lowercase") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
@@ -251,13 +251,13 @@ func TestConformanceValidateChoices(t *testing.T) {
 	two := []clix.SelectOption{{Label: "A", Value: "a"}, {Label: "B", Value: "b"}}
 	for _, mode := range []string{"line", "dumb"} {
 		t.Run(mode+"/select", func(t *testing.T) {
-			v, err, out := runLine(t, mode, "1\n2\n", clix.WithLabel("Pick"), prompt.Select(two), clix.WithValidate(notValue("a")))
+			v, out, err := runLine(t, mode, "1\n2\n", clix.WithLabel("Pick"), prompt.Select(two), clix.WithValidate(notValue("a")))
 			if err != nil || v != "b" || !strings.Contains(out, "! not a") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
 		})
 		t.Run(mode+"/multi-select", func(t *testing.T) {
-			v, err, out := runLine(t, mode, "1\ndone\n1,2\ndone\n", clix.WithLabel("Pick"), prompt.MultiSelect(two), clix.WithValidate(notValue("a")))
+			v, out, err := runLine(t, mode, "1\ndone\n1,2\ndone\n", clix.WithLabel("Pick"), prompt.MultiSelect(two), clix.WithValidate(notValue("a")))
 			if err != nil || v != "b" || !strings.Contains(out, "! not a") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
@@ -265,7 +265,7 @@ func TestConformanceValidateChoices(t *testing.T) {
 	}
 	for _, mode := range lineModes {
 		t.Run(mode+"/confirm", func(t *testing.T) {
-			v, err, out := runLine(t, mode, "n\ny\n", clix.WithLabel("Accept?"), clix.WithConfirm(), clix.WithValidate(notValue("n")))
+			v, out, err := runLine(t, mode, "n\ny\n", clix.WithLabel("Accept?"), clix.WithConfirm(), clix.WithValidate(notValue("n")))
 			if err != nil || v != "y" || !strings.Contains(out, "! not n") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
@@ -316,7 +316,7 @@ func TestConformanceThemeStyles(t *testing.T) {
 	}
 	for _, mode := range []string{"text", "line"} {
 		t.Run(mode, func(t *testing.T) {
-			_, _, out := runLine(t, mode, "BAD\nok\n", clix.WithLabel("Name"), clix.WithTheme(theme), clix.WithValidate(lowercase))
+			_, out, _ := runLine(t, mode, "BAD\nok\n", clix.WithLabel("Name"), clix.WithTheme(theme), clix.WithValidate(lowercase))
 			for _, want := range []string{"<p>? </p><l>Name</l> <h>hint</h>: ", "<e>! </e><e>must be lowercase</e>"} {
 				if !strings.Contains(out, want) {
 					t.Fatalf("output %q lacks %q", out, want)
@@ -377,7 +377,7 @@ func TestConformanceThemeNoANSIWithoutColor(t *testing.T) {
 	t.Setenv("CLICOLOR_FORCE", "")
 	for _, mode := range []string{"text", "line"} {
 		t.Run(mode+"/pipe", func(t *testing.T) {
-			_, _, out := runLine(t, mode, "x\n", clix.WithLabel("Name"), clix.WithTheme(clix.PromptTheme{LabelStyle: red}))
+			_, out, _ := runLine(t, mode, "x\n", clix.WithLabel("Name"), clix.WithTheme(clix.PromptTheme{LabelStyle: red}))
 			if strings.Contains(out, "\x1b") || out != "? Name: " {
 				t.Fatalf("output %q", out)
 			}
@@ -414,7 +414,7 @@ func TestConformanceConfirmAnswers(t *testing.T) {
 				if mode == "dumb" && (in != "Yes" || name != "WithConfirm") {
 					continue // the terminal case is covered once; it is slow
 				}
-				v, err, out := runLine(t, mode, in+"\n", clix.WithLabel("Sure?"), opt)
+				v, out, err := runLine(t, mode, in+"\n", clix.WithLabel("Sure?"), opt)
 				if err != nil || v != want || !strings.HasPrefix(out, "? Sure? (Y/n): ") {
 					t.Errorf("%s %s %q: got %q, %v, output %q", mode, name, in, v, err, out)
 				}
@@ -424,7 +424,7 @@ func TestConformanceConfirmAnswers(t *testing.T) {
 	t.Run("raw", func(t *testing.T) {
 		for in, want := range map[string]string{"YES": "y", "no": "n"} {
 			keys := append(strings.Split(in, ""), "\r")
-			v, err, screen := runRaw(t, keys, clix.WithLabel("Sure?"), prompt.Confirm())
+			v, screen, err := runRaw(t, keys, clix.WithLabel("Sure?"), prompt.Confirm())
 			if err != nil || v != want {
 				t.Errorf("%q: got %q, %v", in, v, err)
 			}
@@ -438,7 +438,7 @@ func TestConformanceConfirmAnswers(t *testing.T) {
 func TestConformanceConfirmDefault(t *testing.T) {
 	for _, mode := range []string{"text", "line"} {
 		for def, want := range map[string]string{"": "y", "y": "y", "true": "y", "n": "n", "no": "n", "false": "n", "0": "n", "off": "n", "OFF": "n"} {
-			v, err, out := runLine(t, mode, "\n", clix.WithLabel("Sure?"), clix.WithConfirm(), clix.WithDefault(def))
+			v, out, err := runLine(t, mode, "\n", clix.WithLabel("Sure?"), clix.WithConfirm(), clix.WithDefault(def))
 			hint := "(Y/n)"
 			if want == "n" {
 				hint = "(y/N)"
@@ -449,7 +449,7 @@ func TestConformanceConfirmDefault(t *testing.T) {
 		}
 	}
 	t.Run("raw", func(t *testing.T) {
-		v, _, screen := runRaw(t, []string{"\r"}, clix.WithLabel("Sure?"), clix.WithConfirm(), clix.WithDefault("false"))
+		v, screen, _ := runRaw(t, []string{"\r"}, clix.WithLabel("Sure?"), clix.WithConfirm(), clix.WithDefault("false"))
 		if v != "n" || screen != "? Sure? (y/N): no" {
 			t.Fatalf("got %q, screen %q", v, screen)
 		}
@@ -459,7 +459,7 @@ func TestConformanceConfirmDefault(t *testing.T) {
 func TestConformanceConfirmGarbageAndBack(t *testing.T) {
 	for _, mode := range lineModes {
 		t.Run(mode, func(t *testing.T) {
-			v, err, out := runLine(t, mode, "maybe\nback\nn\n", clix.WithLabel("Sure?"), clix.WithConfirm())
+			v, out, err := runLine(t, mode, "maybe\nback\nn\n", clix.WithLabel("Sure?"), clix.WithConfirm())
 			if err != nil || v != "n" || strings.Count(out, "please enter 'y' or 'n'") != 2 {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
@@ -467,7 +467,7 @@ func TestConformanceConfirmGarbageAndBack(t *testing.T) {
 	}
 	for _, mode := range []string{"text", "line"} {
 		t.Run(mode+"/pipe ends", func(t *testing.T) {
-			v, err, _ := runLine(t, mode, "back\n", clix.WithLabel("Sure?"), clix.WithConfirm())
+			v, _, err := runLine(t, mode, "back\n", clix.WithLabel("Sure?"), clix.WithConfirm())
 			if err == nil || v != "" || !strings.Contains(err.Error(), "please enter 'y' or 'n'") {
 				t.Fatalf("got %q, %v", v, err)
 			}
@@ -503,7 +503,7 @@ func TestConformanceBindableKeys(t *testing.T) {
 			got = ctx.Command
 			return clix.PromptCommandAction{Exit: true, ExitErr: errors.New("bound")}
 		}
-		_, err, _ := runRaw(t, []string{seq}, clix.WithLabel("Name"), clix.WithCommandHandler(handler))
+		_, _, err := runRaw(t, []string{seq}, clix.WithLabel("Name"), clix.WithCommandHandler(handler))
 		if err == nil || err.Error() != "bound" || got != want {
 			t.Errorf("%q: command %+v, err %v; want %+v", seq, got, err, want)
 		}
@@ -537,7 +537,7 @@ func TestConformanceBindingsCannotBreakCtrlC(t *testing.T) {
 		"select": {clix.WithLabel("Pick"), prompt.Select(envs)},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err, _ := runRaw(t, []string{"\x03"}, append(opts, clix.WithCommandHandler(greedy))...)
+			_, _, err := runRaw(t, []string{"\x03"}, append(opts, clix.WithCommandHandler(greedy))...)
 			if !errors.Is(err, clix.ErrCancelled) {
 				t.Fatalf("err = %v", err)
 			}
@@ -569,7 +569,7 @@ func TestConformanceConflictingBindings(t *testing.T) {
 		bind("first", true, clix.PromptCommandAction{Handled: true}),
 		bind("second", true, clix.PromptCommandAction{Handled: true}),
 	}}
-	runRaw(t, []string{"\t", "\r"}, clix.WithLabel("Name"), clix.WithKeyMap(km), handler)
+	_, _, _ = runRaw(t, []string{"\t", "\r"}, clix.WithLabel("Name"), clix.WithKeyMap(km), handler)
 	// Enter has no binding, so it reaches the handler (which does not
 	// handle it, so the prompt submits).
 	if strings.Join(calls, ",") != "first,handler" {
@@ -581,14 +581,14 @@ func TestConformanceConflictingBindings(t *testing.T) {
 		bind("first", false, clix.PromptCommandAction{Handled: true}),
 		bind("second", true, clix.PromptCommandAction{Handled: true}),
 	}}
-	runRaw(t, []string{"\t", "\r"}, clix.WithLabel("Name"), clix.WithKeyMap(km), handler)
+	_, _, _ = runRaw(t, []string{"\t", "\r"}, clix.WithLabel("Name"), clix.WithKeyMap(km), handler)
 	if strings.Join(calls, ",") != "handler" {
 		t.Fatalf("calls = %q", calls)
 	}
 	// a binding that does not handle passes the key to the handler
 	calls = nil
 	km = clix.PromptKeyMap{Bindings: []clix.PromptKeyBinding{bind("first", true, clix.PromptCommandAction{})}}
-	runRaw(t, []string{"\t", "\r"}, clix.WithLabel("Name"), clix.WithKeyMap(km), handler)
+	_, _, _ = runRaw(t, []string{"\t", "\r"}, clix.WithLabel("Name"), clix.WithKeyMap(km), handler)
 	if strings.Join(calls, ",") != "first,handler,handler" {
 		t.Fatalf("calls = %q", calls)
 	}
@@ -605,7 +605,7 @@ func TestConformanceLineModeIgnoresBindings(t *testing.T) {
 	km := clix.PromptKeyMap{Bindings: []clix.PromptKeyBinding{{Command: clix.PromptCommand{Type: clix.PromptCommandEscape}, Handler: handler}}}
 	for _, mode := range lineModes {
 		for _, typed := range []string{"?", "back"} {
-			v, err, _ := runLine(t, mode, typed+"\n", clix.WithLabel("Name"), clix.WithKeyMap(km), clix.WithCommandHandler(handler))
+			v, _, err := runLine(t, mode, typed+"\n", clix.WithLabel("Name"), clix.WithKeyMap(km), clix.WithCommandHandler(handler))
 			if err != nil || v != typed || called {
 				t.Errorf("%s %q: got %q, %v, handler called %v", mode, typed, v, err, called)
 			}
@@ -637,7 +637,7 @@ func TestConformanceSelectNavigation(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			v, err, _ := runRaw(t, c.keys, clix.WithLabel("Pick"), prompt.Select(opts))
+			v, _, err := runRaw(t, c.keys, clix.WithLabel("Pick"), prompt.Select(opts))
 			if err != nil || v != c.want {
 				t.Fatalf("got %q, %v; want %q", v, err, c.want)
 			}
@@ -648,7 +648,7 @@ func TestConformanceSelectNavigation(t *testing.T) {
 func TestConformanceSelectDefault(t *testing.T) {
 	for _, mode := range []string{"line", "dumb"} {
 		t.Run(mode, func(t *testing.T) {
-			v, err, out := runLine(t, mode, "\n", clix.WithLabel("Env"), prompt.Select(envs), clix.WithDefault("staging"))
+			v, out, err := runLine(t, mode, "\n", clix.WithLabel("Env"), prompt.Select(envs), clix.WithDefault("staging"))
 			if err != nil || v != "staging" || !strings.Contains(out, "> staging") {
 				t.Fatalf("got %q, %v, output %q", v, err, out)
 			}
@@ -662,7 +662,7 @@ func TestConformanceSelectDefault(t *testing.T) {
 	})
 	// A default that is not an option is an error, in every mode.
 	for _, mode := range []string{"line", "dumb"} {
-		if _, err, _ := runLine(t, mode, "\n", clix.WithLabel("Env"), prompt.Select(envs), clix.WithDefault("dev")); !errors.Is(err, clix.ErrInvalidDefault) {
+		if _, _, err := runLine(t, mode, "\n", clix.WithLabel("Env"), prompt.Select(envs), clix.WithDefault("dev")); !errors.Is(err, clix.ErrInvalidDefault) {
 			t.Errorf("%s: err = %v", mode, err)
 		}
 	}
@@ -681,7 +681,7 @@ func TestConformanceEmptyOptions(t *testing.T) {
 		"struct":           clix.PromptRequest{Options: []clix.SelectOption{}},
 	} {
 		for _, mode := range []string{"text", "line"} {
-			if _, err, _ := runLine(t, mode, "anything\n", clix.WithLabel("Region"), opt); !errors.Is(err, clix.ErrNoOptions) {
+			if _, _, err := runLine(t, mode, "anything\n", clix.WithLabel("Region"), opt); !errors.Is(err, clix.ErrNoOptions) {
 				t.Errorf("%s %s: err = %v", mode, name, err)
 			}
 		}
@@ -707,14 +707,14 @@ func TestConformanceSelectLineMatching(t *testing.T) {
 	}
 	for _, mode := range []string{"line", "dumb"} {
 		for _, c := range cases {
-			v, err, out := runLine(t, mode, c.input, clix.WithLabel("Env"), prompt.Select(envs))
+			v, out, err := runLine(t, mode, c.input, clix.WithLabel("Env"), prompt.Select(envs))
 			if err != nil || v != c.want || (c.msg != "" && !strings.Contains(out, c.msg)) {
 				t.Errorf("%s %q: got %q, %v, output %q", mode, c.input, v, err, out)
 			}
 		}
 	}
 	// TextPrompter has no select prompt.
-	if _, err, _ := runLine(t, "text", "1\n", clix.WithLabel("Env"), prompt.Select(envs)); err == nil || !strings.Contains(err.Error(), "prompt extension") {
+	if _, _, err := runLine(t, "text", "1\n", clix.WithLabel("Env"), prompt.Select(envs)); err == nil || !strings.Contains(err.Error(), "prompt extension") {
 		t.Errorf("TextPrompter select: %v", err)
 	}
 }
@@ -749,7 +749,7 @@ func TestConformanceMultiSelectRaw(t *testing.T) {
 		}
 	})
 	t.Run("empty finish allowed by Validate", func(t *testing.T) {
-		v, err, _ := runRaw(t, []string{"\x1b[F", "\r"}, clix.WithLabel("Envs"), prompt.MultiSelect(envs), clix.WithValidate(func(string) error { return nil }))
+		v, _, err := runRaw(t, []string{"\x1b[F", "\r"}, clix.WithLabel("Envs"), prompt.MultiSelect(envs), clix.WithValidate(func(string) error { return nil }))
 		if err != nil || v != "" {
 			t.Fatalf("got %q, %v", v, err)
 		}
@@ -782,17 +782,17 @@ func TestConformanceMultiSelectLine(t *testing.T) {
 	for _, mode := range []string{"line", "dumb"} {
 		for _, c := range cases {
 			opts := append([]clix.PromptOption{clix.WithLabel("Envs"), prompt.MultiSelect(envs)}, c.opts...)
-			v, err, out := runLine(t, mode, c.input, opts...)
+			v, out, err := runLine(t, mode, c.input, opts...)
 			if err != nil || v != c.want || (c.msg != "" && !strings.Contains(out, c.msg)) {
 				t.Errorf("%s %s: got %q, %v, output %q", mode, c.name, v, err, out)
 			}
 		}
 	}
-	v, err, _ := runLine(t, "line", "\n", clix.WithLabel("Ports"), prompt.MultiSelect(ports), clix.WithDefault("1"))
+	v, _, err := runLine(t, "line", "\n", clix.WithLabel("Ports"), prompt.MultiSelect(ports), clix.WithDefault("1"))
 	if err != nil || v != "1" {
 		t.Errorf("numeric value default: got %q, %v", v, err)
 	}
-	if _, err, _ := runLine(t, "line", "\n", clix.WithLabel("Envs"), prompt.MultiSelect(envs), clix.WithDefault("dev")); !errors.Is(err, clix.ErrInvalidDefault) {
+	if _, _, err := runLine(t, "line", "\n", clix.WithLabel("Envs"), prompt.MultiSelect(envs), clix.WithDefault("dev")); !errors.Is(err, clix.ErrInvalidDefault) {
 		t.Errorf("bad default: %v", err)
 	}
 }
@@ -803,25 +803,25 @@ func TestConformanceOptionOrder(t *testing.T) {
 	for _, mode := range []string{"text", "line"} {
 		t.Run(mode, func(t *testing.T) {
 			// Later options override earlier ones.
-			v, _, out := runLine(t, mode, "\n", clix.WithLabel("First"), clix.WithDefault("a"),
+			v, out, _ := runLine(t, mode, "\n", clix.WithLabel("First"), clix.WithDefault("a"),
 				clix.PromptRequest{Label: "Second"}, clix.WithDefault("b"))
 			if v != "b" || !strings.HasPrefix(out, "? Second [b]: ") {
 				t.Fatalf("got %q, output %q", v, out)
 			}
 			// A struct's zero fields keep earlier values.
-			v, _, out = runLine(t, mode, "\n", clix.WithLabel("Name"), clix.WithDefault("a"), clix.PromptRequest{Validate: lowercase})
+			v, out, _ = runLine(t, mode, "\n", clix.WithLabel("Name"), clix.WithDefault("a"), clix.PromptRequest{Validate: lowercase})
 			if v != "a" || !strings.HasPrefix(out, "? Name [a]: ") {
 				t.Fatalf("got %q, output %q", v, out)
 			}
 			// Themes merge in order.
-			_, _, out = runLine(t, mode, "x\n", clix.WithLabel("Name"), clix.WithTheme(clix.PromptTheme{Prefix: "> "}), clix.PromptRequest{Theme: clix.PromptTheme{Hint: "h"}})
+			_, out, _ = runLine(t, mode, "x\n", clix.WithLabel("Name"), clix.WithTheme(clix.PromptTheme{Prefix: "> "}), clix.PromptRequest{Theme: clix.PromptTheme{Hint: "h"}})
 			if !strings.HasPrefix(out, "> Name h: ") {
 				t.Fatalf("output %q", out)
 			}
 		})
 	}
 	// Select after MultiSelect is a single select.
-	v, err, out := runLine(t, "line", "2\n", clix.WithLabel("Pick"), prompt.MultiSelect(envs), prompt.Select(envs))
+	v, out, err := runLine(t, "line", "2\n", clix.WithLabel("Pick"), prompt.MultiSelect(envs), prompt.Select(envs))
 	if err != nil || v != "production" || strings.Contains(out, "[ ]") {
 		t.Fatalf("got %q, %v, output %q", v, err, out)
 	}
@@ -856,7 +856,7 @@ func TestConformanceLineContextCancel(t *testing.T) {
 				if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 500*time.Millisecond {
 					t.Fatalf("err = %v after %v", err, time.Since(start))
 				}
-				pw.Close() // ends the read still parked for the next prompt
+				_ = pw.Close() // ends the read still parked for the next prompt
 			})
 		}
 	}
@@ -898,11 +898,11 @@ func TestConformancePromptsGoToAppErr(t *testing.T) {
 func TestConformanceNoGoroutineLeaks(t *testing.T) {
 	checkGoroutines(t)
 	for _, mode := range []string{"text", "line"} {
-		runLine(t, mode, "x\n", clix.WithLabel("Name"))
-		runLine(t, mode, "y\n", clix.WithLabel("Sure?"), clix.WithConfirm())
+		_, _, _ = runLine(t, mode, "x\n", clix.WithLabel("Name"))
+		_, _, _ = runLine(t, mode, "y\n", clix.WithLabel("Sure?"), clix.WithConfirm())
 	}
-	runLine(t, "line", "1\n", clix.WithLabel("Pick"), prompt.Select(envs))
-	runLine(t, "line", "1\n\n", clix.WithLabel("Pick"), prompt.MultiSelect(envs))
-	runRaw(t, []string{"x", "\r"}, clix.WithLabel("Name"))
-	runRaw(t, []string{"\r"}, clix.WithLabel("Pick"), prompt.Select(envs))
+	_, _, _ = runLine(t, "line", "1\n", clix.WithLabel("Pick"), prompt.Select(envs))
+	_, _, _ = runLine(t, "line", "1\n\n", clix.WithLabel("Pick"), prompt.MultiSelect(envs))
+	_, _, _ = runRaw(t, []string{"x", "\r"}, clix.WithLabel("Name"))
+	_, _, _ = runRaw(t, []string{"\r"}, clix.WithLabel("Pick"), prompt.Select(envs))
 }

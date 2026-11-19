@@ -52,7 +52,7 @@ func (l *linePrompt) printError(cfg *clix.PromptConfig, msg string) {
 	if msg != "" {
 		msg = l.style(cfg.Theme.ErrorStyle, msg)
 	}
-	fmt.Fprintf(l.out, "%s%s\n", l.style(cfg.Theme.ErrorStyle, cfg.Theme.Error), msg)
+	_, _ = fmt.Fprintf(l.out, "%s%s\n", l.style(cfg.Theme.ErrorStyle, cfg.Theme.Error), msg)
 }
 
 // readLine reads one answer; secrets are read with echo off when the input
@@ -63,7 +63,7 @@ func (l *linePrompt) readLine(ctx context.Context, secret bool) (string, error) 
 			if restore, err := tty.DisableEcho(f); err == nil {
 				line, err := clix.ReadLine(ctx, l.in)
 				restore()
-				fmt.Fprint(l.out, "\n")
+				_, _ = fmt.Fprint(l.out, "\n")
 				return line, err
 			}
 		}
@@ -77,16 +77,16 @@ func (l *linePrompt) readLine(ctx context.Context, secret bool) (string, error) 
 func (l *linePrompt) text(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	var invalid error
 	for {
-		fmt.Fprint(l.out, l.header(cfg))
+		_, _ = fmt.Fprint(l.out, l.header(cfg))
 		if cfg.Default != "" && !cfg.Secret {
-			fmt.Fprintf(l.out, " [%s]", l.style(placeholderStyle(cfg.Theme), cfg.Default))
+			_, _ = fmt.Fprintf(l.out, " [%s]", l.style(placeholderStyle(cfg.Theme), cfg.Default))
 		} else if cfg.Default == "" && cfg.NoDefaultPlaceholder != "" {
-			fmt.Fprintf(l.out, " [%s]", l.style(placeholderStyle(cfg.Theme), cfg.NoDefaultPlaceholder))
+			_, _ = fmt.Fprintf(l.out, " [%s]", l.style(placeholderStyle(cfg.Theme), cfg.NoDefaultPlaceholder))
 		}
 		if cfg.Theme.Hint != "" {
-			fmt.Fprintf(l.out, " %s", l.style(cfg.Theme.HintStyle, cfg.Theme.Hint))
+			_, _ = fmt.Fprintf(l.out, " %s", l.style(cfg.Theme.HintStyle, cfg.Theme.Hint))
 		}
-		fmt.Fprint(l.out, ": ")
+		_, _ = fmt.Fprint(l.out, ": ")
 
 		line, err := l.readLine(ctx, cfg.Secret)
 		if err != nil {
@@ -106,16 +106,16 @@ func (l *linePrompt) text(ctx context.Context, cfg *clix.PromptConfig) (string, 
 func (l *linePrompt) confirm(ctx context.Context, cfg *clix.PromptConfig) (string, error) {
 	var invalid error
 	for {
-		fmt.Fprint(l.out, l.header(cfg))
+		_, _ = fmt.Fprint(l.out, l.header(cfg))
 		if answer.DefaultYes(cfg.Default) {
-			fmt.Fprint(l.out, " (Y/n)")
+			_, _ = fmt.Fprint(l.out, " (Y/n)")
 		} else {
-			fmt.Fprint(l.out, " (y/N)")
+			_, _ = fmt.Fprint(l.out, " (y/N)")
 		}
 		if cfg.Theme.Hint != "" {
-			fmt.Fprintf(l.out, " %s", l.style(cfg.Theme.HintStyle, cfg.Theme.Hint))
+			_, _ = fmt.Fprintf(l.out, " %s", l.style(cfg.Theme.HintStyle, cfg.Theme.Hint))
 		}
-		fmt.Fprint(l.out, ": ")
+		_, _ = fmt.Fprint(l.out, ": ")
 
 		line, err := l.readLine(ctx, false)
 		if err != nil {
@@ -132,23 +132,23 @@ func (l *linePrompt) confirm(ctx context.Context, cfg *clix.PromptConfig) (strin
 }
 
 func (l *linePrompt) printOptions(cfg *clix.PromptConfig, marker func(i int) string, numbered bool) {
-	fmt.Fprint(l.out, l.header(cfg))
+	_, _ = fmt.Fprint(l.out, l.header(cfg))
 	if cfg.Theme.Hint != "" {
-		fmt.Fprintf(l.out, " %s", l.style(cfg.Theme.HintStyle, cfg.Theme.Hint))
+		_, _ = fmt.Fprintf(l.out, " %s", l.style(cfg.Theme.HintStyle, cfg.Theme.Hint))
 	}
-	fmt.Fprint(l.out, "\n")
+	_, _ = fmt.Fprint(l.out, "\n")
 	for i, opt := range cfg.Options {
 		if numbered {
-			fmt.Fprintf(l.out, "%s %d. %s", marker(i), i+1, opt.Label)
+			_, _ = fmt.Fprintf(l.out, "%s %d. %s", marker(i), i+1, opt.Label)
 		} else {
-			fmt.Fprintf(l.out, "%s %s", marker(i), opt.Label)
+			_, _ = fmt.Fprintf(l.out, "%s %s", marker(i), opt.Label)
 		}
 		if opt.Description != "" {
-			fmt.Fprintf(l.out, " - %s", opt.Description)
+			_, _ = fmt.Fprintf(l.out, " - %s", opt.Description)
 		}
-		fmt.Fprint(l.out, "\n")
+		_, _ = fmt.Fprint(l.out, "\n")
 	}
-	fmt.Fprint(l.out, "> ")
+	_, _ = fmt.Fprint(l.out, "> ")
 }
 
 // choose prompts for one option. An answer is matched against the options

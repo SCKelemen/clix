@@ -19,7 +19,7 @@ func readSecretLine(ctx context.Context, in io.Reader, out io.Writer) (string, e
 			line, err := ReadLine(ctx, in)
 			restore()
 			// The Enter that ended the line was not echoed either.
-			fmt.Fprint(out, "\n")
+			_, _ = fmt.Fprint(out, "\n")
 			return line, err
 		}
 	}

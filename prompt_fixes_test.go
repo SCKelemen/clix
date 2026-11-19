@@ -227,7 +227,7 @@ func TestReadLine(t *testing.T) {
 		t.Fatalf("err = %v, want EOF", err)
 	}
 	pr, pw := io.Pipe()
-	defer pw.Close()
+	defer func() { _ = pw.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	if _, err := clix.ReadLine(ctx, pr); !errors.Is(err, context.DeadlineExceeded) {

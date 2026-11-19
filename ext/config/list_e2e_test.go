@@ -57,7 +57,7 @@ func TestConfigE2E_ListYAMLRoundTrips(t *testing.T) {
 			t.Fatalf("%q: output is not YAML: %v\n%s", args, err, got)
 		}
 		for k, v := range vals {
-			node := any(back)
+			var node any
 			if k == "nested.null" {
 				node = back["nested"].(map[string]any)["null"]
 			} else {

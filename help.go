@@ -59,14 +59,14 @@ func (p helpPrinter) style(s TextStyle, value string) string {
 
 // heading prints a section heading.
 func (p helpPrinter) heading(title string) {
-	fmt.Fprintln(p.w, p.style(p.App.Styles.SectionHeading, title))
+	_, _ = fmt.Fprintln(p.w, p.style(p.App.Styles.SectionHeading, title))
 }
 
 // row prints one entry of a two-column section. The name is padded by its
 // visible width, so escape sequences added by styles do not count toward
 // the column width (as they do with fmt's %-20s).
 func (p helpPrinter) row(name, desc string) {
-	fmt.Fprintf(p.w, "  %s %s\n", tty.PadRight(name, helpNameWidth), desc)
+	_, _ = fmt.Fprintf(p.w, "  %s %s\n", tty.PadRight(name, helpNameWidth), desc)
 }
 
 func (p helpPrinter) render(cmd *Command) {
@@ -76,9 +76,9 @@ func (p helpPrinter) render(cmd *Command) {
 
 	if isRoot {
 		title := strings.ToUpper(p.App.Name)
-		fmt.Fprintf(w, "%s\n", p.style(styles.AppTitle, title))
+		_, _ = fmt.Fprintf(w, "%s\n", p.style(styles.AppTitle, title))
 		if p.App.Description != "" {
-			fmt.Fprintf(w, "%s\n\n", p.style(styles.AppDescription, p.App.Description))
+			_, _ = fmt.Fprintf(w, "%s\n\n", p.style(styles.AppDescription, p.App.Description))
 		} else {
 			fmt.Fprintln(w)
 		}
@@ -87,7 +87,7 @@ func (p helpPrinter) render(cmd *Command) {
 		if title == "" {
 			title = cmd.Long
 		}
-		fmt.Fprintf(w, "%s\n\n", p.style(styles.CommandTitle, title))
+		_, _ = fmt.Fprintf(w, "%s\n\n", p.style(styles.CommandTitle, title))
 	}
 
 	usage := cmd.Usage
@@ -95,16 +95,16 @@ func (p helpPrinter) render(cmd *Command) {
 		usage = p.buildUsageLine(cmd)
 	}
 	p.heading("USAGE")
-	fmt.Fprintf(w, "  %s\n\n", p.style(styles.Usage, usage))
+	_, _ = fmt.Fprintf(w, "  %s\n\n", p.style(styles.Usage, usage))
 
 	if !isRoot && len(cmd.Aliases) > 0 {
 		p.heading("ALIASES")
-		fmt.Fprintf(w, "  %s\n\n", p.style(styles.ChildName, commandNames(cmd)))
+		_, _ = fmt.Fprintf(w, "  %s\n\n", p.style(styles.ChildName, commandNames(cmd)))
 	}
 
 	// When Short is empty, Long was already printed as the title.
 	if cmd.Long != "" && (isRoot || cmd.Short != "") {
-		fmt.Fprintf(w, "%s\n\n", p.style(styles.CommandTitle, cmd.Long))
+		_, _ = fmt.Fprintf(w, "%s\n\n", p.style(styles.CommandTitle, cmd.Long))
 	}
 
 	p.renderArguments(cmd)
@@ -116,7 +116,7 @@ func (p helpPrinter) render(cmd *Command) {
 	if cmd.Example != "" {
 		example := strings.ReplaceAll(cmd.Example, "\n", "\n  ")
 		p.heading("EXAMPLES")
-		fmt.Fprintf(w, "  %s\n", p.style(styles.Example, example))
+		_, _ = fmt.Fprintf(w, "  %s\n", p.style(styles.Example, example))
 	}
 }
 
@@ -140,7 +140,7 @@ func (p helpPrinter) renderArguments(cmd *Command) {
 		}
 		p.row(p.style(nameStyle, label), p.style(usageStyle, usage))
 	}
-	fmt.Fprintln(p.w)
+	_, _ = fmt.Fprintln(p.w)
 }
 
 func (p helpPrinter) renderFlags(cmd *Command) {
@@ -155,7 +155,7 @@ func (p helpPrinter) renderFlags(cmd *Command) {
 	for _, flag := range flags {
 		p.flagRow(flag, flag.Short, nameStyle, usageStyle)
 	}
-	fmt.Fprintln(p.w)
+	_, _ = fmt.Fprintln(p.w)
 }
 
 // renderInheritedFlags lists the flags of the command's ancestors below the
@@ -178,7 +178,7 @@ func (p helpPrinter) renderInheritedFlags(cmd *Command) {
 	for _, e := range entries {
 		p.flagRow(e.flag, e.short, nameStyle, usageStyle)
 	}
-	fmt.Fprintln(p.w)
+	_, _ = fmt.Fprintln(p.w)
 }
 
 func (p helpPrinter) renderGlobalFlags(cmd *Command) {
@@ -195,7 +195,7 @@ func (p helpPrinter) renderGlobalFlags(cmd *Command) {
 	for _, e := range entries {
 		p.flagRow(e.flag, e.short, nameStyle, usageStyle)
 	}
-	fmt.Fprintln(p.w)
+	_, _ = fmt.Fprintln(p.w)
 }
 
 // flagEntry is a flag as help shows it: short is "" when the short name
@@ -286,7 +286,7 @@ func (p helpPrinter) renderChildSection(title string, children []*Command) {
 		}
 		p.row(p.style(p.App.Styles.ChildName, commandNames(child)), p.style(p.App.Styles.ChildDesc, desc))
 	}
-	fmt.Fprintln(p.w)
+	_, _ = fmt.Fprintln(p.w)
 }
 
 // commandNames returns the command's name followed by its aliases, as in

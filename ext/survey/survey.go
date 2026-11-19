@@ -702,7 +702,7 @@ func (s *Survey) renderSummary(out io.Writer) {
 				if theme.DefaultStyle != nil {
 					styledAnswer = renderText(theme.DefaultStyle, answer)
 				}
-				fmt.Fprintf(out, "  %s %s\n", bullet, styledAnswer)
+				_, _ = fmt.Fprintf(out, "  %s %s\n", bullet, styledAnswer)
 			}
 			continue
 		}

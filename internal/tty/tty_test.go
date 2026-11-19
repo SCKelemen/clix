@@ -10,23 +10,23 @@ import (
 
 func TestStringWidth(t *testing.T) {
 	cases := map[string]int{
-		"":             0,
-		"abc":          3,
-		"José":         4,
-		"José":        4, // e + combining acute accent
-		"日本":           4,
-		"? 名前: ":       8,
-		"😀":            2,
-		"❤️":           2, // U+2764 + VS16
-		"👍🏽":           2, // thumbs up + skin tone
-		"👨‍👩‍👧":        2, // ZWJ family
-		"🇸🇪":           2, // regional indicator pair
-		"ｶ":            1, // halfwidth katakana
-		"Ａ":            2, // fullwidth A
-		"\x1b":         0,
-		"한국어":          6,
-		"tab\there":    7, // control characters take no columns
-		"zero​width‍!": 10,
+		"":                       0,
+		"abc":                    3,
+		"José":                   4,
+		"Jose\u0301":             4, // e + combining acute accent
+		"日本":                     4,
+		"? 名前: ":                 8,
+		"😀":                      2,
+		"❤️":                     2, // U+2764 + VS16
+		"👍🏽":                     2, // thumbs up + skin tone
+		"👨‍👩‍👧":                  2, // ZWJ family
+		"🇸🇪":                     2, // regional indicator pair
+		"ｶ":                      1, // halfwidth katakana
+		"Ａ":                      2, // fullwidth A
+		"\x1b":                   0,
+		"한국어":                    6,
+		"tab\there":              7, // control characters take no columns
+		"zero\u200bwidth\u200d!": 10,
 	}
 	for s, want := range cases {
 		if got := tty.StringWidth(s); got != want {
