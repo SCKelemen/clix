@@ -17,7 +17,7 @@ Everything else is opt-in via extensions, including:
 - Config management commands (`cli config`)
 - Shell completion (`cli autocomplete`)
 - Version information (`cli version`)
-- Output format selection (`--format`)
+- Output format selection (`--format`, `--json`, `--jq`, `--template`)
 - Select and multi-select prompts, surveys, and validators
 
 ## Using Extensions
@@ -43,7 +43,7 @@ app.Root = clix.NewCommand("myapp")
 app.AddExtension(help.Extension{})         // Adds: myapp help [command]
 app.AddExtension(config.Extension{})       // Adds: myapp config, myapp config set, etc.
 app.AddExtension(autocomplete.Extension{}) // Adds: myapp autocomplete [shell]
-app.AddExtension(format.Extension{})       // Adds: --format / -f (json|yaml|text)
+app.AddExtension(format.Extension{})       // Adds: --format / -f, --json, --jq / -q, --template / -t
 app.AddExtension(version.Extension{        // Adds: myapp version, --version / -v
 	Version: "1.0.0",
 	Commit:  "abc123",     // optional
@@ -108,21 +108,26 @@ app.AddExtension(version.Extension{
 
 ### Format Extension (`clix/ext/format`)
 
-Adds a global `--format` / `-f` flag that accepts `json`, `yaml`, or `text` (the default). `format.OutputFormat(app)` returns the selected format, falling back to `text` when the flag is unset or invalid; pass it to `clix.FormatData`:
+Adds gh's output flags: `--format` / `-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq` / `-q` and `--template` / `-t`. Print a command's result with `format.Write`, which applies them all:
 
 ```go
 app.AddExtension(format.Extension{})
 
 cmd.Run = func(ctx *clix.Context) error {
-	data := map[string]any{"name": "demo", "replicas": 3}
-	return clix.FormatData(ctx.App.Out, data, format.OutputFormat(ctx.App))
+	return format.Write(ctx, repos) // a slice of structs
 }
-// cli <command> --format json
+// cli repos list                         a table on a terminal, tab-separated values in a pipe
+// cli repos list --json                  lists the fields
+// cli repos list --json name,owner.login
+// cli repos list --jq '.[].name'
+// cli repos list --template '{{range .}}{{.name}}{{"\n"}}{{end}}'
 ```
 
-The flag is `Ambient` (see `clix.FlagOptions.Ambient`): it chooses how the result is printed, not what the command does, so `cli --format json <command>` still prompts for the command's missing required flags when the app is interactive.
+`format.OutputFormat(app)` returns the selected format (falling back to `text`, and `json` with `--json`) for handlers that call `clix.FormatData` themselves. `--jq` is a strict, dependency-free subset of jq; see the [README](../README.md#structured-output) for the flag rules, the jq subset and the template helpers.
 
-Without this extension there is no `--format` flag; `config list` prints YAML and `version` prints text.
+The flags are `Ambient` (see `clix.FlagOptions.Ambient`): they choose how the result is printed, not what the command does, so `cli --format json <command>` still prompts for the command's missing required flags when the app is interactive.
+
+Without this extension there are no output flags; `config list` prints YAML and `version` prints text.
 
 ### Prompt Extension (`clix/ext/prompt`)
 

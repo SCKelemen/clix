@@ -9,7 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `clix/ext/format`: gh's `--json [fields]`, `--jq` / `-q` and `--template` / `-t`, next to `--format`, and `format.Write(ctx, data)` (and `format.WriteWith` with `clix.FormatOptions`), which prints a command's result as all four flags ask. `--json name,owner.login` prints the JSON output with only those fields in each object, or in each object of a list, in the order the full output has them; dotted paths select nested fields, also through lists. `--json` without fields (alone, `--json=`, or before another flag) and an unknown field are usage errors that list the available fields: the keys of the output's objects and the JSON names of the fields of the struct type behind them. `--jq` filters that JSON and prints string results raw, as gh does, and everything else as jq does. `--template` executes a Go `text/template` over the decoded JSON with gh's helpers `color`/`autocolor`, `join`, `pluck`, `tablerow`/`tablerender`, `truncate`, `timeago`, `timefmt` and `hyperlink`. `--json`, `--jq` and `--template` are Ambient and read from the command line only; with `--format` given on the command line it must be `json`, and `--jq` and `--template` exclude each other. A `--jq` expression or `--template` that does not parse is a usage error before the command runs.
+- An in-house implementation of a strict subset of jq 1.7 for `--jq`, with the standard library only (`internal/jq`). Constructs outside the subset are errors that say they are "not supported in clix --jq", never a different result. Differential tests and a fuzzer compare it with the real `jq` when it is installed.
+- `clix.FormatDataWith` and `clix.FormatOptions`: `Columns` chooses the columns of a text table (JSON names or dotted paths), and `HeaderStyle` styles its header.
+- `clix.UsageErrorf`: an error that `ExitCode` maps to 2, for usage problems a command finds while running.
+- Flags whose value may be left out: a custom `Value` with an `OptionalValue() bool` method returning true takes the next argument as its value unless the flag is last or followed by another flag (or `--`), in which case it is set to `""`. Shell completion reads such flags the same way.
+- `examples/gh`: `gh pr list`, printed with `format.Write`.
 - Key-sequence fixtures captured in Ghostty 1.3.1, with application cursor keys and the kitty keyboard protocol on as well as off, replayed by `TestTerminalKeyFixtures`; and an opt-in live test suite (`CLIX_LIVE_TERMINALS=ghostty,cmux`, macOS) that drives prompts, a survey and shell completion in Ghostty and cmux. See "Testing in real terminals" in the README.
+
+### Changed
+
+- `FormatData` text output of a list of objects (structs or maps) is a table, as gh prints lists: when the writer is a terminal, an aligned table with a header (bold unless `NO_COLOR`, `CLICOLOR=0` or `TERM=dumb`) whose widest columns are truncated to fit; otherwise one line of tab-separated values per element, with no header, no color and no truncation, and `\`, tab, newline and carriage return escaped as in linear TSV. The columns are the fields in the order of the JSON output. Before, each element printed as a block of `key = value` lines separated by blank lines. Every other value, including lists of plain values and lists that mix objects with other values, prints exactly as before.
+- `format.OutputFormat` returns `json` when `--json` is given.
 
 ### Fixed
 
