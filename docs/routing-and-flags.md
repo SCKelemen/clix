@@ -140,13 +140,13 @@ Global and command-level flags support:
 - **Environment variable defaults**: Automatically read from environment
 - **Config file defaults**: Persistent configuration in `~/.config/<app>/config.yaml` (or `$XDG_CONFIG_HOME/<app>/config.yaml`); set `App.ConfigPath` to use another file (see [Configuration](configuration.md))
 - **Flag variants**: Long (`--flag`), short (`-f`), with equals (`--flag=value`) or space (`--flag value`), attached short values (`-fvalue`) and short clusters (`-xvf`); see [Routing](#routing)
-- **Type support**: `StringVar`, `BoolVar`, `IntVar`, `Int64Var`, `Float64Var`, `DurationVar` (`time.Duration`, parsed with `time.ParseDuration`), `StringSliceVar` (repeatable, comma-separated), `ArgsVar` (a positional argument that collects all remaining arguments, shown in help as `<name>...`), and `Var` for your own `clix.Value` types
+- **Type support**: `StringVar`, `BoolVar`, `IntVar`, `Int64Var`, `Float64Var`, `DurationVar` (`time.Duration`, as `1m30s` or ISO 8601 `PT1M30S`), `TimeVar` (`time.Time`, ISO 8601) and `ISODurationVar` (`iso8601.Duration`, ISO 8601 with years, months and days), `StringSliceVar` (repeatable, comma-separated), `ArgsVar` (a positional argument that collects all remaining arguments, shown in help as `<name>...`), and `Var` for your own `clix.Value` types; see [Times and durations](#times-and-durations)
 - **Custom validation**: Optional `Validate` function runs after parsing to reject invalid values
 - **Precedence**: Command line > Environment variables > Config file > Defaults (see [Configuration](configuration.md#precedence))
 
 App-level flags live on the root command: `app.Flags()` returns the flag set of `app.Root`. Flags registered before you assign a custom root move to it when the app runs.
 
-Every command on the path takes part in a run: the root, each group, and the command itself. Environment variables and the config file fill all their flags, `Required` is enforced on all of them, and `Context` getters (`String`, `Bool`, `Int`, `Int64`, `Float64`, `Duration` and the `Effective...` variants, which also report the `Source`) see all of them, returning the parsed value whatever its source. `FlagSet.Lookup`, `FlagSet.Changed` (set on the command line) and `Flag.Source` answer the same questions for one flag.
+Every command on the path takes part in a run: the root, each group, and the command itself. Environment variables and the config file fill all their flags, `Required` is enforced on all of them, and `Context` getters (`String`, `Bool`, `Int`, `Int64`, `Float64`, `Duration`, `Time`, `ISODuration` and the `Effective...` variants, which also report the `Source`) see all of them, returning the parsed value whatever its source. `FlagSet.Lookup`, `FlagSet.Changed` (set on the command line) and `Flag.Source` answer the same questions for one flag.
 
 ```go
 var project string
@@ -161,6 +161,40 @@ app.Flags().StringVar(clix.StringVarOptions{
         Default: "default-project",
 })
 ```
+
+### Times and durations
+
+Three flag types take times and durations, using the [`iso8601`](../iso8601) package for ISO 8601 and its internet profile, RFC 3339:
+
+- **`TimeVar`** binds a `time.Time`. It accepts any form `iso8601.ParseTime` reads: RFC 3339 (`2026-11-19T08:30:00Z`, `2026-11-19T10:30:00.5+02:00`), a date alone (`2026-11-19`), a time without an offset (`2026-11-19T08:30`), the basic format (`20261119T083000Z`), and week and ordinal dates (`2026-W47-4`, `2026-323`). A date or time without an offset is read in `TimeVarOptions.Location` (`WithTimeLocation`). The default is UTC, so a value means the same instant on every machine, and `time.Local` reads it in the user's time zone. A date alone is the first instant of that day, and a local time that a daylight saving change skips or repeats is resolved as RFC 5545 §3.3.5 says: a skipped 02:30 is read with the offset before the gap, and a repeated 01:30 is its first occurrence. A value with an offset keeps it, whatever the Location.
+- **`ISODurationVar`** binds an `iso8601.Duration` such as `P1D`, `PT1H30M`, `P1Y2M` or `P2W`. It keeps years, months, weeks and days apart from the exact hours, minutes and seconds, because a calendar day is not always 24 hours. `every.AddTo(t)` steps through the calendar (P1D is the same wall-clock time the next day, even across a daylight saving change), and `every.Exact()` converts a duration without years or months to a `time.Duration`. It accepts ISO 8601 only, not `90m`.
+- **`DurationVar`** binds a `time.Duration` and accepts Go's syntax (`90s`, `1h30m`) as before, and also ISO 8601 (`PT5M`, `P1DT12H`, `-PT2H`), as `--format json` and `yaml` print durations. Years and months are rejected (`duration "P1M" has years or months, whose length depends on the calendar`), and a day is 24 hours. Every value it accepted before reads the same, and the value still prints as `5m0s`.
+
+```go
+import "github.com/SCKelemen/clix/v2/iso8601"
+
+var since time.Time
+var every iso8601.Duration
+cmd.Flags.TimeVar(clix.TimeVarOptions{
+        FlagOptions: clix.FlagOptions{Name: "since", Usage: "Show events since then"},
+        Location:    time.Local,
+        Value:       &since,
+})
+cmd.Flags.ISODurationVar(clix.ISODurationVarOptions{
+        FlagOptions: clix.FlagOptions{Name: "every", Usage: "Repeat this often"},
+        Default:     "P1D",
+        Value:       &every,
+})
+```
+
+They read the environment, the config file (`since: 2026-11-19` keeps its text), prompts and defaults like every flag, and `Validate` sees the text as given. `config set` checks values with the same parsers. Help shows the format after the usage:
+
+```text
+  --since    Show events since then (ISO 8601, such as 2026-11-19 or 2026-11-19T08:30:00Z; without an offset, in local time)
+  --every    Repeat this often (ISO 8601 duration, such as PT1H30M, P1D or P1M)
+```
+
+Shell completion offers nothing for a `TimeVar` or `ISODurationVar` value, rather than file names, unless you set a function with `SetCompletion`. `ctx.Time` and `ctx.ISODuration` (and `EffectiveTime`, `EffectiveISODuration`) return a flag's value exactly as bound, including its location. They read other keys with the same parsers, with UTC for a time without an offset, and `ctx.ISODuration` reads a `DurationVar` flag as exact time. `ctx.Duration` reads ISO 8601 too, so it works on an `ISODurationVar` flag without years or months. `FlagSet.Time` and `FlagSet.ISODuration` read one flag set.
 
 ### Positional arguments
 
@@ -342,7 +376,7 @@ Some of these rules are kept only for compatibility with earlier v2 releases and
 Command handlers receive a `*clix.Context` that embeds `context.Context` and provides:
 - Access to the active command
 - Application instance and configuration
-- Resolved flag/config values via `String()`, `Bool()`, `Int()`, `Int64()`, `Float64()` and `Duration()`, plus `EffectiveString()`, `EffectiveBool()`, `EffectiveInt()`, `EffectiveInt64()`, `EffectiveFloat64()` and `EffectiveDuration()`, which also report the `clix.Source` (command flag, app flag, env var, config file, default, or prompt) the value came from
+- Resolved flag/config values via `String()`, `Bool()`, `Int()`, `Int64()`, `Float64()`, `Duration()`, `Time()` and `ISODuration()`, plus `EffectiveString()`, `EffectiveBool()`, `EffectiveInt()`, `EffectiveInt64()`, `EffectiveFloat64()`, `EffectiveDuration()`, `EffectiveTime()` and `EffectiveISODuration()`, which also report the `clix.Source` (command flag, app flag, env var, config file, default, or prompt) the value came from
 - `Progress(label)`, an indicator for long waits (see [Progress for long waits](prompting-and-terminals.md#progress-for-long-waits))
 - Standard output/error streams
 - Standard context.Context functionality (cancellation, deadlines, values)

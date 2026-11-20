@@ -139,11 +139,7 @@ func (p helpPrinter) renderArguments(cmd *Command) {
 		if flag.IsVariadic() {
 			label += "..."
 		}
-		usage := flag.Usage
-		if flag.Required {
-			usage += " (required)"
-		}
-		p.row(p.style(nameStyle, label), p.style(usageStyle, usage))
+		p.row(p.style(nameStyle, label), p.style(usageStyle, flagUsage(flag)))
 	}
 	_, _ = fmt.Fprintln(p.w)
 }
@@ -259,11 +255,24 @@ func (p helpPrinter) flagRow(flag *Flag, short string, nameStyle, usageStyle Tex
 		names = append(names, "-"+short)
 	}
 	names = append(names, "--"+flag.Name)
+	p.row(p.style(nameStyle, strings.Join(names, ", ")), p.style(usageStyle, flagUsage(flag)))
+}
+
+// flagUsage returns the help text of a flag or positional argument: its
+// Usage, then the format of its value in parentheses when the Value has
+// one (TimeVar and ISODurationVar flags), then "(required)".
+func flagUsage(flag *Flag) string {
 	usage := flag.Usage
+	if h, ok := flag.Value.(formatHinter); ok {
+		if usage != "" {
+			usage += " "
+		}
+		usage += "(" + h.formatHint() + ")"
+	}
 	if flag.Required {
 		usage += " (required)"
 	}
-	p.row(p.style(nameStyle, strings.Join(names, ", ")), p.style(usageStyle, usage))
+	return usage
 }
 
 // renderChildren renders both groups and commands, showing them in separate sections.
