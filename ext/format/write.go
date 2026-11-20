@@ -44,10 +44,16 @@ import (
 //     or uint64, other numbers float64), with the helpers listed in the
 //     package documentation.
 //
+// With Extension.Projections, a gcloud format expression in --format
+// (anything but json, yaml or text alone) prints data as gcloud's printer
+// of that name would (see the package documentation); json and yaml with
+// a projection print the projected data with clix's encoders. opts.Columns
+// are the columns of table, csv and value without a projection.
+//
 // --jq and --template cannot be combined, and --json, --jq or --template
-// with --format yaml or text on the command line is a usage error
-// (--format json is fine). A --format from the environment or the config
-// file gives way to them.
+// with --format yaml or text, or any gcloud format expression, on the
+// command line is a usage error (--format json is fine). A --format from
+// the environment or the config file gives way to them.
 //
 // Usage errors are returned before anything is written. A jq or template
 // error while running is returned after the output produced before it.

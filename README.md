@@ -700,7 +700,7 @@ func main() {
 
 ### Structured Output
 
-Structured output is opt-in and modeled on the GitHub CLI (`gh`). The format extension (`github.com/SCKelemen/clix/v2/ext/format`) registers four global flags: `--format`/`-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq`/`-q` and `--template`/`-t`. A handler prints its result with `format.Write`, which applies all of them:
+Structured output is opt-in and modeled on the GitHub CLI (`gh`), with gcloud's format expressions as a further option (see [gcloud format projections](#gcloud-format-projections)). The format extension (`github.com/SCKelemen/clix/v2/ext/format`) registers four global flags: `--format`/`-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq`/`-q` and `--template`/`-t`. A handler prints its result with `format.Write`, which applies all of them:
 
 ```go
 import (
@@ -825,6 +825,64 @@ Results within the subset are exactly those of jq 1.8.1, the current release (bu
 - **Numbers** keep the text they were written with, in the input or in the filter, as jq 1.8 does: `1.0` stays `1.0`, `1e2` prints `1E+2`, and `100000000000000000001` is not rounded, also through unary minus and `length` (`-1.0` is `-1.0`, `-0` is `0`, `1e1000 | length` is `1E+1000`); two such numbers compare exactly, so large IDs match. Lengths of strings, arrays and objects, and the indices from `keys`, print the way jq prints doubles.
 - **`last(f)`** gives no output when `f` has none, like `first(f)` (jq 1.8; jq 1.7 gave `null`).
 - **`test(re)`** takes Go's RE2 syntax, which runs in linear time, restricted to what jq's Oniguruma reads the same way: literals, `.`, `^`, `$` at the end of the pattern or of an alternative (matching before a final newline, as in jq), `\A`, `\z`, groups `(...)`, `(?:...)` and `(?<name>...)`, `|`, the quantifiers `* + ? {n} {n,} {n,m}` (and their lazy forms), bracket classes, `\t \n \r \f \xHH \x{H...}`, `\p{...}`, `\P{...}` and escaped punctuation. Rejected because the two engines disagree: `\d \D \w \W \s \S \b \B` (Unicode-aware in jq, ASCII in RE2; write `[0-9]` or `\p{Nd}`), POSIX classes, inline flags, lookaround, backreferences, anchors inside a repeated group, and regex flags (`test(re; flags)`: jq folds `ß` to `ss` when ignoring case, RE2 does not). A pattern written in the filter is checked before the command runs.
+
+#### gcloud format projections
+
+Apps modeled on gcloud can opt in to gcloud's `--format` expressions, `NAME[ATTRIBUTES](PROJECTION)`, with `format.Extension{Projections: true}`. Existing apps are unchanged: without the option, `--format` accepts `json`, `yaml` and `text` only, and with it those three alone still print exactly as before.
+
+```go
+app.AddExtension(format.Extension{Projections: true})
+```
+
+```text
+$ myapp instances list --format 'table(name, zone.basename():label=ZONE, status, networkInterfaces[0].networkIP:label=INTERNAL_IP)'
+NAME             ZONE            STATUS      INTERNAL_IP
+web-1            us-central1-a   RUNNING     10.128.0.2
+batch-worker-12  europe-west1-b  TERMINATED  10.132.0.7
+$ myapp instances list --format 'value(name)'
+web-1
+batch-worker-12
+$ myapp instances list --format 'table[box,title=Instances](name, cpus:align=right)'
+┌────────────────────────┐
+│       Instances        │
+├─────────────────┬──────┤
+│       NAME      │ CPUS │
+├─────────────────┼──────┤
+│ web-1           │    2 │
+│ batch-worker-12 │   16 │
+└─────────────────┴──────┘
+```
+
+clix implements a strict subset of gcloud's formats (`gcloud topic formats` and `gcloud topic projections`), ported from the Cloud SDK's own printers. Within the subset the output is byte for byte what gcloud prints for the same JSON, which differential tests check against an installed Cloud SDK (set `CLIX_GCLOUD_SDK` and `CLIX_GCLOUD_PYTHON`; see `internal/gcloudtest`) and golden files check in CI. Anything outside it is a usage error that says it "is not supported in clix --format", never different output.
+
+| Format | Attributes | Prints |
+| --- | --- | --- |
+| `table` | `box`, `all-box`, `no-heading`, `title=TEXT`, `pad=N` | Aligned columns two spaces apart with ANGRY_SNAKE_CASE headings (`displayName` is `DISPLAY_NAME`; `a.name` after `name` is `A_NAME`) |
+| `csv` | `no-heading`, `no-quote`, `separator=S`, `delimiter=S`, `terminator=S` | A heading of lower-cased labels, then comma-separated values, quoted when needed |
+| `value` | `quote`, `separator=S`, `delimiter=S`, `terminator=S` | Tab-separated values, no heading |
+| `flattened` | `no-pad`, `separator=S` | One `key: value` line per value, nested keys dotted and indexed, `---` between resources |
+| `list` | `compact`, `title=TEXT`, `always-display-title` | ` - ` and each value on an indented line |
+| `json`, `yaml` | none | The projected resources, with clix's encoders as for `--format json` and `yaml` |
+| `none` | none | Nothing |
+
+- **Keys** are names, `[N]` indices (negative from the end) and `[]` slices, joined with dots, as in `disks[0].deviceName` or `tags.items[]`; quote a name with special characters (`"k.e.y"`). Every key takes `:label=TEXT` (`:label=''` for no heading); in `table`, keys also take `:align=left|center|right`, `:sort=N` (sort by this column, lower `N` first) and `:reverse`.
+- **Transforms**: `.len()`, `.basename()` (the last part of a URL or path) and `.join(sep)`, chained left to right, with gcloud's arguments (`undefined=TEXT`).
+- **Values** print as gcloud prints them: in `table`, `csv` and `value`, `null` prints nothing, `true` prints `True`, floats have six significant digits, and in `table` lists and objects print as Python does (`['a', 'b']`); `csv` and `value` join lists with `;` and objects as `key=value` pairs; a table cell with newlines spans lines.
+- **Without a projection**, `table`, `csv` and `value` print the command's `FormatOptions.Columns` (from `format.WriteWith`), or else every top-level field, in the order they first appear; gcloud's commands have a default projection instead. A command whose output has no fields needs a projection.
+- **Terminals**: projection tables print the same on a terminal as in a pipe, as gcloud's do: no truncation, no color, headings always (unless `no-heading`). Box characters are Unicode in a UTF-8 locale and ASCII otherwise.
+- **json and yaml** with a projection keep only the projected keys, as gcloud does, and print them with clix's JSON and YAML encoders: the JSON is what gcloud prints, and the YAML is a sequence, as for `--format yaml`, not gcloud's stream of YAML documents.
+- **Rejected**: gcloud's formats `config`, `default`, `diff`, `disable`, `get`, `multi` and `object`; `text` with attributes or a projection (`text` stays clix's format, not gcloud's alias for `flattened`); every other attribute (gcloud ignores unknown ones); other key attributes (`alias`, `format`, `optional`, `width`, `wrap`); other transforms, among them `date()`, which depends on python-dateutil and the local time zone; a key that repeats an earlier column's label (gcloud reads it as that column); an order other than `NAME[ATTRIBUTES](PROJECTION)`; and, when printing, control characters other than tab and newline in the text (gcloud writes them to the terminal as they are), and text outside ASCII in a table when the locale is not UTF-8.
+
+How `--format` relates to the other output flags, and where it comes from:
+
+| Situation | Result |
+| --- | --- |
+| `--format 'table(...)'` (or any expression) on the command line with `--json`, `--jq` or `--template` | A usage error: those work on JSON output |
+| `--format json` with `--json`, `--jq` or `--template` | Allowed, as before |
+| An expression in `<PREFIX>_FORMAT` or the `format` config key | Used when the command line has no `--format`; `--json`, `--jq` and `--template` win over it |
+| An expression that does not parse, or is outside the subset, from any source | A usage error (exit status 2) before the command runs, naming the source |
+| The app's own `--format` flag | Replaces the extension's, projections included |
+| `format.OutputFormat(app)` with an expression | `json` for `json(...)`, `yaml` for `yaml(...)`, `text` otherwise, for handlers that print with `clix.FormatData` themselves |
 
 #### Template helpers
 
