@@ -238,6 +238,18 @@ func checkConfigurationName(name string) error {
 	return nil
 }
 
+// checkNameArg is checkConfigurationName for a name the caller was given,
+// such as a command's argument: an invalid one is a usage error, so
+// ExitCode returns 2. A name read from active_config is checked with
+// checkConfigurationName instead, since a broken file is not a mistake in
+// how the program was invoked.
+func checkNameArg(name string) error {
+	if err := checkConfigurationName(name); err != nil {
+		return &usageError{err: err}
+	}
+	return nil
+}
+
 // configDirPath returns the config directory without creating it.
 func (a *App) configDirPath() (string, error) {
 	base, err := a.baseConfigFilePath()
@@ -271,9 +283,10 @@ func (a *App) configurationPath(name string) (string, error) {
 // ConfigurationFile returns the file that holds the configuration name,
 // without touching the file system: the classic config file for
 // "default", and configurations/config_<name>.yaml in the config
-// directory for the others.
+// directory for the others. An invalid name is a usage error (ExitCode
+// returns 2).
 func (a *App) ConfigurationFile(name string) (string, error) {
-	if err := checkConfigurationName(name); err != nil {
+	if err := checkNameArg(name); err != nil {
 		return "", err
 	}
 	return a.configurationPath(name)
@@ -354,15 +367,20 @@ func (a *App) CompleteConfigurations(CompletionRequest) []Completion {
 // CreateConfiguration creates the empty configuration name (mode 0600, in
 // a directory created with mode 0700). It is an error if it exists, which
 // "default" always does. It does not activate it.
+//
+// An invalid name and a name that exists are usage errors, for which
+// ExitCode returns 2, as are the refusals of ActivateConfiguration,
+// DeleteConfiguration and RenameConfiguration: they are mistakes in what
+// was asked for. A failure to read or write a file is not.
 func (a *App) CreateConfiguration(name string) error {
 	if !a.configurations {
 		return errConfigurationsDisabled
 	}
-	if err := checkConfigurationName(name); err != nil {
+	if err := checkNameArg(name); err != nil {
 		return err
 	}
 	if name == DefaultConfiguration {
-		return fmt.Errorf("configuration %q already exists", name)
+		return usageErrorf("configuration %q already exists", name)
 	}
 	path, err := a.configurationPath(name)
 	if err != nil {
@@ -375,7 +393,7 @@ func (a *App) CreateConfiguration(name string) error {
 	// at the same moment.
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if errors.Is(err, os.ErrExist) {
-		return fmt.Errorf("configuration %q already exists", name)
+		return usageErrorf("configuration %q already exists", name)
 	}
 	if err != nil {
 		return err
@@ -386,7 +404,8 @@ func (a *App) CreateConfiguration(name string) error {
 // ActivateConfiguration makes name, which must exist, the configuration
 // commands use when neither --configuration nor <EnvPrefix>_CONFIGURATION
 // picks one. It replaces active_config atomically (mode 0600), through a
-// symbolic link if active_config is one.
+// symbolic link if active_config is one. An invalid or missing name is a
+// usage error (see CreateConfiguration).
 func (a *App) ActivateConfiguration(name string) error {
 	if !a.configurations {
 		return errConfigurationsDisabled
@@ -403,7 +422,7 @@ func (a *App) ActivateConfiguration(name string) error {
 
 // requireConfiguration checks that name is valid and exists.
 func (a *App) requireConfiguration(name string) error {
-	if err := checkConfigurationName(name); err != nil {
+	if err := checkNameArg(name); err != nil {
 		return err
 	}
 	exists, err := a.configurationExists(name)
@@ -411,7 +430,7 @@ func (a *App) requireConfiguration(name string) error {
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("configuration %q does not exist: %w", name, ErrConfigurationNotFound)
+		return usageErrorf("configuration %q does not exist: %w", name, ErrConfigurationNotFound)
 	}
 	return nil
 }
@@ -421,7 +440,7 @@ func (a *App) requireConfiguration(name string) error {
 // configuration or the one in effect: activate another one first. When the
 // configuration's file is a symbolic link, the link is removed and the
 // file it points to is kept, so nothing outside the config directory is
-// ever deleted.
+// ever deleted. Each refusal is a usage error (see CreateConfiguration).
 func (a *App) DeleteConfiguration(name string) error {
 	if !a.configurations {
 		return errConfigurationsDisabled
@@ -442,7 +461,8 @@ func (a *App) DeleteConfiguration(name string) error {
 // RenameConfiguration renames the configuration name to newName, which
 // must not exist. "default", the activated configuration and the one in
 // effect cannot be renamed. A symbolic link is renamed itself, so it keeps
-// pointing where it did.
+// pointing where it did. Each refusal is a usage error (see
+// CreateConfiguration).
 func (a *App) RenameConfiguration(name, newName string) error {
 	if !a.configurations {
 		return errConfigurationsDisabled
@@ -450,7 +470,7 @@ func (a *App) RenameConfiguration(name, newName string) error {
 	if err := a.requireConfiguration(name); err != nil {
 		return err
 	}
-	if err := checkConfigurationName(newName); err != nil {
+	if err := checkNameArg(newName); err != nil {
 		return err
 	}
 	if err := a.checkNotInUse(name, "rename"); err != nil {
@@ -459,7 +479,7 @@ func (a *App) RenameConfiguration(name, newName string) error {
 	if exists, err := a.configurationExists(newName); err != nil {
 		return err
 	} else if exists {
-		return fmt.Errorf("configuration %q already exists", newName)
+		return usageErrorf("configuration %q already exists", newName)
 	}
 	from, err := a.configurationPath(name)
 	if err != nil {
@@ -477,19 +497,19 @@ func (a *App) RenameConfiguration(name, newName string) error {
 func (a *App) checkNotInUse(name, verb string) error {
 	if name == DefaultConfiguration {
 		if verb == "delete" {
-			return fmt.Errorf("cannot delete the %q configuration; use \"%s config reset\" to clear it", name, a.Name)
+			return usageErrorf("cannot delete the %q configuration; use \"%s config reset\" to clear it", name, a.Name)
 		}
-		return fmt.Errorf("cannot rename the %q configuration", name)
+		return usageErrorf("cannot rename the %q configuration", name)
 	}
 	active, err := a.activatedConfiguration()
 	if err != nil {
 		return err
 	}
 	if name == active {
-		return fmt.Errorf("cannot %s the active configuration %q; activate another one first", verb, name)
+		return usageErrorf("cannot %s the active configuration %q; activate another one first", verb, name)
 	}
 	if current, source, _ := a.Configuration(); current == name {
-		return fmt.Errorf("cannot %s configuration %q: this command uses it (from %s)", verb, name, sourceLabel(source, a))
+		return usageErrorf("cannot %s configuration %q: this command uses it (from %s)", verb, name, sourceLabel(source, a))
 	}
 	return nil
 }

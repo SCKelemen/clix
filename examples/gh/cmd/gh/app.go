@@ -9,11 +9,15 @@ import (
 	prcmd "github.com/SCKelemen/clix/v2/examples/gh/internal/pr"
 	repocmd "github.com/SCKelemen/clix/v2/examples/gh/internal/repo"
 	simplecmd "github.com/SCKelemen/clix/v2/examples/gh/internal/simple"
+	"github.com/SCKelemen/clix/v2/ext/alias"
 	"github.com/SCKelemen/clix/v2/ext/format"
+	"github.com/SCKelemen/clix/v2/ext/plugin"
 )
 
-func newApp() *clix.App {
-	app := clix.NewApp("gh")
+// newApp builds the app. Tests pass options such as clix.WithAppOut, which
+// clix.NewApp applies before it creates the default prompter.
+func newApp(opts ...clix.AppOption) *clix.App {
+	app := clix.NewApp("gh", opts...)
 	app.Description = "Work seamlessly with GitHub from the command line."
 
 	root := clix.NewCommand("gh")
@@ -36,20 +40,17 @@ GITHUB ACTIONS COMMANDS
   run         View details about workflow runs
   workflow    View details about GitHub Actions workflows
 
-ALIAS COMMANDS
-  co          Alias for "pr checkout"
-
 ADDITIONAL COMMANDS
   alias       Create command shortcuts
   api         Make an authenticated GitHub API request
   completion  Generate shell completion scripts
   config      Manage configuration for gh
-  extension   Manage gh extensions
+  plugin      List the plugins found on PATH
   search      Search for repositories, issues, and pull requests
   status      Print information about relevant issues, pull requests, and notifications across repositories`)
-	root.Example = strings.TrimSpace(`gh issue create
-gh repo clone cli/cli
-gh pr checkout 321`)
+	root.Example = strings.TrimSpace(`gh pr list --json number,title --jq '.[].title'
+gh alias set co 'pr checkout'
+gh co 321`)
 
 	root.Run = func(ctx *clix.Context) error {
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
@@ -69,17 +70,23 @@ gh pr checkout 321`)
 		simplecmd.NewCommand("cache", "Manage GitHub Actions caches"),
 		simplecmd.NewCommand("run", "View details about workflow runs"),
 		simplecmd.NewCommand("workflow", "View details about GitHub Actions workflows"),
-		simplecmd.NewCommand("alias", "Create command shortcuts"),
 		simplecmd.NewCommand("api", "Make an authenticated GitHub API request"),
 		simplecmd.NewCommand("completion", "Generate shell completion scripts"),
 		simplecmd.NewCommand("config", "Manage configuration for gh"),
-		simplecmd.NewCommand("extension", "Manage gh extensions"),
 		simplecmd.NewCommand("search", "Search for repositories, issues, and pull requests"),
 		simplecmd.NewCommand("status", "Print information about relevant issues, pull requests, and notifications across repositories"),
 	}
 
 	app.Root = root
-	// --format, --json, --jq and --template, as gh has them.
+	// --format, --json, --jq and --template, as gh has them. Commands
+	// print their results with format.Write.
 	app.AddExtension(format.Extension{})
+	// "gh alias set|list|delete": shortcuts stored in the config file and
+	// expanded by Run. Root help lists them under ALIAS COMMANDS. They
+	// never run a shell and never shadow a command.
+	app.AddExtension(alias.Extension{})
+	// "gh foo" runs gh-foo from PATH when foo is not a command, as gh's
+	// extensions do; "gh plugin list" lists them. See plugins/gh-hello.
+	app.AddExtension(plugin.Extension{})
 	return app
 }

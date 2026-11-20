@@ -457,6 +457,25 @@ type Context struct {
 // "1m30s" whether it came from "90s" on the command line, in the
 // environment, in the config file or as the default.
 func (ctx *Context) resolveValue(key string) (string, Source, bool) {
+	r, found := ctx.resolve(key)
+	return r.text, r.source, found
+}
+
+// resolution is a value resolveValue found, with where it came from.
+type resolution struct {
+	text   string
+	source Source
+	// flag is the flag the value belongs to, or nil for a key that is not
+	// a flag.
+	flag *Flag
+	// fromValue reports that text is flag.Value.String(): the flag holds
+	// the value, so a getter may read it from the Value directly. When it
+	// is false, text is raw text from the environment or the config file.
+	fromValue bool
+}
+
+// resolve is resolveValue, also reporting the flag the value belongs to.
+func (ctx *Context) resolve(key string) (resolution, bool) {
 	type hit struct {
 		fs   *FlagSet
 		flag *Flag
@@ -479,16 +498,19 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 			}
 		}
 	}
+	held := func(f *Flag, source Source) (resolution, bool) {
+		return resolution{text: f.Value.String(), source: source, flag: f, fromValue: true}, true
+	}
 
 	// First check values the user supplied directly, innermost command
 	// first. A value typed at a prompt for a missing required flag counts
 	// as supplied directly but reports SourcePrompt.
 	for _, h := range hits {
 		if h.flag.cliSet {
-			return h.flag.Value.String(), ctx.cliSource(h.fs), true
+			return held(h.flag, ctx.cliSource(h.fs))
 		}
 		if h.flag.set && h.flag.source == SourcePrompt {
-			return h.flag.Value.String(), SourcePrompt, true
+			return held(h.flag, SourcePrompt)
 		}
 	}
 
@@ -496,7 +518,7 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	// aliases, and the APP_KEY default, in that order.
 	for _, h := range hits {
 		if h.flag.set && h.flag.source == SourceEnvVar {
-			return h.flag.Value.String(), SourceEnvVar, true
+			return held(h.flag, SourceEnvVar)
 		}
 	}
 	if ctx.App != nil {
@@ -505,7 +527,7 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 				continue // a mutually exclusive group rules it out (see planGroupFill)
 			}
 			if _, val, ok := ctx.App.lookupFlagEnv(h.flag); ok {
-				return val, SourceEnvVar, true
+				return resolution{text: val, source: SourceEnvVar, flag: h.flag}, true
 			}
 		}
 		// Keys that are not flags only have the APP_KEY default. As for
@@ -513,7 +535,7 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 		// the config file.
 		if len(hits) == 0 {
 			if val, ok := os.LookupEnv(ctx.App.envVarName(key)); ok && val != "" {
-				return val, SourceEnvVar, true
+				return resolution{text: val, source: SourceEnvVar}, true
 			}
 		}
 	}
@@ -522,7 +544,7 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	// or the key itself for keys that are not flags.
 	for _, h := range hits {
 		if h.flag.set && h.flag.source == SourceConfigFile {
-			return h.flag.Value.String(), SourceConfigFile, true
+			return held(h.flag, SourceConfigFile)
 		}
 	}
 	if ctx.App != nil && ctx.App.Config != nil {
@@ -532,13 +554,13 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 			}
 			if k, ok := ctx.App.flagConfigKey(h.flag); ok {
 				if v, ok := ctx.App.Config.Get(k); ok {
-					return v, SourceConfigFile, true
+					return resolution{text: v, source: SourceConfigFile, flag: h.flag}, true
 				}
 			}
 		}
 		if len(hits) == 0 {
 			if v, ok := ctx.App.Config.Get(key); ok {
-				return v, SourceConfigFile, true
+				return resolution{text: v, source: SourceConfigFile}, true
 			}
 		}
 	}
@@ -547,11 +569,11 @@ func (ctx *Context) resolveValue(key string) (string, Source, bool) {
 	// set), innermost command first.
 	for _, h := range hits {
 		if !h.flag.set && h.flag.hasDefault() {
-			return h.flag.Value.String(), SourceDefault, true
+			return held(h.flag, SourceDefault)
 		}
 	}
 
-	return "", 0, false
+	return resolution{}, false
 }
 
 // numericValue is resolveValue for the numeric getters. A key that is not
@@ -735,22 +757,24 @@ func (ctx *Context) Float64(key string) (float64, bool) {
 	return v, ok
 }
 
-// Duration retrieves a time.Duration value (such as "90s" or "1m30s")
-// using the same precedence as String.
+// Duration retrieves a time.Duration value (such as "90s", "1m30s" or
+// "PT1M30S") using the same precedence as String.
 func (ctx *Context) Duration(key string) (time.Duration, bool) {
 	v, _, ok := ctx.EffectiveDuration(key)
 	return v, ok
 }
 
 // EffectiveDuration retrieves a time.Duration value and returns both the
-// value and its source.
+// value and its source. The text is read as a DurationVar flag reads it:
+// Go's syntax ("1m30s") or an ISO 8601 duration without years or months
+// ("PT1M30S", "P1D").
 // Precedence: command flags > app flags > env > config > defaults
 func (ctx *Context) EffectiveDuration(key string) (time.Duration, Source, bool) {
 	value, source, found := ctx.resolveValue(key)
 	if !found {
 		return 0, 0, false
 	}
-	parsed, err := time.ParseDuration(value)
+	parsed, err := parseDuration(value)
 	if err != nil {
 		return 0, 0, false
 	}

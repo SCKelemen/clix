@@ -59,7 +59,9 @@ func (fs *FlagSet) SetCompletion(name string, fn CompletionFunc) bool {
 }
 
 // Completer returns the completion function registered for f with
-// SetCompletion, or nil.
+// SetCompletion, or nil. TimeVar and ISODurationVar flags start with one
+// that offers nothing, so shell completion suggests no file names for
+// them.
 func (f *Flag) Completer() CompletionFunc {
 	if f == nil {
 		return nil

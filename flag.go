@@ -599,7 +599,8 @@ func (o stringDefaultOption) ApplyFlag(*FlagOptions) {}
 //	)
 type DurationVarOptions struct {
 	FlagOptions
-	// Default is the default value as a duration string (e.g., "30s", "5m").
+	// Default is the default value as a duration string (e.g., "30s", "5m"
+	// or "PT5M"; see DurationVar).
 	Default string
 	// Value is a pointer to the variable that will store the flag value.
 	Value *time.Duration
@@ -697,6 +698,14 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 
 // DurationVar registers a duration flag. Accepts either a DurationVarOptions struct
 // (primary API) or functional options (convenience layer).
+//
+// The value is Go's duration syntax ("90s", "1h30m", see
+// time.ParseDuration) or an ISO 8601 duration ("PT1M30S", "P1DT12H",
+// "-PT2H", see iso8601.ParseDuration), the form JSON and YAML output use.
+// A time.Duration is an exact length, so an ISO 8601 duration with years
+// or months is an error, and a day counts as 24 hours and a week as 7
+// days; use ISODurationVar for calendar durations. The value prints in
+// Go's syntax ("1m30s").
 func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 	var durationOpts DurationVarOptions
 	for _, opt := range opts {

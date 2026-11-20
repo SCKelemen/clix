@@ -325,7 +325,7 @@ func configGetCommand(app *clix.App) *clix.Command {
 			// A secret is printed only on request, so it does not end up in
 			// a terminal scrollback or a CI log by accident.
 			if !reveal && sensitiveKey(app, keyPath) {
-				return fmt.Errorf("config key %q holds a secret; add --reveal to print it", keyPath)
+				return clix.UsageErrorf("config key %q holds a secret; add --reveal to print it", keyPath)
 			}
 			_, err := fmt.Fprintln(app.Out, value)
 			return err
@@ -388,7 +388,7 @@ func configSetCommand(app *clix.App) *clix.Command {
 			}
 		}
 		if strings.TrimSpace(value) == "" {
-			return errors.New("value cannot be empty")
+			return clix.UsageErrorf("value cannot be empty")
 		}
 
 		stored, err := checkValue(app, keyPath, value)
@@ -396,7 +396,9 @@ func configSetCommand(app *clix.App) *clix.Command {
 			err = redactError(err, value)
 		}
 		if err != nil {
-			return err
+			// A value no flag or schema accepts is a usage error, like the
+			// same value given to the flag on the command line.
+			return clix.UsageErrorf("%w", err)
 		}
 
 		app.Config.Set(keyPath, stored)
@@ -475,13 +477,15 @@ func configResetCommand(app *clix.App) *clix.Command {
 	return cmd
 }
 
+// validateKeyPath checks a key given to get, set or unset. A bad one is a
+// usage error (ExitCode 2).
 func validateKeyPath(raw string) (string, error) {
 	key := strings.TrimSpace(raw)
 	if key == "" {
-		return "", errors.New("key path cannot be empty")
+		return "", clix.UsageErrorf("key path cannot be empty")
 	}
 	if strings.Contains(key, " ") {
-		return "", fmt.Errorf("key path %q must not contain spaces", key)
+		return "", clix.UsageErrorf("key path %q must not contain spaces", key)
 	}
 	return key, nil
 }

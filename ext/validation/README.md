@@ -61,8 +61,10 @@ prompter.Prompt(ctx, clix.PromptRequest{
 - `UUID(value string) error` - Validates UUID strings (e.g., "550e8400-e29b-41d4-a716-446655440000")
 
 ### Times and Durations
-- `ISO8601Time(value string) error` - Validates an RFC 3339 (ISO 8601) timestamp with a time zone, such as "2026-11-19T08:30:00Z"
-- `ISO8601Duration(value string) error` - Validates an ISO 8601 duration of days, hours, minutes and seconds (PnDTnHnMnS, optional sign, fractional seconds), such as "PT1M30S" or "P1DT12H"; years, months and weeks are rejected
+- `ISO8601Time(value string) error` - Validates an RFC 3339 (ISO 8601) timestamp with a time zone, `YYYY-MM-DDThh:mm:ss[.fraction](Z|±hh:mm)`, such as "2026-11-19T08:30:00Z", which `time.Parse(time.RFC3339, …)` and `iso8601.ParseTime` both read. A lowercase `t` or `z`, a space for `T`, a leap second, and the ISO 8601 basic, week and ordinal forms are rejected; for those, parse with the [`iso8601`](../../iso8601) package
+- `ISO8601Duration(value string) error` - Validates an ISO 8601 duration of days, hours, minutes and seconds (PnDTnHnMnS, optional sign, fractional seconds), such as "PT1M30S" or "P1DT12H", that fits in a `time.Duration`; years, months and weeks are rejected. For calendar durations, use `iso8601.ParseDuration`
+
+Both check values with the [`iso8601`](../../iso8601) package, and their errors say what is wrong and where (`month 13 is out of range 01-12`).
 
 ### Numeric
 - `Integer(value string) error` - Validates that a string can be parsed as an integer (int)

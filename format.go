@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SCKelemen/clix/v2/iso8601"
 	"go.yaml.in/yaml/v3"
 )
 
@@ -70,10 +71,12 @@ import (
 // YAML output is encoded with go.yaml.in/yaml/v3, indented by two spaces.
 // Struct fields keep YAML's own rules: their keys are the lower-cased field
 // names or yaml tags (json tags are ignored), and a time.Duration field is
-// written as yaml writes it ("1m30s"). Elsewhere, at the top level and in
-// maps, slices, arrays and pointers, a time.Duration is an ISO 8601
-// duration ("PT1M30S", as in JSON) and a json.RawMessage is decoded into
-// the value it holds. time.Time is RFC 3339 everywhere.
+// written as yaml writes it ("1m30s"), so the output decodes back into the
+// same struct with yaml.Unmarshal, which cannot read an ISO 8601 duration
+// into a time.Duration. Elsewhere, at the top level and in maps, slices,
+// arrays and pointers, a time.Duration is an ISO 8601 duration ("PT1M30S",
+// as in JSON) and a json.RawMessage is decoded into the value it holds.
+// time.Time is RFC 3339 everywhere.
 func FormatData(w io.Writer, data interface{}, format string) error {
 	return FormatDataWith(w, data, FormatOptions{Format: format})
 }
@@ -118,49 +121,6 @@ func FormatDataWith(w io.Writer, data interface{}, opts FormatOptions) error {
 	default:
 		return formatText(w, data, opts)
 	}
-}
-
-// isoDuration formats d as an ISO 8601 duration of hours, minutes and
-// seconds, with fractional seconds when needed: "PT1M30S", "PT1.5S",
-// "-PT2H", "PT26H" (hours are not carried into days, whose length ISO 8601
-// leaves to the calendar), and "PT0S" for zero.
-//
-// ISO 8601-1:2019 section 5.5.2.4 (durations) and ISO 8601-2:2019 section
-// 4.4.1.9 (negative durations); see also RFC 3339 Appendix A,
-// https://datatracker.ietf.org/doc/html/rfc3339#appendix-A
-//
-// TODO: switch to iso8601.FormatDuration once
-// github.com/SCKelemen/clix/v2/iso8601 lands.
-func isoDuration(d time.Duration) string {
-	if d == 0 {
-		return "PT0S"
-	}
-	var b strings.Builder
-	u := uint64(d)
-	if d < 0 {
-		b.WriteByte('-')
-		u = -u // also right for math.MinInt64
-	}
-	b.WriteString("PT")
-	h := u / uint64(time.Hour)
-	u -= h * uint64(time.Hour)
-	m := u / uint64(time.Minute)
-	u -= m * uint64(time.Minute)
-	sec, frac := u/uint64(time.Second), u%uint64(time.Second)
-	if h > 0 {
-		b.WriteString(strconv.FormatUint(h, 10) + "H")
-	}
-	if m > 0 {
-		b.WriteString(strconv.FormatUint(m, 10) + "M")
-	}
-	if sec > 0 || frac > 0 {
-		b.WriteString(strconv.FormatUint(sec, 10))
-		if frac > 0 {
-			b.WriteString("." + strings.TrimRight(fmt.Sprintf("%09d", frac), "0"))
-		}
-		b.WriteString("S")
-	}
-	return b.String()
 }
 
 // formatYAML formats data as YAML using go.yaml.in/yaml/v3.
@@ -209,7 +169,7 @@ func replaceForYAML(rv reflect.Value) (interface{}, bool, error) {
 	case rawMessageType:
 		return jsonToYAMLValue(rv.Bytes())
 	case durationType:
-		return isoDuration(time.Duration(rv.Int())), true, nil
+		return iso8601.FormatDuration(time.Duration(rv.Int())), true, nil
 	}
 	switch rv.Kind() {
 	case reflect.Interface, reflect.Pointer:
