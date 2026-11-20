@@ -278,7 +278,8 @@ func runHandlers(runCtx *Context, cmd *Command) error {
 }
 
 // parseCommandLine resolves the command path in args and parses all flags
-// in a single pass. README.md ("Routing") states these rules for users.
+// in a single pass. docs/routing-and-flags.md ("Routing") states these
+// rules for users.
 //
 // The path is found first: words that name a child command descend into it,
 // and flag tokens are skipped (together with their value, when the flag is

@@ -75,6 +75,9 @@ Sleep 500ms
 Type "Bob"
 Enter
 Sleep 1s
+
+# Keep terminal visible at end (prevent transparency)
+Sleep 500ms
 BASICEOF
             ;;
         "survey")
@@ -178,38 +181,64 @@ Type "./styled --help"
 Enter
 Sleep 2s
 
-# Show format option (non-interactive)
-Type "./styled style --format json"
+# Show a styled confirm prompt
+Type "./styled prompt confirm"
 Enter
 Sleep 1s
+Type "y"
+Enter
+Sleep 1.5s
 LIPGLOSSEOF
             ;;
         "gh")
             cat >> "$tape_file" <<'GHEOF'
-# Show help
-Type "./gh"
+# A private config directory for the aliases, and the example's plugins
+# on PATH (hidden)
+Hide
+Type "export XDG_CONFIG_HOME=$(mktemp -d) PATH=$PWD/plugins:$PATH && clear"
+Enter
+Sleep 100ms
+Show
+
+# A table on a terminal
+Type "./gh pr list"
+Enter
+Sleep 1.5s
+
+# gh's --json, --jq and --template
+Type "./gh pr list --json number,title,author.login"
+Enter
+Sleep 2s
+
+Type `./gh pr list --jq '.[] | select(.state == "OPEN") | .title'`
+Enter
+Sleep 1.5s
+
+Type `./gh pr list --template '{{range .}}{{tablerow (printf "#%v" .number) .title .author.login}}{{end}}'`
+Enter
+Sleep 2s
+
+# Aliases, stored in the config file
+Type "./gh alias set co 'pr checkout'"
 Enter
 Sleep 1s
 
-Type "./gh auth --help"
-Enter
-Sleep 1.5s
-
-Type "./gh repo --help"
-Enter
-Sleep 1.5s
-
-Type "./gh pr --help"
-Enter
-Sleep 1.5s
-
-Type "./gh org --help"
-Enter
-Sleep 1.5s
-
-Type "./gh --version"
+Type "./gh co 321"
 Enter
 Sleep 1s
+
+Type "./gh alias list"
+Enter
+Sleep 1.5s
+
+# Plugins: plugins/gh-hello runs as "gh hello"
+Type "./gh plugin list"
+Enter
+Sleep 1.5s
+
+Type "./gh hello world"
+Enter
+Sleep 1.5s
 GHEOF
             ;;
         "multicli")
@@ -253,22 +282,57 @@ MULTICLIEOF
             ;;
         "gcloud")
             cat >> "$tape_file" <<'GCLOUDEOF'
-# Show help
-Type "./gcloud"
+# A private config directory for the configurations (hidden)
+Hide
+Type "export XDG_CONFIG_HOME=$(mktemp -d) && clear"
+Enter
+Sleep 100ms
+Show
+
+# A table on a terminal
+Type "./gcloud projects list"
+Enter
+Sleep 1.5s
+
+# Named configurations
+Type "./gcloud config configurations create staging"
 Enter
 Sleep 1s
 
-Type "./gcloud auth --help"
+Type "./gcloud config set project demo-staging"
+Enter
+Sleep 1s
+
+Type "./gcloud config configurations list"
 Enter
 Sleep 1.5s
 
-Type "./gcloud config --help"
+Type "./gcloud projects describe"
+Enter
+Sleep 2s
+
+# A flag group: --clear-labels and --remove-labels exclude each other
+Type "./gcloud projects update --clear-labels --remove-labels env"
 Enter
 Sleep 1.5s
 
-Type "./gcloud projects --help"
+Type "./gcloud projects update --update-labels env=prod,owner=ana"
 Enter
 Sleep 1.5s
+
+# --format is Ambient, so the missing project ID is still prompted for;
+# then a progress indicator runs on stderr while JSON goes to stdout
+Type "./gcloud --format json projects create"
+Enter
+Sleep 1s
+Type "my-new-project"
+Enter
+Sleep 4s
+
+# A help topic
+Type "./gcloud help configurations"
+Enter
+Sleep 2s
 GCLOUDEOF
             ;;
         "bubbles")
