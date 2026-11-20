@@ -7,7 +7,8 @@ import (
 
 // CheckValue reports whether raw is a value the flag accepts, without
 // changing it: it must parse for the built-in value types (bool, int,
-// int64, float64, duration) and pass the flag's Validate function. Custom
+// int64, float64, duration, time, ISO 8601 duration) and pass the flag's
+// Validate function. Custom
 // Value types are checked only by Validate. For a Sensitive flag the error
 // never contains raw.
 //
@@ -41,8 +42,10 @@ func valueKind(v Value) string {
 		return "integer"
 	case *Float64Value:
 		return "number"
-	case *DurationValue:
+	case *DurationValue, *ISODurationValue:
 		return "duration"
+	case *TimeValue:
+		return "time"
 	}
 	return "value"
 }

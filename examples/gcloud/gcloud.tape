@@ -18,19 +18,54 @@ Type "go build -o gcloud ./cmd/gcloud"
 Enter
 Sleep 2s
 
-# Show help
-Type "./gcloud"
+# A private config directory for the configurations (hidden)
+Hide
+Type "export XDG_CONFIG_HOME=$(mktemp -d) && clear"
+Enter
+Sleep 100ms
+Show
+
+# A table on a terminal
+Type "./gcloud projects list"
+Enter
+Sleep 1.5s
+
+# Named configurations
+Type "./gcloud config configurations create staging"
 Enter
 Sleep 1s
 
-Type "./gcloud auth --help"
+Type "./gcloud config set project demo-staging"
+Enter
+Sleep 1s
+
+Type "./gcloud config configurations list"
 Enter
 Sleep 1.5s
 
-Type "./gcloud config --help"
+Type "./gcloud projects describe"
+Enter
+Sleep 2s
+
+# A flag group: --clear-labels and --remove-labels exclude each other
+Type "./gcloud projects update --clear-labels --remove-labels env"
 Enter
 Sleep 1.5s
 
-Type "./gcloud projects --help"
+Type "./gcloud projects update --update-labels env=prod,owner=ana"
 Enter
 Sleep 1.5s
+
+# --format is Ambient, so the missing project ID is still prompted for;
+# then a progress indicator runs on stderr while JSON goes to stdout
+Type "./gcloud --format json projects create"
+Enter
+Sleep 1s
+Type "my-new-project"
+Enter
+Sleep 4s
+
+# A help topic
+Type "./gcloud help configurations"
+Enter
+Sleep 2s

@@ -561,6 +561,9 @@ var DefaultPromptTheme = PromptTheme{
 // is delivered to the next prompt on the same reader. Prompts on one reader
 // must not run concurrently.
 //
+// Under --quiet (see App.EnableQuiet) Prompt returns QuietAnswer, the
+// prompt's default answer, without reading In or writing to Out.
+//
 // Confirm prompts accept y, yes, n and no (any case) and return "y" or "n".
 // Secret prompts (WithSecret) turn echo off when In is a terminal and keep
 // the answer exactly as typed. Theme styles are written without their ANSI
@@ -590,6 +593,9 @@ func (p TextPrompter) Prompt(ctx context.Context, opts ...PromptOption) (string,
 	}
 
 	cfg, err := NewPromptConfig(ctx, opts...)
+	if errors.Is(err, ErrQuiet) {
+		return QuietAnswer(cfg)
+	}
 	if err != nil {
 		return "", err
 	}

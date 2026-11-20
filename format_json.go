@@ -6,6 +6,8 @@ import (
 	"encoding/json/v2"
 	"io"
 	"time"
+
+	"github.com/SCKelemen/clix/v2/iso8601"
 )
 
 // jsonV1Semantics makes encoding/json/v2 encode Go values the way
@@ -33,7 +35,7 @@ var jsonOutputOptions = json.JoinOptions(
 	json.FormatNilMapAsNull(false),
 	json.WithMarshalers(json.JoinMarshalers(
 		json.MarshalToFunc(func(enc *jsontext.Encoder, d time.Duration) error {
-			return enc.WriteToken(jsontext.String(isoDuration(d)))
+			return enc.WriteToken(jsontext.String(iso8601.FormatDuration(d)))
 		}),
 		json.MarshalToFunc(func(enc *jsontext.Encoder, t time.Time) error {
 			return enc.WriteToken(jsontext.String(isoTime(t)))
@@ -76,8 +78,10 @@ func marshalForText(v interface{}) ([]byte, error) {
 // with fractional seconds only when they are non-zero.
 // https://datatracker.ietf.org/doc/html/rfc3339#section-5.6
 //
-// TODO: switch to iso8601.FormatTime once
-// github.com/SCKelemen/clix/v2/iso8601 lands.
+// It is not iso8601.FormatTime, which differs for an offset with a seconds
+// part (local mean time in historical zone data): FormatTime writes such a
+// time in UTC, while Format drops the offset's seconds. YAML output, which
+// go.yaml.in/yaml/v3 formats with Format, would then disagree with JSON.
 func isoTime(t time.Time) string {
 	return t.Format(time.RFC3339Nano)
 }
