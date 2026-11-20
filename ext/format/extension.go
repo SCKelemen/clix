@@ -49,6 +49,11 @@ import (
 // replaces the extension's (Write then ignores it). App.Validate reports
 // replaced flags. Adding the extension twice registers the flags once.
 //
+// That includes gcloud's -q for --quiet: clix.App.EnableQuiet registers
+// --quiet without a short name, so -q stays --jq, as in gh. An app that
+// calls app.EnableQuiet(clix.QuietOptions{Short: "q"}) itself owns -q,
+// and --jq is then available by its long name only.
+//
 // With Projections set, --format also accepts gcloud's format
 // expressions, NAME[ATTRIBUTES](PROJECTION), such as "table(name,
 // zone:label=LOCATION)" or "value(name)" (see the package documentation

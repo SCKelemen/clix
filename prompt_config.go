@@ -15,7 +15,9 @@ import (
 // ErrPromptsDisabled is returned by the built-in prompters when a command
 // prompts although its App does not allow prompting: App.Interactive is
 // InteractiveNever, or the <EnvPrefix>_DISABLE_PROMPTS environment variable
-// is set to a true value. Test for it with errors.Is.
+// is set to a true value. Under --quiet (see App.EnableQuiet) it is
+// wrapped, with ErrQuiet, in the error for a prompt that has no default to
+// accept. Test for it with errors.Is.
 var ErrPromptsDisabled = errors.New("prompts are disabled")
 
 // ErrNoOptions is returned when a select or multi-select prompt is given
@@ -86,6 +88,12 @@ func (a *App) promptsDisabled() string {
 // multi-select prompt has an empty option list, and one wrapping
 // ErrInvalidDefault when such a prompt's Default names no option. The
 // configuration is returned in each case.
+//
+// Under --quiet (see App.EnableQuiet) it returns, after those checks, an
+// error wrapping both ErrQuiet and ErrPromptsDisabled: the prompter should
+// not prompt but return QuietAnswer(cfg), the default answer, as the
+// built-in prompters do. --quiet wins over <EnvPrefix>_DISABLE_PROMPTS
+// and InteractiveNever, which return ErrPromptsDisabled alone.
 func NewPromptConfig(ctx context.Context, opts ...PromptOption) (*PromptConfig, error) {
 	theme := DefaultPromptTheme
 	app := appFromContext(ctx)
@@ -98,18 +106,36 @@ func NewPromptConfig(ctx context.Context, opts ...PromptOption) (*PromptConfig, 
 			opt.Apply(cfg)
 		}
 	}
-	if reason := app.promptsDisabled(); reason != "" {
-		return cfg, fmt.Errorf("cannot prompt for %q: %w (%s)", cfg.Label, ErrPromptsDisabled, reason)
+	// Under --quiet nothing is drawn and nothing is read: the prompter
+	// answers with QuietAnswer, after the checks below.
+	quiet := app.Quiet()
+	if !quiet {
+		if reason := app.promptsDisabled(); reason != "" {
+			return cfg, fmt.Errorf("cannot prompt for %q: %w (%s)", cfg.Label, ErrPromptsDisabled, reason)
+		}
+		// The prompt is about to draw on the terminal: a progress
+		// indicator drawing there steps aside until its next Update (see
+		// Context.Progress).
+		app.pauseProgress()
 	}
-	// The prompt is about to draw on the terminal: a progress indicator
-	// drawing there steps aside until its next Update (see
-	// Context.Progress).
-	app.pauseProgress()
+	if err := checkPromptOptions(cfg); err != nil {
+		return cfg, err
+	}
+	if quiet {
+		return cfg, fmt.Errorf("cannot prompt for %q: %w (%w)", cfg.Label, ErrPromptsDisabled, ErrQuiet)
+	}
+	return cfg, nil
+}
+
+// checkPromptOptions reports a select or multi-select prompt with no
+// options, or with a Default that names none of them. A confirmation
+// ignores its options.
+func checkPromptOptions(cfg *PromptConfig) error {
 	if cfg.Confirm {
-		return cfg, nil
+		return nil
 	}
 	if (cfg.Options != nil || cfg.MultiSelect) && len(cfg.Options) == 0 {
-		return cfg, fmt.Errorf("cannot prompt for %q: %w", cfg.Label, ErrNoOptions)
+		return fmt.Errorf("cannot prompt for %q: %w", cfg.Label, ErrNoOptions)
 	}
 	if len(cfg.Options) > 0 && cfg.Default != "" {
 		values, labels := optionNames(cfg.Options)
@@ -120,10 +146,10 @@ func NewPromptConfig(ctx context.Context, opts ...PromptOption) (*PromptConfig, 
 			_, ok = answer.SingleDefault(values, labels, cfg.Default)
 		}
 		if !ok {
-			return cfg, fmt.Errorf("cannot prompt for %q: %w: %q", cfg.Label, ErrInvalidDefault, cfg.Default)
+			return fmt.Errorf("cannot prompt for %q: %w: %q", cfg.Label, ErrInvalidDefault, cfg.Default)
 		}
 	}
-	return cfg, nil
+	return nil
 }
 
 func optionNames(options []SelectOption) (values, labels []string) {

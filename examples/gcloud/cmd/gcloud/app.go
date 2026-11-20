@@ -1,398 +1,100 @@
 package main
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/SCKelemen/clix/v2"
 	authcmd "github.com/SCKelemen/clix/v2/examples/gcloud/internal/auth"
-	configcmd "github.com/SCKelemen/clix/v2/examples/gcloud/internal/config"
 	projectscmd "github.com/SCKelemen/clix/v2/examples/gcloud/internal/projects"
 	simplecmd "github.com/SCKelemen/clix/v2/examples/gcloud/internal/simple"
+	"github.com/SCKelemen/clix/v2/ext/config"
+	"github.com/SCKelemen/clix/v2/ext/format"
+	"github.com/SCKelemen/clix/v2/ext/help"
 )
 
-// Toggle the feature packages you want to include in this build of gcloud. Because the
-// command wiring happens inside cmd/, you can choose to opt-in only to the internal
-// packages that your binary actually needs.
-var (
-	includeAuth     = true
-	includeConfig   = true
-	includeProjects = true
-)
+// configurationsTopic is "gcloud help configurations", like gcloud's
+// "gcloud topic configurations".
+const configurationsTopic = `A configuration is a named set of properties, such as the project, for
+one account, project or environment. "default" always exists; the
+properties of the configuration in effect fill the flags of the same name.
 
-type commandBuilder struct {
-	Enabled bool
-	Build   func() *clix.Command
-}
+  gcloud config configurations create staging    create "staging" and activate it
+  gcloud config set project demo-staging         set a property in it
+  gcloud config configurations list              list them, and see which is active
+  gcloud config configurations activate default  switch back
+  gcloud --configuration staging projects list   use "staging" for one command
 
-type gcloudEntry struct {
-	Name        string
-	Description string
-}
+CLOUDSDK_CORE_CONFIGURATION selects a configuration for a shell or a CI job,
+as --configuration does for one command.`
 
-func newApp() *clix.App {
-	app := clix.NewApp("gcloud")
+// newApp builds the app. Tests pass options such as clix.WithAppIn, which
+// must be given to clix.NewApp because it creates the default prompter.
+func newApp(opts ...clix.AppOption) *clix.App {
+	app := clix.NewApp("gcloud", opts...)
 	app.Description = "Interact with Google Cloud services from the command line."
+
+	// gcloud's environment variables start with CLOUDSDK_CORE_: --project
+	// reads CLOUDSDK_CORE_PROJECT, and CLOUDSDK_CORE_DISABLE_PROMPTS turns
+	// prompts off, as in gcloud.
+	app.EnvPrefix = "CLOUDSDK_CORE"
 
 	var project string
 
 	root := clix.NewCommand("gcloud")
-	root.Short = "Interact with Google Cloud services from the command line."
+	root.Short = app.Description
 	root.Usage = "gcloud <command> [<group> ...] [flags]"
-
-	groups := gcloudCommandGroups()
-	commands := gcloudStandaloneCommands()
-
-	builders := map[string]commandBuilder{
-		"auth": {
-			Enabled: includeAuth,
-			Build:   authcmd.NewCommand,
-		},
-		"projects": {
-			Enabled: includeProjects,
-			Build:   func() *clix.Command { return projectscmd.NewCommand(&project) },
-		},
-		"config": {
-			Enabled: includeConfig,
-			Build:   func() *clix.Command { return configcmd.NewCommand(&project) },
-		},
-	}
-
-	root.Long = buildGCloudLongHelp(groups, commands, builders)
-
+	root.Long = buildGCloudLongHelp(gcloudCommandGroups(), gcloudStandaloneCommands())
 	root.Run = func(ctx *clix.Context) error {
 		return clix.HelpRenderer{App: ctx.App, Command: ctx.Command}.Render(ctx.App.Out)
 	}
 
-	added := map[string]struct{}{}
-	var subcommands []*clix.Command
-	for _, group := range groups {
-		for _, entry := range group.Entries {
-			if _, exists := added[entry.Name]; exists {
-				continue
-			}
-			if builder, ok := builders[entry.Name]; ok {
-				if !builder.Enabled {
-					continue
-				}
-				subcommands = append(subcommands, builder.Build())
-			} else {
-				subcommands = append(subcommands, simplecmd.NewCommand(entry.Name, entry.Description))
-			}
-			added[entry.Name] = struct{}{}
-		}
+	// The commands this example implements. "config" and "help" come from
+	// extensions, and the rest of the catalog prints its description.
+	implemented := map[string]*clix.Command{
+		"auth":     authcmd.NewCommand(),
+		"projects": projectscmd.NewCommand(&project),
 	}
-
-	for _, category := range commands {
+	fromExtensions := map[string]bool{"config": true, "help": true}
+	added := map[string]bool{}
+	for _, category := range append(gcloudCommandGroups(), gcloudStandaloneCommands()...) {
 		for _, entry := range category.Entries {
-			if _, exists := added[entry.Name]; exists {
+			if added[entry.Name] || fromExtensions[entry.Name] {
 				continue
 			}
-			subcommands = append(subcommands, simplecmd.NewCommand(entry.Name, entry.Description))
-			added[entry.Name] = struct{}{}
+			added[entry.Name] = true
+			if cmd, ok := implemented[entry.Name]; ok {
+				root.AddCommand(cmd)
+			} else {
+				root.AddCommand(simplecmd.NewCommand(entry.Name, entry.Description))
+			}
 		}
 	}
-
-	root.Children = subcommands
 
 	// app.Flags() is the flag set of the current root command, so install
 	// the custom root before registering app-level flags on it.
 	app.Root = root
 
+	// --project sets the context a command runs in, so it is Ambient:
+	// "gcloud --project demo-prod projects create" still prompts for the
+	// missing project ID instead of failing as a scripted call would. Like
+	// every flag, it also reads its environment variable and the "project"
+	// property of the configuration in effect.
 	app.Flags().StringVar(clix.StringVarOptions{
 		FlagOptions: clix.FlagOptions{
-			Name:   "project",
-			Usage:  "Google Cloud project to operate against",
-			EnvVar: "GCLOUD_PROJECT",
+			Name:    "project",
+			Usage:   "Google Cloud project ID to use for this invocation",
+			Ambient: true,
 		},
 		Value: &project,
 	})
 
+	// "gcloud help configurations", next to the built-in "environment" and
+	// "exit-codes" topics.
+	app.AddHelpTopic("configurations", "Named configurations of properties", configurationsTopic)
+
+	app.AddExtension(help.Extension{})
+	// config list|get|set|unset|reset, and with Configurations, "config
+	// configurations ..." and the global, Ambient --configuration flag.
+	app.AddExtension(config.Extension{Configurations: true})
+	// --format json|yaml|text, --json, --jq and --template, all Ambient.
+	app.AddExtension(format.Extension{})
 	return app
-}
-
-func buildGCloudLongHelp(groups []struct {
-	Category string
-	Entries  []gcloudEntry
-}, commands []struct {
-	Category string
-	Entries  []gcloudEntry
-}, builders map[string]commandBuilder) string {
-	var b strings.Builder
-	b.WriteString("Available command groups for gcloud:\n\n")
-	for _, group := range groups {
-		var displayed int
-		for _, entry := range group.Entries {
-			if builder, ok := builders[entry.Name]; ok && !builder.Enabled {
-				continue
-			}
-			if displayed == 0 {
-				b.WriteString("  " + group.Category + "\n")
-			}
-			fmt.Fprintf(&b, "      %-22s %s\n", entry.Name, entry.Description)
-			displayed++
-		}
-		if displayed > 0 {
-			b.WriteString("\n")
-		}
-	}
-	b.WriteString("Available commands for gcloud:\n\n")
-	for _, cat := range commands {
-		var displayed int
-		for _, entry := range cat.Entries {
-			if builder, ok := builders[entry.Name]; ok && !builder.Enabled {
-				continue
-			}
-			if displayed == 0 {
-				b.WriteString("  " + cat.Category + "\n")
-			}
-			fmt.Fprintf(&b, "      %-22s %s\n", entry.Name, entry.Description)
-			displayed++
-		}
-		if displayed > 0 {
-			b.WriteString("\n")
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
-
-func gcloudCommandGroups() []struct {
-	Category string
-	Entries  []gcloudEntry
-} {
-	return []struct {
-		Category string
-		Entries  []gcloudEntry
-	}{
-		{
-			Category: "AI and Machine Learning",
-			Entries: []gcloudEntry{
-				{Name: "ai", Description: "Manage entities in Vertex AI."},
-				{Name: "ai-platform", Description: "Manage AI Platform jobs and models."},
-				{Name: "colab", Description: "Manage Colab Enterprise resources."},
-				{Name: "gemini", Description: "Manage code repository index resources."},
-				{Name: "ml", Description: "Use Google Cloud machine learning capabilities."},
-				{Name: "ml-engine", Description: "Manage AI Platform jobs and models."},
-				{Name: "notebooks", Description: "Notebooks Command Group."},
-				{Name: "workbench", Description: "Workbench Command Group."},
-			},
-		},
-		{
-			Category: "API Platform and Ecosystems",
-			Entries: []gcloudEntry{
-				{Name: "api-gateway", Description: "Manage Cloud API Gateway resources."},
-				{Name: "apigee", Description: "Manage Apigee resources."},
-				{Name: "endpoints", Description: "Create, enable and manage API services."},
-				{Name: "recommender", Description: "Manage Cloud recommendations and recommendation rules."},
-				{Name: "services", Description: "List, enable and disable APIs and services."},
-			},
-		},
-		{
-			Category: "Anthos CLI",
-			Entries:  []gcloudEntry{{Name: "anthos", Description: "Anthos command Group."}},
-		},
-		{
-			Category: "Batch",
-			Entries:  []gcloudEntry{{Name: "batch", Description: "Manage Batch resources."}},
-		},
-		{
-			Category: "Big Data",
-			Entries:  []gcloudEntry{{Name: "bq", Description: "Manage Bq resources."}},
-		},
-		{
-			Category: "Billing",
-			Entries:  []gcloudEntry{{Name: "billing", Description: "Manage billing accounts and associate them with projects."}},
-		},
-		{
-			Category: "CI/CD",
-			Entries: []gcloudEntry{
-				{Name: "artifacts", Description: "Manage Artifact Registry resources."},
-				{Name: "builds", Description: "Create and manage builds for Google Cloud Build."},
-				{Name: "deploy", Description: "Create and manage Cloud Deploy resources."},
-				{Name: "scheduler", Description: "Manage Cloud Scheduler jobs and schedules."},
-				{Name: "tasks", Description: "Manage Cloud Tasks queues and tasks."},
-			},
-		},
-		{
-			Category: "Compute",
-			Entries: []gcloudEntry{
-				{Name: "app", Description: "Manage your App Engine deployments."},
-				{Name: "bms", Description: "Manage Bare Metal Solution resources."},
-				{Name: "compute", Description: "Create and manipulate Compute Engine resources."},
-				{Name: "container", Description: "Deploy and manage clusters of machines for running containers."},
-				{Name: "edge-cloud", Description: "Manage edge-cloud resources."},
-				{Name: "functions", Description: "Manage Google Cloud Functions."},
-				{Name: "run", Description: "Manage your Cloud Run applications."},
-				{Name: "vmware", Description: "Manage Google Cloud VMware Engine resources."},
-			},
-		},
-		{
-			Category: "Data Analytics",
-			Entries: []gcloudEntry{
-				{Name: "composer", Description: "Create and manage Cloud Composer Environments."},
-				{Name: "data-catalog", Description: "Manage Data Catalog resources."},
-				{Name: "dataflow", Description: "Manage Google Cloud Dataflow resources."},
-				{Name: "dataplex", Description: "Manage Dataplex resources."},
-				{Name: "dataproc", Description: "Create and manage Google Cloud Dataproc clusters and jobs."},
-				{Name: "looker", Description: "Manage Looker resources."},
-				{Name: "managed-kafka", Description: "Administer Managed Service for Apache Kafka clusters, topics, and consumer groups."},
-				{Name: "metastore", Description: "Manage Dataproc Metastore resources."},
-				{Name: "pubsub", Description: "Manage Cloud Pub/Sub topics, subscriptions, and snapshots."},
-			},
-		},
-		{
-			Category: "Databases",
-			Entries: []gcloudEntry{
-				{Name: "alloydb", Description: "Create and manage AlloyDB databases."},
-				{Name: "bigtable", Description: "Manage your Cloud Bigtable storage."},
-				{Name: "database-migration", Description: "Manage Database Migration Service resources."},
-				{Name: "datastore", Description: "Manage your Cloud Datastore resources."},
-				{Name: "datastream", Description: "Manage Cloud Datastream resources."},
-				{Name: "firestore", Description: "Manage your Cloud Firestore resources."},
-				{Name: "memcache", Description: "Manage Cloud Memorystore Memcached resources."},
-				{Name: "redis", Description: "Manage Cloud Memorystore Redis resources."},
-				{Name: "spanner", Description: "Command groups for Cloud Spanner."},
-				{Name: "sql", Description: "Create and manage Google Cloud SQL databases."},
-			},
-		},
-		{
-			Category: "Identity",
-			Entries:  []gcloudEntry{{Name: "active-directory", Description: "Manage Managed Microsoft AD resources."}, {Name: "identity", Description: "Manage Cloud Identity Groups and Memberships resources."}},
-		},
-		{
-			Category: "Identity and Security",
-			Entries: []gcloudEntry{
-				{Name: "access-approval", Description: "Manage Access Approval requests and settings."},
-				{Name: "access-context-manager", Description: "Manage Access Context Manager resources."},
-				{Name: "auth", Description: "Manage oauth2 credentials for the Google Cloud CLI."},
-				{Name: "iam", Description: "Manage IAM service accounts and keys."},
-				{Name: "iap", Description: "Manage IAP policies."},
-				{Name: "kms", Description: "Manage cryptographic keys in the cloud."},
-				{Name: "org-policies", Description: "Create and manage Organization Policies."},
-				{Name: "pam", Description: "Manage Privileged Access Manager (PAM) entitlements and grants."},
-				{Name: "policy-intelligence", Description: "A platform to help better understand, use, and manage policies at scale."},
-				{Name: "policy-troubleshoot", Description: "Troubleshoot Google Cloud Platform policies."},
-				{Name: "privateca", Description: "Manage private Certificate Authorities on Google Cloud."},
-				{Name: "publicca", Description: "Manage accounts for Google Trust Services' Certificate Authority."},
-				{Name: "recaptcha", Description: "Manage reCAPTCHA Enterprise Keys."},
-				{Name: "resource-manager", Description: "Manage Cloud Resources."},
-				{Name: "secrets", Description: "Manage secrets on Google Cloud."},
-			},
-		},
-		{
-			Category: "Management Tools",
-			Entries: []gcloudEntry{
-				{Name: "apphub", Description: "Manage App Hub resources."},
-				{Name: "cloud-shell", Description: "Manage Google Cloud Shell."},
-				{Name: "deployment-manager", Description: "Manage deployments of cloud resources."},
-				{Name: "essential-contacts", Description: "Manage Essential Contacts."},
-				{Name: "infra-manager", Description: "Manage Infra Manager resources."},
-				{Name: "logging", Description: "Manage Cloud Logging."},
-				{Name: "organizations", Description: "Create and manage Google Cloud Platform Organizations."},
-				{Name: "projects", Description: "Create and manage project access policies."},
-			},
-		},
-		{
-			Category: "Mobile",
-			Entries:  []gcloudEntry{{Name: "firebase", Description: "Work with Google Firebase."}},
-		},
-		{
-			Category: "Monitoring",
-			Entries:  []gcloudEntry{{Name: "monitoring", Description: "Manage Cloud Monitoring dashboards."}},
-		},
-		{
-			Category: "Network Security",
-			Entries:  []gcloudEntry{{Name: "network-security", Description: "Manage Network Security resources."}},
-		},
-		{
-			Category: "Networking",
-			Entries: []gcloudEntry{
-				{Name: "certificate-manager", Description: "Manage SSL certificates for your Google Cloud projects."},
-				{Name: "dns", Description: "Manage your Cloud DNS managed-zones and record-sets."},
-				{Name: "domains", Description: "Manage domains for your Google Cloud projects."},
-				{Name: "edge-cache", Description: "Manage Media CDN resources."},
-				{Name: "ids", Description: "Manage Cloud IDS."},
-				{Name: "network-connectivity", Description: "Manage Network Connectivity Center resources."},
-				{Name: "network-management", Description: "Manage Network Management resources."},
-				{Name: "network-services", Description: "Manage Network Services resources."},
-				{Name: "service-directory", Description: "Command groups for Service Directory."},
-				{Name: "service-extensions", Description: "Manage Service Extensions resources."},
-				{Name: "telco-automation", Description: "Manage Telco Automation resources."},
-			},
-		},
-		{
-			Category: "Other",
-			Entries: []gcloudEntry{
-				{Name: "developer-connect", Description: "Manage Developer Connect resources."},
-				{Name: "immersive-stream", Description: "Manage Immersive Stream resources."},
-				{Name: "lustre", Description: "Manage Lustre resources."},
-				{Name: "memorystore", Description: "Manage Memorystore resources."},
-				{Name: "model-armor", Description: "Model Armor is a service offering LLM-agnostic security and AI safety measures to mitigate risks associated with large language models (LLMs)."},
-				{Name: "oracle-database", Description: "Manage Oracle Database resources."},
-				{Name: "parametermanager", Description: "Parameter Manager is a single source of truth to store, access and manage the lifecycle of your application parameters."},
-				{Name: "remote-build-execution", Description: "Remote execution of builds."},
-				{Name: "sap", Description: "Manage SAP resources."},
-				{Name: "scheduler", Description: "Manage Cloud Scheduler jobs and schedules."},
-			},
-		},
-		{
-			Category: "Security Operations",
-			Entries:  []gcloudEntry{{Name: "scc", Description: "Manage Security Command Center resources."}},
-		},
-		{
-			Category: "Serverless",
-			Entries: []gcloudEntry{
-				{Name: "beta", Description: "Beta versions of gcloud commands."},
-				{Name: "preview", Description: "Preview versions of gcloud commands."},
-				{Name: "survey", Description: "Command group for the gcloud CLI survey."},
-			},
-		},
-		{
-			Category: "Storage",
-			Entries: []gcloudEntry{
-				{Name: "filestore", Description: "Manage filestore resources."},
-				{Name: "storage", Description: "Command group for Cloud Storage."},
-			},
-		},
-	}
-}
-
-func gcloudStandaloneCommands() []struct {
-	Category string
-	Entries  []gcloudEntry
-} {
-	return []struct {
-		Category string
-		Entries  []gcloudEntry
-	}{
-		{
-			Category: "Help and Feedback",
-			Entries: []gcloudEntry{
-				{Name: "help", Description: "Describe available gcloud commands."},
-				{Name: "feedback", Description: "Provide feedback on Cloud SDK command experience."},
-				{Name: "info", Description: "Display information about the current gcloud environment."},
-				{Name: "components", Description: "List, install, update, or remove Google Cloud CLI components."},
-			},
-		},
-		{
-			Category: "IAM and Admin",
-			Entries: []gcloudEntry{
-				{Name: "auth", Description: "Manage oauth2 credentials for the Google Cloud CLI."},
-				{Name: "config", Description: "View and edit Google Cloud CLI properties."},
-				{Name: "iam", Description: "Manage IAM service accounts and keys."},
-				{Name: "organizations", Description: "Create and manage Google Cloud Platform Organizations."},
-				{Name: "projects", Description: "Create and manage project access policies."},
-				{Name: "services", Description: "List, enable and disable APIs and services."},
-			},
-		},
-		{
-			Category: "Networking",
-			Entries: []gcloudEntry{
-				{Name: "dns", Description: "Manage your Cloud DNS managed-zones and record-sets."},
-				{Name: "compute", Description: "Create and manipulate Compute Engine resources."},
-				{Name: "run", Description: "Manage your Cloud Run applications."},
-				{Name: "container", Description: "Deploy and manage clusters of machines for running containers."},
-			},
-		},
-	}
 }

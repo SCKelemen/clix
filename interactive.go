@@ -51,14 +51,15 @@ func (a *App) DisablePromptsEnvVar() string {
 // IsInteractive reports whether Run may prompt for missing required flags.
 //
 // It returns false when the <EnvPrefix>_DISABLE_PROMPTS environment
-// variable is set to a true value ("1", "true", "yes", or "on"), regardless
-// of App.Interactive; this lets the person running a program opt out of
-// prompts, as in CI. Otherwise InteractiveAlways and InteractiveNever decide,
+// variable is set to a true value ("1", "true", "yes", or "on"), or when
+// --quiet is in effect (see EnableQuiet), regardless of App.Interactive;
+// this lets the person running a program opt out of prompts, as in CI.
+// Otherwise InteractiveAlways and InteractiveNever decide,
 // and InteractiveAuto returns whether App.In is a terminal. Readers that are
 // not backed by a file descriptor, such as strings.Reader, are not
 // terminals; set Interactive to InteractiveAlways to prompt from them.
 func (a *App) IsInteractive() bool {
-	if envTrue(os.Getenv(a.DisablePromptsEnvVar())) {
+	if envTrue(os.Getenv(a.DisablePromptsEnvVar())) || a.Quiet() {
 		return false
 	}
 	switch a.Interactive {

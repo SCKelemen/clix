@@ -174,15 +174,6 @@ func (ts *TerminalState) restoreTerminal(now bool) error {
 	return term.Restore(ts.fd, ts.oldState)
 }
 
-// readKey reads one key from in, like ReadKey, but returns early with
-// clix.ErrCancelled if a signal arrives while the terminal is in raw mode,
-// or with ctx.Err() when ctx is done. Nothing is left reading in, so a key
-// typed afterwards goes to the next prompt.
-func (ts *TerminalState) readKey(ctx context.Context, in *os.File) (Key, error) {
-	ev, err := ts.readEvent(ctx, in, nil, false)
-	return ev.key, err
-}
-
 // readEvent reads one key or bracketed paste (when collectPaste is set),
 // returning errResized when resized delivers a signal while waiting.
 func (ts *TerminalState) readEvent(ctx context.Context, in *os.File, resized <-chan os.Signal, collectPaste bool) (keyEvent, error) {

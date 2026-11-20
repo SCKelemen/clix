@@ -125,34 +125,38 @@ func TestRawPastedCRLFIsOneEnter(t *testing.T) {
 
 func TestRawBracketedPasteInsertsFirstLine(t *testing.T) {
 	p := raw(t, clix.WithLabel("Name"))
-	if !strings.Contains(p.term.Output(), "\x1b[?2004h") {
-		t.Fatal("bracketed paste not enabled while prompting")
+	// The prompt turns bracketed paste on after it enters raw mode, which
+	// is all WaitRaw waits for, so wait for the sequence itself.
+	p.term.WaitOutput(t, "\x1b[?2004h", 5*time.Second)
+	// A paste that contains a newline neither submits nor carries on: the
+	// key typed after it lands at the end of the first line. Had the CR
+	// submitted, the answer would lack the "!"; had the paste carried on,
+	// it would hold "second line".
+	p.typeKeys(t, "x", "\x1b[200~pasted line\rsecond line\x1b[201~", "!", "\r")
+	if r := p.mustFinish(t); r.err != nil || r.val != "xpasted line!" {
+		t.Fatalf("got %q, %v; want %q", r.val, r.err, "xpasted line!")
 	}
-	// A paste that contains a newline neither submits nor carries on.
-	p.typeKeys(t, "x", "\x1b[200~pasted line\rsecond line\x1b[201~")
-	if r, done := p.wait(t, 300*time.Millisecond); done {
-		t.Fatalf("paste submitted the prompt: %q", r.val)
-	}
-	p.typeKeys(t, "\r")
-	if r := p.mustFinish(t); r.val != "xpasted line" {
-		t.Fatalf("got %q, want %q", r.val, "xpasted line")
-	}
-	if !strings.Contains(p.term.Output(), "\x1b[?2004l") {
-		t.Fatal("bracketed paste not disabled afterwards")
-	}
+	// The prompt writes the sequence that turns it off before it returns,
+	// but the pty's reader may not have collected it yet.
+	p.term.WaitOutput(t, "\x1b[?2004l", 5*time.Second)
 }
 
 func TestRawSecretIsNotEchoed(t *testing.T) {
 	p := raw(t, clix.WithLabel("API token"), clix.WithSecret())
+	p.waitScreen(t, "? API token:")
 	p.typeKeys(t, " ", "t", "o", "p", "s", "e", "c", "r", "e", "t", " ", "\r")
 	r := p.mustFinish(t)
 	if r.val != " topsecret " {
 		t.Fatalf("got %q; secrets are returned exactly as typed", r.val)
 	}
-	if strings.Contains(p.term.Output(), "topsecret") {
+	// Check everything the prompt wrote, up to turning bracketed paste off
+	// as it restores the terminal, not just what the pty's reader has
+	// collected so far.
+	out := p.term.WaitOutput(t, "\x1b[?2004l", 5*time.Second)
+	if strings.Contains(out, "topsecret") {
 		t.Fatal("the secret was echoed")
 	}
-	if s := p.screen(); !strings.Contains(s, "? API token:") {
+	if s := ptytest.ScreenText(out, 24, 80); !strings.Contains(s, "? API token:") {
 		t.Fatalf("screen:\n%s", s)
 	}
 }

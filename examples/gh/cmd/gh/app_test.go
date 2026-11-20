@@ -3,44 +3,50 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/SCKelemen/clix/v2"
 )
 
-func TestGitHubAuthLogin(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-
-	app := newApp()
-	out := &bytes.Buffer{}
-	app.Out = out
-	app.Err = &bytes.Buffer{}
-	app.In = strings.NewReader("")
-	app.Prompter = clix.TextPrompter{In: app.In, Out: app.Out}
-
-	if err := app.Run(context.Background(), []string{"auth", "login", "--hostname", "github.com", "--username", "monalisa"}); err != nil {
-		t.Fatalf("app.Run returned error: %v", err)
-	}
-
-	output := out.String()
-	if !strings.Contains(output, "Logging into github.com as monalisa") {
-		t.Fatalf("expected login message in output, got %q", output)
-	}
+// run runs a fresh app with args, and returns what it wrote to stdout.
+func run(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	var out bytes.Buffer
+	app := newApp(clix.WithAppIn(strings.NewReader("")), clix.WithAppOut(&out), clix.WithAppErr(&bytes.Buffer{}))
+	err := app.Run(context.Background(), args)
+	return out.String(), err
 }
 
-// The example passes App.Validate, as the README recommends checking.
+// isolate gives the test its own config directory, where aliases live.
+func isolate(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("GH_FORMAT", "")
+}
+
+// The example passes App.Validate, as docs/testing.md recommends checking.
 func TestAppValidates(t *testing.T) {
 	if err := newApp().Validate(); err != nil {
 		t.Fatal(err)
 	}
 }
 
+func TestAuthLogin(t *testing.T) {
+	isolate(t)
+	out, err := run(t, "auth", "login", "--hostname", "github.com", "--username", "monalisa")
+	if err != nil || !strings.Contains(out, "Logging into github.com as monalisa") {
+		t.Fatalf("auth login: %q, %v", out, err)
+	}
+}
+
 // "gh pr list" prints through format.Write: tab-separated values when Out
-// is not a terminal, and gh's --json and --template.
+// is not a terminal, and gh's --json, --jq and --template.
 func TestPullRequestList(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolate(t)
 	for _, tc := range []struct {
 		args []string
 		want string
@@ -62,17 +68,83 @@ func TestPullRequestList(t *testing.T) {
   }
 ]
 `},
+		{[]string{"pr", "list", "--jq", `.[] | select(.state == "OPEN") | .title`}, "Add --json, --jq and --template\n"},
 		{[]string{"pr", "ls", "--template", `{{range .}}#{{.number}} {{join "," .labels}}{{"\n"}}{{end}}`}, "#321 enhancement\n#318 bug,ui\n"},
+		{[]string{"pr", "list", "--template", `{{range .}}{{tablerow (printf "#%v" .number) .title .author.login}}{{end}}`},
+			"#321  Add --json, --jq and --template  monalisa\n#318  Fix tables on narrow terminals   hubot\n"},
 	} {
-		app := newApp()
-		out := &bytes.Buffer{}
-		app.Out = out
-		app.Err = &bytes.Buffer{}
-		if err := app.Run(context.Background(), tc.args); err != nil {
+		out, err := run(t, tc.args...)
+		if err != nil {
 			t.Fatalf("%q: %v", tc.args, err)
 		}
-		if out.String() != tc.want {
-			t.Errorf("%q:\ngot  %q\nwant %q", tc.args, out.String(), tc.want)
+		if out != tc.want {
+			t.Errorf("%q:\ngot  %q\nwant %q", tc.args, out, tc.want)
 		}
+	}
+	if _, err := run(t, "pr", "list", "--json"); clix.ExitCode(err) != 2 || !strings.Contains(err.Error(), "headRefName") {
+		t.Errorf("--json without fields: %v, want a usage error listing the fields", err)
+	}
+}
+
+// Aliases are stored in the config file and expand into commands.
+func TestAliases(t *testing.T) {
+	isolate(t)
+	for _, args := range [][]string{
+		{"alias", "set", "co", "pr checkout"},
+		{"alias", "set", "titles", `pr list --jq .[].title`},
+	} {
+		if _, err := run(t, args...); err != nil {
+			t.Fatalf("%q: %v", args, err)
+		}
+	}
+	if out, err := run(t, "co", "321"); err != nil || out != "Checking out PR #321\n" {
+		t.Errorf("co 321: %q, %v", out, err)
+	}
+	if out, err := run(t, "titles"); err != nil || out != "Add --json, --jq and --template\nFix tables on narrow terminals\n" {
+		t.Errorf("titles: %q, %v", out, err)
+	}
+	if out, err := run(t, "alias", "list"); err != nil || !strings.Contains(strings.Join(strings.Fields(out), " "), "co: pr checkout titles: pr list --jq .[].title") {
+		t.Errorf("alias list: %q, %v", out, err)
+	}
+	// An alias never shadows a command, and never runs a shell.
+	if _, err := run(t, "alias", "set", "pr", "repo clone"); err == nil {
+		t.Error("alias set pr: an alias named like a command was accepted")
+	}
+	if _, err := run(t, "alias", "set", "x", "!rm -rf /"); err == nil {
+		t.Error("alias set x '!...': a shell alias was accepted")
+	}
+}
+
+// plugins/gh-hello runs as "gh hello" when its directory is on PATH.
+func TestPlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("on Windows, only .exe and .com files run as plugins")
+	}
+	isolate(t)
+	src, err := os.ReadFile(filepath.Join("..", "..", "plugins", "gh-hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A copy with a known mode: the checkout's mode depends on the umask.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "gh-hello"), src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	out, err := run(t, "hello", "world", "--loud")
+	if err != nil || out != "Hello from hello, a plugin of gh: world --loud\n" {
+		t.Errorf("hello world --loud: %q, %v", out, err)
+	}
+	out, err = run(t, "plugin", "list")
+	if err != nil || !strings.Contains(strings.Join(strings.Fields(out), " "), "hello "+filepath.Join(dir, "gh-hello")) {
+		t.Errorf("plugin list: %q, %v", out, err)
+	}
+	// A command wins over a plugin of the same name.
+	if err := os.WriteFile(filepath.Join(dir, "gh-pr"), src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := run(t, "pr", "list", "--jq", ".[0].number"); err != nil || out != "321\n" {
+		t.Errorf("pr list with a gh-pr plugin on PATH: %q, %v", out, err)
 	}
 }

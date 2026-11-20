@@ -146,7 +146,8 @@ var stderrProgress progressBoard
 //     plain line: "Deploying..." when it starts and "done" (or Done's
 //     message) when it ends, as in "Deploying...done". Update prints
 //     nothing.
-//   - With ProgressQuiet it prints nothing.
+//   - With ProgressQuiet, or under --quiet (see App.EnableQuiet), it
+//     prints nothing.
 //
 // It ends once, at the first of Done, Fail, the end of ctx ("cancelled",
 // or "timed out" for a deadline), or the command's handler returning: Run
@@ -180,6 +181,9 @@ func (ctx *Context) Progress(label string) *Progress {
 	if ctx.App != nil {
 		w = ctx.App.stderr()
 		mode = ctx.App.ProgressMode
+		if ctx.App.Quiet() {
+			mode = ProgressQuiet
+		}
 		board = &ctx.App.progress
 		inMain = ctx.App.inMain.Load()
 	}

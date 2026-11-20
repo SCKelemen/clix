@@ -130,6 +130,11 @@ type Flag struct {
 	// from prompting for missing required flags. See FlagOptions.Ambient.
 	Ambient bool
 
+	// ValueFromFile lets a command-line value read the flag's value from a
+	// file: --name=@path, or --name=@- for standard input. See
+	// FlagOptions.ValueFromFile.
+	ValueFromFile bool
+
 	// Value is the flag value implementation.
 	Value Value
 
@@ -330,6 +335,40 @@ type FlagOptions struct {
 	// variables and config values never counted as passed flags, Ambient
 	// or not. FlagSet.AnyCLISet still reports Ambient flags.
 	Ambient bool
+
+	// ValueFromFile lets a value given on the command line read the flag's
+	// value from a file, as curl's -d @file and gh's -F key=@file do:
+	//
+	//   - "--name=@path" (or "--name @path", "-n@path", or "@path" for a
+	//     Positional flag) reads the file at path. A relative path is
+	//     relative to the current directory, or, in a flags file (see
+	//     App.EnableFlagsFile), to that file's directory.
+	//   - "@-" reads standard input. Only one value of a Run may read it.
+	//   - "@@" at the start stands for one "@": "--name=@@team" sets
+	//     "@team", and "--name=@@@x" sets "@@x". Only a leading "@" is
+	//     special: "a@b" is used as written.
+	//   - "@" alone is an error.
+	//
+	// The value is the file's contents with one trailing line ending ("\n"
+	// or "\r\n") removed, as gh and curl do, so a file written by an editor
+	// or by echo holds just the value; a file that ends with two line
+	// endings keeps one. It then goes through Value.Set and Validate like
+	// any value typed on the command line, and counts as given on the
+	// command line (Changed, Source, and "flags passed" for prompting).
+	//
+	// Only command-line values are read this way, including values in a
+	// flags file. Values from environment variables, the config file, a
+	// prompt and Default are always used as written, so a value set once
+	// in a shell profile or a config file can never read a file on every
+	// run, and "@team" stored there keeps meaning "@team".
+	//
+	// Reading files is opt-in per flag because a program that passes
+	// untrusted text as a flag value (a bot, a web hook, a CI job) would
+	// otherwise let that text read local files. Files and standard input
+	// are read up to App.MaxFileSize (DefaultMaxFileSize, 1 MiB); a larger
+	// one is an error. For a Sensitive flag, an error about a value read
+	// from a file never shows the file's contents.
+	ValueFromFile bool
 }
 
 // newFlag builds a Flag from o with the given value and default text.
@@ -351,6 +390,7 @@ func (o FlagOptions) newFlag(value Value, def string) *Flag {
 		ConfigKey:       o.ConfigKey,
 		Sensitive:       o.Sensitive,
 		Ambient:         o.Ambient,
+		ValueFromFile:   o.ValueFromFile,
 		Value:           value,
 	}
 }
@@ -403,6 +443,9 @@ func (o FlagOptions) ApplyFlag(fo *FlagOptions) {
 	}
 	if o.Ambient {
 		fo.Ambient = true
+	}
+	if o.ValueFromFile {
+		fo.ValueFromFile = true
 	}
 }
 
@@ -556,7 +599,8 @@ func (o stringDefaultOption) ApplyFlag(*FlagOptions) {}
 //	)
 type DurationVarOptions struct {
 	FlagOptions
-	// Default is the default value as a duration string (e.g., "30s", "5m").
+	// Default is the default value as a duration string (e.g., "30s", "5m"
+	// or "PT5M"; see DurationVar).
 	Default string
 	// Value is a pointer to the variable that will store the flag value.
 	Value *time.Duration
@@ -654,6 +698,14 @@ func (fs *FlagSet) BoolVar(opts ...FlagOption) {
 
 // DurationVar registers a duration flag. Accepts either a DurationVarOptions struct
 // (primary API) or functional options (convenience layer).
+//
+// The value is Go's duration syntax ("90s", "1h30m", see
+// time.ParseDuration) or an ISO 8601 duration ("PT1M30S", "P1DT12H",
+// "-PT2H", see iso8601.ParseDuration), the form JSON and YAML output use.
+// A time.Duration is an exact length, so an ISO 8601 duration with years
+// or months is an error, and a day counts as 24 hours and a week as 7
+// days; use ISODurationVar for calendar durations. The value prints in
+// Go's syntax ("1m30s").
 func (fs *FlagSet) DurationVar(opts ...FlagOption) {
 	var durationOpts DurationVarOptions
 	for _, opt := range opts {
@@ -1171,6 +1223,13 @@ func WithFlagAmbient() FlagOption {
 	return flagAmbientOption{}
 }
 
+// WithFlagValueFromFile lets a command-line value read the flag's value
+// from a file: --name=@path, or --name=@- for standard input. See
+// FlagOptions.ValueFromFile.
+func WithFlagValueFromFile() FlagOption {
+	return flagValueFromFileOption{}
+}
+
 // WithStringValue sets the string flag value pointer.
 func WithStringValue(value *string) FlagOption {
 	return stringValueOption{value: value}
@@ -1308,6 +1367,10 @@ func (o flagConfigKeyOption) ApplyFlag(fo *FlagOptions) {
 type flagAmbientOption struct{}
 
 func (flagAmbientOption) ApplyFlag(fo *FlagOptions) { fo.Ambient = true }
+
+type flagValueFromFileOption struct{}
+
+func (flagValueFromFileOption) ApplyFlag(fo *FlagOptions) { fo.ValueFromFile = true }
 
 type boolValueOption struct {
 	value *bool
