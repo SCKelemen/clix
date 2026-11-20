@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.1] - 2026-11-20
+
 ### Fixed
 
 - Secret answers stay masked on dynamic survey end cards and in errors from a prompted flag's custom value parser.
@@ -334,7 +336,8 @@ Prepared as 1.0.0 (commit 464e98b, "Prepare for v1.0.0 release") but tagged as t
 - `ext/survey` – Chained prompts with branching logic
 - `ext/validation` – Common validation functions
 
-[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.9.0...HEAD
+[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.9.1...HEAD
+[2.9.1]: https://github.com/SCKelemen/clix/compare/v2.9.0...v2.9.1
 [2.9.0]: https://github.com/SCKelemen/clix/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/SCKelemen/clix/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/SCKelemen/clix/compare/v2.6.0...v2.7.0

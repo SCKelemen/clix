@@ -20,7 +20,7 @@ Some rules exist only because earlier v2 releases had them, and may change in a 
 
 ## Receiving Dependabot PRs when clix releases
 
-Releases are tagged `v2.x.y` (for example `v2.9.0`) under the module path `github.com/SCKelemen/clix/v2`, so the Go module proxy and Dependabot see each new tag automatically. To have Dependabot open upgrade PRs in your application:
+Releases are tagged `v2.x.y` (for example `v2.9.1`) under the module path `github.com/SCKelemen/clix/v2`, so the Go module proxy and Dependabot see each new tag automatically. To have Dependabot open upgrade PRs in your application:
 
 1. **Import clix with the `/v2` suffix**:
    ```go
@@ -28,7 +28,7 @@ Releases are tagged `v2.x.y` (for example `v2.9.0`) under the module path `githu
    ```
 2. **Require a v2 release in your `go.mod`**, for example with `go get github.com/SCKelemen/clix/v2@latest`:
    ```text
-   require github.com/SCKelemen/clix/v2 v2.9.0
+   require github.com/SCKelemen/clix/v2 v2.9.1
    ```
    Dependabot will bump this line when a newer v2 minor or patch release exists.
 3. **Add `.github/dependabot.yml` with a Go entry**:
