@@ -251,7 +251,7 @@ cmd.Flags.MarkRequiredTogether("user", "password")              // all or none
 cmd.Flags.MarkOneRequired("file", "url")                        // at least one
 ```
 
-Mark a group both mutually exclusive and one required for "exactly one". `Run` checks the groups after parsing, and a broken rule is a `*clix.FlagGroupError`, a usage error (exit status 2) that names the flags:
+[`examples/gcloud`](../examples/gcloud)'s `projects update` has the label trio: `--clear-labels` and `--remove-labels` exclude each other, and one of them or `--update-labels` is required. Mark a group both mutually exclusive and one required for "exactly one". `Run` checks the groups after parsing, and a broken rule is a `*clix.FlagGroupError`, a usage error (exit status 2) that names the flags:
 
 ```text
 --clear-labels and --remove-labels cannot be used together

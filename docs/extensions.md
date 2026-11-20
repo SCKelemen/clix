@@ -100,7 +100,7 @@ clix ships two topics about what it owns, generated for the app when they are sh
 - `environment`: the variables clix reads for the app: `<PREFIX>_<FLAG>` (unless `App.AutoEnv` is off) and each global flag's variables, `<PREFIX>_CONFIGURATION` with named configurations, `<PREFIX>_DISABLE_PROMPTS`, `XDG_CONFIG_HOME` (unless `App.ConfigPath` is set), `NO_COLOR`, `CLICOLOR`, `CLICOLOR_FORCE` and `TERM`.
 - `exit-codes`: 0, 1, 2 (usage errors), 130 (cancelled) and 143 (SIGTERM).
 
-A topic of the same name replaces a built-in one, and an empty body removes a topic (`app.AddHelpTopic("exit-codes", "", "")`). The app's topics win over an extension's, and an extension added first wins over a later one, as for flags and commands; a command (even a hidden one) wins over a topic of its name, which `App.Validate` reports. `App.HelpTopics`, `App.LookupHelpTopic` and `HelpRenderer.RenderTopic` read and render them.
+[`examples/gcloud`](../examples/gcloud) adds `gcloud help configurations`. A topic of the same name replaces a built-in one, and an empty body removes a topic (`app.AddHelpTopic("exit-codes", "", "")`). The app's topics win over an extension's, and an extension added first wins over a later one, as for flags and commands; a command (even a hidden one) wins over a topic of its name, which `App.Validate` reports. `App.HelpTopics`, `App.LookupHelpTopic` and `HelpRenderer.RenderTopic` read and render them.
 
 **Note:** Flag-based help (`-h`, `--help`) is handled by the core library and works without this extension. This extension only adds the `help` command itself.
 
@@ -131,7 +131,7 @@ The rules, which are also the security model:
 - **One expansion, into a command.** The expansion must start with a root command, so an alias cannot name another alias and is expanded once.
 - **Only the first argument**, and only when the root takes no positional arguments of its own; flags before an alias are not supported (as in gh).
 
-Alias names are a letter or digit followed by letters, digits, hyphens and underscores, matched like command names (ASCII case is ignored unless `App.CaseSensitive`). The core API is `App.ExpandAliases`, `Aliases`, `AliasNames`, `CheckAlias`, `SetAlias`, `DeleteAlias`, `ExpandAlias` and `AliasConfigPrefix`. An app command named `alias` replaces the extension's.
+[`examples/gh`](../examples/gh) adds the extension; its tests set and run aliases. Alias names are a letter or digit followed by letters, digits, hyphens and underscores, matched like command names (ASCII case is ignored unless `App.CaseSensitive`). The core API is `App.ExpandAliases`, `Aliases`, `AliasNames`, `CheckAlias`, `SetAlias`, `DeleteAlias`, `ExpandAlias` and `AliasConfigPrefix`. An app command named `alias` replaces the extension's.
 
 ## Plugin (`clix/ext/plugin`)
 
@@ -159,7 +159,7 @@ The security model: a plugin is trusted like any other program on PATH, since wh
 - the name must be a letter or digit followed by letters, digits, hyphens and underscores, so it can never be a path;
 - on Unix only executable regular files run (symbolic links are followed), and a file that every user can write to (mode o+w) is refused; on Windows only `.exe` and `.com` files run, never `.bat` or `.cmd` scripts, whose arguments `cmd.exe` would interpret.
 
-`plugin list` lists the plugins found on PATH, with warnings for shadowed ones, ones named like a command (which never run) and insecure ones. `App.LookupPlugin(name)` and `App.ListPlugins()` return `clix.Plugin` values (`Name`, `Path`, `Shadowed`, `Command`, `Insecure`, `Runnable`). An app command named `plugin` replaces the extension's.
+[`examples/gh/plugins/gh-hello`](../examples/gh/plugins/gh-hello) is a plugin of the gh example. `plugin list` lists the plugins found on PATH, with warnings for shadowed ones, ones named like a command (which never run) and insecure ones. `App.LookupPlugin(name)` and `App.ListPlugins()` return `clix.Plugin` values (`Name`, `Path`, `Shadowed`, `Command`, `Insecure`, `Runnable`). An app command named `plugin` replaces the extension's.
 
 ## Autocomplete (`clix/ext/autocomplete`)
 
