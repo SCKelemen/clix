@@ -69,7 +69,7 @@ clix (42)
 `clix.FormatData(w, data, format)` writes deterministic output in each format:
 
 - **JSON**: `encoding/json/v2` with `encoding/json`'s rules (field names, `omitempty`, `,string`, `MarshalJSON`, embedded fields), plus two-space indentation and a trailing newline, sorted map keys, `<`, `>` and `&` not escaped, durations as ISO 8601 (`"PT1M30S"`), times as RFC 3339 (fractional seconds only when non-zero), and `[]` and `{}` for nil slices and maps.
-- **YAML** (`go.yaml.in/yaml/v3`): `json.RawMessage` is decoded first; durations are ISO 8601 at the top level and in maps, slices, arrays and pointers, while struct fields keep YAML's own names and `1m30s`.
+- **YAML** (`go.yaml.in/yaml/v3`): `json.RawMessage` is decoded first; durations are ISO 8601 at the top level and in maps, slices, arrays and pointers, while struct fields keep YAML's own names and `1m30s`, which `yaml.Unmarshal` can read back into a `time.Duration` field.
 - **Text**: sorted `key = value` lines with nested keys flattened as `a.b`, one line per element of a list of plain values, structs through their JSON field names (fields tagged `json:"-"` never print), durations as `1m30s`, `fmt.Stringer` values through `String`, and nothing for nil. A list of objects (structs or maps) is a table, as below. Everything that is not a list of objects prints exactly as in 2.7.0.
 
 ## Tables
