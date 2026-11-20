@@ -1,9 +1,9 @@
 package clix
 
 import (
-	"encoding/json/jsontext"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -74,11 +74,10 @@ type configTree struct {
 	children map[string]*configTree
 }
 
-// subtree rebuilds the configuration under prefix as JSON, or returns nil
-// when there is none.
+// subtree uses the same YAML representation for strict decoding and saving.
 func (m *ConfigManager) subtree(prefix string, c *yamlConverter) (*jsonNode, error) {
 	var keys []string
-	for k := range m.values {
+	for k := range m.nodes {
 		if prefix == "" || k == prefix || strings.HasPrefix(k, prefix+".") {
 			keys = append(keys, k)
 		}
@@ -86,7 +85,15 @@ func (m *ConfigManager) subtree(prefix string, c *yamlConverter) (*jsonNode, err
 	if len(keys) == 0 {
 		return nil, nil
 	}
-	sort.Strings(keys)
+	n, err := m.buildYAML(prefix, keys)
+	if err != nil {
+		return nil, err
+	}
+	return c.convert(n, "", nil)
+}
+
+func (m *ConfigManager) buildYAML(prefix string, keys []string) (*yaml.Node, error) {
+	slices.Sort(keys)
 	root := &configTree{}
 	for _, k := range keys {
 		rel := k
@@ -95,8 +102,13 @@ func (m *ConfigManager) subtree(prefix string, c *yamlConverter) (*jsonNode, err
 		}
 		t := root
 		if rel != "" {
-			for _, seg := range strings.Split(rel, ".") {
-				if t.leaf != nil {
+			depth := 0
+			for seg := range strings.SplitSeq(rel, ".") {
+				depth++
+				if depth > maxYAMLDepth {
+					return nil, fmt.Errorf("%s: config key exceeds %d levels", m.source(), maxYAMLDepth)
+				}
+				if t.leaf != nil && t.leaf.Kind != yaml.MappingNode {
 					return nil, m.mixedKeyError(k)
 				}
 				if t.children == nil {
@@ -110,12 +122,9 @@ func (m *ConfigManager) subtree(prefix string, c *yamlConverter) (*jsonNode, err
 				t = child
 			}
 		}
-		if t.children != nil {
-			return nil, m.mixedKeyError(k)
-		}
-		t.leaf = m.leafNode(k)
+		t.leaf = m.nodes[k]
 	}
-	return m.treeJSON(root, prefix, c, "", nil)
+	return m.treeYAML(root, prefix), nil
 }
 
 // mixedKeyError reports a key that holds a value and also keys under it,
@@ -124,55 +133,29 @@ func (m *ConfigManager) mixedKeyError(key string) error {
 	return fmt.Errorf("%s: key %q holds a value and also keys under it", m.source(), key)
 }
 
-// leafNode returns the YAML node of key: the one it was loaded from, or,
-// for a value given to Set, the scalar Save would write.
-func (m *ConfigManager) leafNode(key string) *yaml.Node {
-	if n, ok := m.nodes[key]; ok {
-		return n
+func (m *ConfigManager) treeYAML(t *configTree, full string) *yaml.Node {
+	if len(t.children) == 0 {
+		return t.leaf
 	}
-	return newScalar(m.values[key])
-}
-
-// treeJSON converts t, the configuration under the key full, into JSON.
-// Keys under a key that held a YAML list of maps or lists, named 0 to
-// n-1, become a list again.
-func (m *ConfigManager) treeJSON(t *configTree, full string, c *yamlConverter, ptr jsontext.Pointer, path []pathPart) (*jsonNode, error) {
-	if t.leaf != nil {
-		return c.convert(t.leaf, ptr, path)
-	}
-	names := make([]string, 0, len(t.children))
-	for name := range t.children {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	join := func(name string) string {
-		if full == "" {
-			return name
-		}
-		return full + "." + name
-	}
+	names := slices.Sorted(maps.Keys(t.children))
+	node := &yaml.Node{Kind: yaml.MappingNode}
 	if m.seqs[full] && isIndexList(names) {
-		node := &jsonNode{kind: '['}
+		node.Kind = yaml.SequenceNode
 		for i := range names {
-			name := strconv.Itoa(i)
-			child, err := m.treeJSON(t.children[name], join(name), c, ptr.AppendToken(name), append(path[:len(path):len(path)], pathPart{index: i, isIndex: true}))
-			if err != nil {
-				return nil, err
-			}
-			node.items = append(node.items, child)
+			names[i] = strconv.Itoa(i)
 		}
-		return node, nil
 	}
-	node := &jsonNode{kind: '{'}
 	for _, name := range names {
-		child, err := m.treeJSON(t.children[name], join(name), c, ptr.AppendToken(name), append(path[:len(path):len(path)], pathPart{name: name}))
-		if err != nil {
-			return nil, err
+		if node.Kind == yaml.MappingNode {
+			node.Content = append(node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name})
 		}
-		node.keys = append(node.keys, name)
-		node.vals = append(node.vals, child)
+		path := name
+		if full != "" {
+			path = full + "." + name
+		}
+		node.Content = append(node.Content, m.treeYAML(t.children[name], path))
 	}
-	return node, nil
+	return node
 }
 
 // isIndexList reports whether names are exactly "0" to "n-1".

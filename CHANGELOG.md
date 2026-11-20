@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Structured configuration lists keep their elements and types when saved and reloaded. `DecodeVar` accepts inline scalar lists, including empty lists.
+- Config loading and strict decoding reject cyclic YAML aliases and bound document depth and expansion.
+
 ## [2.9.0] - 2026-11-20
 
 ### Added

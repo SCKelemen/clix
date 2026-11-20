@@ -151,7 +151,7 @@ func (v *decodeValue) setFromFile(r *fileReader, text, dir string) error {
 // target. It reports false when key holds a single value (a file name)
 // or nothing.
 func (v *decodeValue) decodeConfig(m *ConfigManager, key string) (bool, error) {
-	if _, isValue := m.Get(key); isValue {
+	if _, isValue := m.Get(key); isValue && m.lists[key] == nil {
 		return false, nil
 	}
 	c := newYAMLConverter(key)
