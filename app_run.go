@@ -101,6 +101,13 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	rootFlags := a.Root.Flags
 
+	// Files named on the command line (@file values, flags files and
+	// DecodeVar inputs) are read through one reader per Run, which a
+	// nested Run shares, so standard input is read at most once.
+	if !a.running || a.files == nil {
+		a.files = newFileReader(a)
+	}
+
 	// Undo what the previous Run set (unless the program changed it
 	// since), and record what this one changes. A nested Run (started by
 	// a handler) puts back what it changed when it ends.
@@ -152,7 +159,7 @@ func (a *App) Run(ctx context.Context, args []string) error {
 
 	// Map leftover positional args to flags marked Positional: true
 	if len(positionals) > 0 {
-		excess, err := cmd.Flags.MapPositionals(positionals)
+		excess, err := cmd.Flags.mapPositionals(a.files, positionals)
 		if err != nil {
 			return err
 		}
@@ -404,7 +411,7 @@ scan:
 			if u.takesNext(args, i) && i+1 < scanned && !isValue[i+1] {
 				return nil, nil, nil, "", usageErrorf("%s needs a value: write %s=VALUE, or put the flags after the command", u.name, tok)
 			}
-			err := setFromArg(u.flag, u.name, u.value, u.hasValue, func() (string, bool) {
+			err := a.files.apply(u, flagChain(path[:depth]), late, func() (string, bool) {
 				if !u.takesNext(args, i) {
 					return "", false
 				}
@@ -744,7 +751,7 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 	if !ok {
 		return false, nil
 	}
-	if err := setAndValidate(flag, val); err != nil {
+	if err := setAndValidate(a.files, flag, val); err != nil {
 		// A usage error, like the same value on the command line.
 		return false, usageErrorf("invalid value %s for --%s from environment variable %s: %w", shownValue(flag, val), flag.Name, name, redactErr(flag, err, val))
 	}
@@ -754,9 +761,10 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 }
 
 // setAndValidate parses raw into flag and then runs the flag's Validate
-// function, mirroring what the command-line parser does.
-func setAndValidate(flag *Flag, raw string) error {
-	if err := flag.setValue(raw); err != nil {
+// function, mirroring what the command-line parser does. A value whose
+// text names a file (DecodeVar) reads it through r.
+func setAndValidate(r *fileReader, flag *Flag, raw string) error {
+	if err := flag.setValueWith(r, raw, ""); err != nil {
 		return err
 	}
 	if flag.Validate != nil {
@@ -813,6 +821,22 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 		return false, nil
 	}
 
+	if dv, isDecode := flag.Value.(*decodeValue); isDecode {
+		// A DecodeVar flag's key may hold the document itself.
+		decoded, err := dv.decodeConfig(a.Config, key)
+		if decoded || err != nil {
+			flag.touched = true
+		}
+		if err != nil {
+			return false, usageErrorf("invalid value for --%s from config file key %q: %w", flag.Name, key, err)
+		}
+		if decoded {
+			flag.set = true
+			flag.source = SourceConfigFile
+			return true, nil
+		}
+	}
+
 	val, ok := a.Config.Get(key)
 	if !ok {
 		return false, nil
@@ -839,7 +863,7 @@ func (a *App) trySetFromConfig(flag *Flag) (bool, error) {
 			val = n
 		}
 	}
-	if err := setAndValidate(flag, val); err != nil {
+	if err := setAndValidate(a.files, flag, val); err != nil {
 		return false, usageErrorf("invalid value %s for --%s from config file key %q: %w", shownValue(flag, val), flag.Name, key, redactErr(flag, err, val))
 	}
 	flag.set = true
@@ -913,7 +937,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 			}
 			return err
 		}
-		if err := setAndValidate(flag, value); err != nil {
+		if err := setAndValidate(a.files, flag, value); err != nil {
 			return fmt.Errorf("invalid value for --%s: %w", flag.Name, err)
 		}
 		flag.set = true

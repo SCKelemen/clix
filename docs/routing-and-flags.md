@@ -275,6 +275,90 @@ app.Flags().StringVar(clix.StringVarOptions{
 
 Any flag that is not Ambient still marks a scripted call: `myapp --target staging widgets create --dry-run` returns a `*clix.MissingFlagsError` (see [Non-interactive use](prompting-and-terminals.md#non-interactive-use) for the full rule). `Ambient` changes nothing else: the flag is parsed, read from the environment and the config file, checked when `Required` (and prompted for when missing), and shown in help like any other flag. The format extension's `--format`, `--json`, `--jq` and `--template` are Ambient.
 
+### Values from files
+
+Long or awkward values, such as a message body, a certificate or a token, are easier to keep in a file. Mark a flag `ValueFromFile` (or pass `clix.WithFlagValueFromFile()`) and its command-line value can name one, as curl's `-d @file` and gh's `-F key=@file` do:
+
+```go
+var body string
+cmd.Flags.StringVar(clix.StringVarOptions{
+        FlagOptions: clix.FlagOptions{Name: "body", Usage: "Message body (@file or @- for stdin)", ValueFromFile: true},
+        Value:       &body,
+})
+```
+
+```text
+myapp post --body=@message.md      # the contents of message.md
+myapp post --body @-               # standard input
+myapp post --body=@@channel        # the text "@channel"
+```
+
+The rules, exactly:
+
+- **Escaping.** A value that starts with `@@` is the value with the first `@` removed (`@@x` is `@x`, `@@@x` is `@@x`, `@@-` is `@-`). A value that starts with a single `@` names a file; `@-` is standard input. `@` alone is an error. An `@` anywhere but first is an ordinary character (`a@b`).
+- **Contents.** The value is the file's contents with one trailing line ending, `\n` or `\r\n`, removed, as gh and curl do: a file written by an editor or `echo` holds just the value. A file that ends with two line endings keeps one, and nothing else is trimmed. The contents then go through `Value.Set` and `Validate` like a typed value, so an int flag reads `42` from a file holding `42\n`, and a slice flag splits the contents on commas.
+- **Where it applies.** Only to values on the command line: by name (`--body=@f`, `--body @f`, `-b@f`), by position, and in a [flags file](#flags-files), where relative paths are relative to the flags file's directory (elsewhere, to the current directory). Environment variables, the config file, prompt answers and `Default` are always used as written, so a value in a shell profile or a config file never reads a file on every run, and `@team` stored there stays `@team`.
+- **It is a command-line value.** It beats the environment and the config file, counts for `Changed`, reports `SourceCommandFlag` (or `SourceAppFlag`), and counts as a flag passed when `Run` decides whether to prompt, unless the flag is `Ambient`.
+- **Limits.** Each file, and standard input, is read up to `App.MaxFileSize` bytes (`clix.DefaultMaxFileSize`, 1 MiB, when zero); a larger one, or an endless one such as `@/dev/zero`, is a usage error. Only one value per run may read standard input; a second `@-` is a usage error that names the flag that read it.
+- **Secrets.** For a `Sensitive` flag, an error about a value read from a file never shows the contents: a parse error only says what kind of value was expected (`not a valid integer`), and the value, and each line of a multi-line value, is removed from a `Validate` error.
+
+Reading files is opt-in per flag because a program that passes untrusted text as a flag value (a chat bot, a web hook, a CI job running `myapp post --body "$TITLE"`) would otherwise let that text read local files, `--body=@/etc/passwd`, and print or send them. Paths are used as written: no `~` expansion, and on Windows drive letters and backslashes work as usual.
+
+### Flags files
+
+`app.EnableFlagsFile()` adds a global `--flags-file`, like gcloud's (`gcloud topic flags-file`): it reads flags from a YAML or JSON file, so values need no shell quoting on any shell.
+
+```yaml
+# deploy.yaml
+--region: us-east1
+--count: 3
+--labels: [team=web, "note=a, b"]   # a list repeats the flag
+--force:                            # no value: the flag alone, so a switch is on
+--body: "@body.md"                  # a ValueFromFile flag reads body.md next to this file
+--flags-file: common.yaml           # more flags files, relative to this one
+```
+
+```text
+myapp deploy --flags-file deploy.yaml --region eu-west1
+```
+
+- **Precedence is gcloud's**: each `--flags-file` is replaced by its file's flags where it is written, and the usual rules apply, so the last occurrence of a flag wins (slice flags append). Above, `--region eu-west1` wins because it comes after the file; with `--region` before `--flags-file`, the file would win. Of two flags files, the one further right wins.
+- **They are command-line values**: they beat environment variables and the config file, count for `Changed`, report `SourceCommandFlag` (or `SourceAppFlag`), and may set `CommandLineOnly` flags. For prompting, each flag from the file counts as passed unless it is `Ambient`; `--flags-file` itself is Ambient, so a file of only Ambient flags (a `--target`, a `--format`) still lets `Run` prompt.
+- **Keys** are long flag names, with or without the leading `--`. They are looked up where `--flags-file` is written, as a flag written there would be: after the command, the command's flags and its ancestors'; before it, a command's flag is found too, since every value in the file is attached. A key that names no flag is a usage error, even on the non-strict root, and so is a key given twice in one mapping (use a list, or a list of mappings as gcloud does, to repeat a flag).
+- **Values** are the text written in the file, as if typed after `--name=`: `0755` stays `0755`, `"-5"` and `--force` are values, not flags. A list gives the flag once per item; null (no value) gives the flag alone; a mapping or a list of lists is an error.
+- **Nesting**: `--flags-file` inside a file (a string or a list) reads more files in place. Relative paths are relative to the directory of the file that names them (gcloud uses the current directory). A file that names itself, directly or through others, is an error; reading the same file twice from different places is not. Nesting is limited to 16 levels, 128 files and 10,000 values per run.
+- **Files**: `-` is standard input (once per run, shared with `@-`). Each file is read up to `App.MaxFileSize`. One YAML document per file; anchors and aliases work, merge keys (`<<`) do not.
+- **Errors** are usage errors that name the file and line (`flags file deploy.yaml, line 4: unknown flag --zone`). A `Sensitive` flag's value never appears in them.
+
+An app flag named `--flags-file` wins over the one `EnableFlagsFile` adds, and is an ordinary flag.
+
+### Structured inputs from files
+
+For rich inputs, like gcloud's `--*-from-file` flags and kubectl's `-f`, `DecodeVar` registers a flag whose value names a YAML or JSON file that is decoded into a Go value with the [strict rules](configuration.md#strict-decoding):
+
+```go
+type Spec struct {
+        Image    string            `json:"image"`
+        Replicas int               `json:"replicas"`
+        Env      map[string]string `json:"env"`
+}
+spec := Spec{Replicas: 1} // the defaults: fields the file leaves out keep them
+cmd.Flags.DecodeVar(clix.DecodeVarOptions{
+        FlagOptions: clix.FlagOptions{Name: "spec", Short: "f", Usage: "Deployment spec (YAML or JSON, - for stdin)", Required: true},
+        Value:       &spec,
+})
+```
+
+```text
+myapp deploy -f spec.yaml
+generate-spec | myapp deploy -f -
+```
+
+- The value is a file name, or `-` for standard input. A leading `@` is ignored, so `-f @spec.yaml` and `-f @-` work as for a `ValueFromFile` flag (`@@x` names the file `@x`). In a [flags file](#flags-files) a relative name is relative to the flags file.
+- Unknown fields, duplicate keys and values of the wrong type are a usage error that lists every problem with its path (`spec.yaml: strict decoding error: unknown field "replcas", env.A: expected string, got a mapping`), and the variable is not changed.
+- Every source works: the command line, an environment variable (`MYAPP_SPEC=spec.yaml`), the config file, where the flag's key may hold the document itself (`spec: {image: web}`) or a file name, and a prompt for a `Required` flag, which asks for a file name. Repeating the flag decodes each file in turn into the same variable.
+- Files are read up to `App.MaxFileSize`, and standard input once per run. For a `Sensitive` flag, errors name fields by path but never show a value.
+
 ### Flag groups
 
 Some flags only make sense in combination, like cobra's flag groups. Declare the rule on a flag set, naming flags by their long names:
@@ -342,6 +426,7 @@ myapp [--project/-p] [--verbose/-v]
 - Boolean flags never consume the next token: `--force` is true, `--force=false` is false, and in `deploy --force false` the word `false` is a positional argument.
 - One-letter short flags can be clustered: `-fv` is `-f -v`. The first letter that takes a value takes the rest of the token as its value (`-frus` sets `--region` to `us`), or the next token if it is the last letter (`-fr us`). A cluster with a letter that is not a flag fails with `unknown flag: -z (in -fz)`.
 - Repeating a flag replaces its value, so the last one wins, except slice flags (`StringSliceVar`), which append: `-t a -t b,c` is `[a b c]`. A slice value is split on commas with the spaces around each item trimmed, and an item in double quotes may contain commas: `--tag '"a,b", c'` is `[a,b c]`. Environment variables follow the same rule.
+- A flag marked `ValueFromFile` reads `--name=@path` from a file and `--name=@-` from standard input, and `@@` stands for a leading `@`; see [Values from files](#values-from-files). With `EnableFlagsFile`, `--flags-file FILE` is replaced by the flags in FILE where it is written; see [Flags files](#flags-files).
 
 **Where a flag may appear, and which flag a name means.** A flag may be written before the path, between path segments or after it. Its name is looked up on the command in effect at that point (the deepest command matched so far), then on each ancestor up to the root. A cluster's letters are looked up the same way, so `deploy -fv` sets `deploy --force` and the root's `--verbose`.
 
