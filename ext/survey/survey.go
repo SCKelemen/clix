@@ -526,7 +526,9 @@ func (s *Survey) Run() error {
 		// there are no key bindings, so typing "back" goes back. A confirm
 		// question is then asked as a text question that accepts it.
 		typedBack := canGoBack && s.lineMode()
-		confirmAsText := typedBack && req.Confirm
+		// Under --quiet nothing is typed, and a confirm question keeps its
+		// default answer.
+		confirmAsText := typedBack && req.Confirm && !s.quiet()
 		if confirmAsText {
 			req = confirmTextRequest(req)
 		}
@@ -573,8 +575,9 @@ func (s *Survey) Run() error {
 		}
 	}
 
-	// Show end card if enabled
-	if s.withEndCard {
+	// Show end card if enabled. Under --quiet there is nobody to confirm
+	// the answers, which are the defaults.
+	if s.withEndCard && !s.quiet() {
 		return s.showEndCard()
 	}
 
@@ -829,6 +832,15 @@ func rawCapable(in io.Reader, out io.Writer) bool {
 	}
 	o, ok := out.(*os.File)
 	return ok && tty.Interactive(f, o)
+}
+
+// quiet reports whether the survey runs under --quiet, where prompts are
+// not shown and answer with their defaults (see clix.App.EnableQuiet). It
+// is asked right before a prompt, which builds its configuration with
+// NewPromptConfig anyway.
+func (s *Survey) quiet() bool {
+	_, err := clix.NewPromptConfig(s.ctx)
+	return errors.Is(err, clix.ErrQuiet)
 }
 
 // confirmTextRequest turns a confirm question into a text question that

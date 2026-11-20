@@ -15,8 +15,15 @@ func (fs *FlagSet) PositionalFlags() []*Flag {
 // in registration order. Flags already set via --flag (cliSet == true)
 // are skipped. Successfully mapped flags get cliSet = true and set = true
 // so three-way mode detection works correctly. Excess unmapped args are
-// returned.
+// returned. A flag with ValueFromFile reads "@path" from a file, as on
+// Run's command line (see FlagOptions.ValueFromFile).
 func (fs *FlagSet) MapPositionals(args []string) ([]string, error) {
+	return fs.mapPositionals(fs.fileReader(), args)
+}
+
+// mapPositionals is MapPositionals with the files that values name read
+// through r.
+func (fs *FlagSet) mapPositionals(r *fileReader, args []string) ([]string, error) {
 	positionals := fs.PositionalFlags()
 	argIdx := 0
 	for _, f := range positionals {
@@ -26,15 +33,9 @@ func (fs *FlagSet) MapPositionals(args []string) ([]string, error) {
 		if f.cliSet {
 			continue
 		}
-		if err := f.setValue(args[argIdx]); err != nil {
-			return nil, usageErrorf("invalid value for positional argument %s: %w", f.Name, err)
+		if err := r.setText(f, f.Name, args[argIdx], "", "positional argument "+f.Name); err != nil {
+			return nil, err
 		}
-		if f.Validate != nil {
-			if err := f.Validate(args[argIdx]); err != nil {
-				return nil, usageErrorf("invalid value for positional argument %s: %w", f.Name, err)
-			}
-		}
-		f.markCLI()
 		argIdx++
 	}
 	return args[argIdx:], nil

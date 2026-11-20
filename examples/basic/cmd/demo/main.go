@@ -2,17 +2,12 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	demoapp "github.com/SCKelemen/clix/v2/examples/basic/internal/app"
 )
 
 func main() {
-	application := demoapp.New()
-
-	if err := application.Run(context.Background(), nil); err != nil {
-		_, _ = fmt.Fprintln(application.Err, err)
-		os.Exit(1)
-	}
+	// Main runs the app with os.Args[1:], cancels the context on Ctrl-C,
+	// prints any error and exits with clix.ExitCode(err).
+	demoapp.New().Main(context.Background())
 }

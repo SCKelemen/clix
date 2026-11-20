@@ -48,12 +48,30 @@ func startPTY(t *testing.T, ctx context.Context, opts ...clix.PromptOption) *pty
 
 func startOn(t *testing.T, term *ptytest.Term, ctx context.Context, opts ...clix.PromptOption) *ptyPrompt {
 	t.Helper()
+	ctx, cancel := context.WithCancel(ctx)
 	p := &ptyPrompt{term: term, ch: make(chan result, 1)}
+	done := make(chan struct{})
 	tp := prompt.TerminalPrompter{In: term.TTY, Out: term.TTY}
 	go func() {
+		defer close(done)
 		v, err := tp.Prompt(ctx, opts...)
 		p.ch <- result{v, err}
 	}()
+	// A test that fails, or ends without finishing the prompt, must not
+	// leave it running: ptytest would close the terminal under it (a data
+	// race on the file), and it would keep the raw-mode restore point of a
+	// file descriptor number that the next test's terminal may reuse, so
+	// that terminal would never leave canonical mode. Cleanups run last
+	// registered first, so this one ends the prompt before ptytest closes
+	// the terminal.
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Errorf("the prompt was still running 5s after the test ended; screen:\n%s", p.screen())
+		}
+	})
 	return p
 }
 
