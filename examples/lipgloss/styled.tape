@@ -34,7 +34,10 @@ Type "./styled --help"
 Enter
 Sleep 2s
 
-# Show format option (non-interactive)
-Type "./styled style --format json"
+# Show a styled confirm prompt
+Type "./styled prompt confirm"
 Enter
 Sleep 1s
+Type "y"
+Enter
+Sleep 1.5s
