@@ -1,0 +1,14 @@
+---
+labels.env:                     prod
+labels.team:                    web
+name:                           web-1
+networkInterfaces[0].networkIP: 10.128.0.2
+---
+labels.env:                     dev
+name:                           batch-worker-12
+networkInterfaces[0].networkIP: 10.132.0.7
+networkInterfaces[1].networkIP: 192.168.1.4
+---
+labels:                         {}
+name:                           db
+networkInterfaces[0].networkIP: 10.128.0.9

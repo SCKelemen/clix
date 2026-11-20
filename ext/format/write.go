@@ -9,6 +9,7 @@ import (
 
 	"github.com/SCKelemen/clix/v2"
 	"github.com/SCKelemen/clix/v2/internal/jq"
+	"github.com/SCKelemen/clix/v2/internal/projection"
 )
 
 // Write prints data, a command's result, to ctx.App.Out as the output
@@ -43,10 +44,16 @@ import (
 //     or uint64, other numbers float64), with the helpers listed in the
 //     package documentation.
 //
+// With Extension.Projections, a gcloud format expression in --format
+// (anything but json, yaml or text alone) prints data as gcloud's printer
+// of that name would (see the package documentation); json and yaml with
+// a projection print the projected data with clix's encoders. opts.Columns
+// are the columns of table, csv and value without a projection.
+//
 // --jq and --template cannot be combined, and --json, --jq or --template
-// with --format yaml or text on the command line is a usage error
-// (--format json is fine). A --format from the environment or the config
-// file gives way to them.
+// with --format yaml or text, or any gcloud format expression, on the
+// command line is a usage error (--format json is fine). A --format from
+// the environment or the config file gives way to them.
 //
 // Usage errors are returned before anything is written. A jq or template
 // error while running is returned after the output produced before it.
@@ -65,7 +72,10 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 	if out == nil {
 		out = os.Stdout
 	}
-	s := readSettings(app)
+	s, err := readSettings(app)
+	if err != nil {
+		return err
+	}
 	if err := s.check(); err != nil {
 		return err
 	}
@@ -79,6 +89,9 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 		}
 	}
 	if !s.json && s.jq == "" && s.template == "" {
+		if s.projection != nil {
+			return writeProjection(out, data, s.projection, opts)
+		}
 		opts.Format = OutputFormat(app)
 		return clix.FormatDataWith(out, data, opts)
 	}
@@ -126,19 +139,32 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 
 // settings are the output flags of one Run.
 type settings struct {
-	format        string // --format as given ("" when unset)
-	formatOnLine  bool   // --format was given on the command line
-	json          bool   // --json was given
+	projection    *projection.Format // a gcloud format expression in --format (Extension.Projections)
+	format        string             // --format as given, in lower case ("" when unset)
+	formatText    string             // --format as given
+	formatOnLine  bool               // --format was given on the command line
+	json          bool               // --json was given
 	fields        []string
 	jq, template  string
 	jsonFlagNames []string // the flags among --json, --jq and --template that were given
 }
 
-func readSettings(app *clix.App) settings {
+func readSettings(app *clix.App) (settings, error) {
 	var s settings
 	if v, ok := ours[*formatValue](app, "format"); ok {
-		s.format = strings.ToLower(v.s)
+		s.format, s.formatText = strings.ToLower(v.s), v.s
 		s.formatOnLine = app.Flags().Changed("format")
+		if v.projections && !isPlainFormat(v.s) {
+			f, err := parseProjection(v.s)
+			if err != nil {
+				return s, clix.UsageErrorf("invalid value for format: %w", err)
+			}
+			if (f.Name == clix.FormatJSON || f.Name == clix.FormatYAML) && !f.HasProjection {
+				s.format = f.Name // " json " and the like: the format itself
+			} else {
+				s.projection = f
+			}
+		}
 	}
 	if v, ok := ours[*fieldsValue](app, "json"); ok && v.set {
 		s.json, s.fields = true, v.fields
@@ -152,7 +178,7 @@ func readSettings(app *clix.App) settings {
 		s.template = v.s
 		s.jsonFlagNames = append(s.jsonFlagNames, "--template")
 	}
-	return s
+	return s, nil
 }
 
 // check reports flags that cannot be combined.
@@ -160,8 +186,12 @@ func (s settings) check() error {
 	if s.jq != "" && s.template != "" {
 		return clix.UsageErrorf("--jq and --template cannot be used together")
 	}
-	if len(s.jsonFlagNames) > 0 && s.formatOnLine && s.format != "" && s.format != clix.FormatJSON {
-		return clix.UsageErrorf("%s works on JSON output and cannot be used with --format %s", strings.Join(s.jsonFlagNames, " and "), s.format)
+	if len(s.jsonFlagNames) > 0 && s.formatOnLine && s.format != "" && (s.format != clix.FormatJSON || s.projection != nil) {
+		format := s.format
+		if s.projection != nil {
+			format = s.formatText
+		}
+		return clix.UsageErrorf("%s works on JSON output and cannot be used with --format %s", strings.Join(s.jsonFlagNames, " and "), format)
 	}
 	return nil
 }

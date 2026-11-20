@@ -3,6 +3,8 @@
 // Write, which prints a command's result as they ask. ListFlags adds the
 // Google Cloud CLI's list flags, --filter, --sort-by and --limit, to a
 // command whose result is a list; Write applies them first.
+// With Extension.Projections, --format also takes gcloud's format
+// expressions, such as table(name, zone:label=LOCATION).
 //
 // # The filter subset
 //
@@ -76,6 +78,41 @@
 // way; \d, \w, \s, \b and their negations, POSIX classes, inline flags,
 // lookaround, backreferences and regex flags are rejected because the
 // two engines disagree on them.
+//
+// # gcloud format projections
+//
+// With Extension{Projections: true}, --format also accepts a strict
+// subset of the Google Cloud CLI's format expressions,
+// NAME[ATTRIBUTES](PROJECTION) (see "gcloud topic formats" and "gcloud
+// topic projections"), which Write prints byte for byte as gcloud would
+// for the same JSON. json, yaml and text alone print as without
+// Projections.
+//
+//   - Formats: table, csv, value, flattened, list, json, yaml and none.
+//     table, csv and value without a projection print the columns of
+//     WriteWith's FormatOptions.Columns, or else every top-level field,
+//     in the order they first appear (gcloud's commands have a default
+//     projection instead).
+//   - Format attributes: table box, all-box, no-heading, title=, pad=;
+//     csv no-heading, no-quote, separator=, delimiter=, terminator=; value
+//     quote, separator=, delimiter=, terminator=; flattened no-pad,
+//     separator=; list compact, title=, always-display-title.
+//   - Keys: names, [N] indices (negative from the end) and [] slices,
+//     with the key attribute :label= (headings default to gcloud's
+//     ANGRY_SNAKE_CASE of the key), and for table :align=, :sort=N and
+//     :reverse.
+//   - Transforms: .len(), .basename() and .join(sep).
+//   - json and yaml with a projection print the projected resources with
+//     clix's encoders, as --format json and yaml do: JSON is what gcloud
+//     prints, and YAML is a sequence rather than gcloud's stream of
+//     documents.
+//
+// Anything else, such as gcloud's other formats and transforms (date()
+// among them), unknown attributes, or an order other than
+// NAME[ATTRIBUTES](PROJECTION), is a usage error that says it "is not
+// supported in clix --format", never different output. Tables print the
+// same on a terminal as in a pipe, as gcloud's do, with Unicode box
+// characters only in a UTF-8 locale.
 //
 // # Template helpers
 //

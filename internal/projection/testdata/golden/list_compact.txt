@@ -1,0 +1,3 @@
+ - web-1 us-central1-a
+ - batch-worker-12 europe-west1-b
+ - db us-central1-a

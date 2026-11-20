@@ -1,0 +1,4 @@
+NAME             ZONE            MACHINE_TYPE   STATUS      INTERNAL_IP  ENV
+web-1            us-central1-a   e2-medium      RUNNING     10.128.0.2   prod
+batch-worker-12  europe-west1-b  n2-highcpu-16  TERMINATED  10.132.0.7   dev
+db               us-central1-a   n2-standard-8  RUNNING     10.128.0.9
