@@ -18,18 +18,7 @@ import (
 // Errors are *resource.UnsupportedError values for what gcloud would do
 // that clix does not reproduce, or errors where gcloud fails too.
 func (f *Filter) Select(resources []any) ([]int, error) {
-	ev := &evaluator{f: f, states: map[*termNode]*termState{}}
-	var out []int
-	for i, r := range resources {
-		ok, err := ev.eval(f.root, r)
-		if err != nil {
-			return nil, unsupportedIn(err)
-		}
-		if ok {
-			out = append(out, i)
-		}
-	}
-	return out, nil
+	return f.Selector().Select(resources)
 }
 
 type evaluator struct {
