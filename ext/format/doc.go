@@ -1,6 +1,36 @@
 // Package format adds the GitHub CLI's output flags to a clix app:
 // --format, --json [fields], --jq and --template (see Extension), and
-// Write, which prints a command's result as they ask.
+// Write, which prints a command's result as they ask. ListFlags adds the
+// Google Cloud CLI's list flags, --filter, --sort-by and --limit, to a
+// command whose result is a list; Write applies them first.
+//
+// # The filter subset
+//
+// --filter is a strict subset of gcloud's filter expressions ("gcloud
+// topic filters"), implemented in clix as a port of gcloud's client-side
+// evaluator, with the standard library and golang.org/x/text only.
+// Within the subset, results are gcloud's, which differential tests
+// check against the gcloud library. Anything outside it is an error that
+// says it "is not supported in clix --filter", never a different result.
+//
+// Supported: terms key:pattern (contains, ignoring case, accents and HTML
+// tags, with one * anchoring it to a line: abc*, *abc, a*c; key:* is
+// true when key has a value), key=value (a line of the value equals it,
+// ignoring case and accents), key!=value, key<value, key<=value,
+// key>value and key>=value (numbers as numbers, dates and times as
+// instants, everything else by code point); lists of values key:(a b)
+// and key=(a,b); AND, OR and NOT in upper case, -term, juxtaposition (a
+// b is a AND b, below OR in precedence) and parentheses, with AND and OR
+// in one group a syntax error as in gcloud; keys as dotted paths with
+// [N] and [], quoted names, and gcloud's camelCase and snake_case
+// matching; quoted values.
+//
+// Not supported: ~ and !~, terms without an operator, transforms and the
+// * map shorthand in keys, [name] and [1.5] indices, : and lists of
+// values on dates and times, relative times (-P2W) and other date forms
+// gcloud's date parser reads, local times that daylight saving time
+// skips or repeats, and digits outside ASCII in numbers. FiltersTopic
+// describes the flags for users.
 //
 // # The jq subset
 //

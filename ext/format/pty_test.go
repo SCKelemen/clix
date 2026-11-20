@@ -46,3 +46,24 @@ func TestWriteOnTerminal(t *testing.T) {
 		}
 	}
 }
+
+// On a terminal, the list flags select the rows of the aligned table.
+func TestListFlagsOnTerminal(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("NO_COLOR", "1")
+	t.Setenv("TERM", "xterm-256color")
+	term := ptytest.New(t)
+	app := clix.NewApp("probe", clix.WithAppOut(term.TTY), clix.WithAppErr(&bytes.Buffer{}), clix.WithAppInteractive(clix.InteractiveNever))
+	app.AddExtension(format.Extension{})
+	app.Root.AddCommand(clix.NewCommand("list", format.WithListFlags(), clix.WithCommandRun(func(ctx *clix.Context) error {
+		return format.WriteWith(ctx, projects, clix.FormatOptions{Columns: []string{"projectId", "name", "labels.env"}})
+	})))
+	want := "PROJECT ID  NAME        LABELS ENV\nweb-test    Web (test)  test\nweb-prod    Web         prod\n"
+	if err := app.Run(context.Background(), []string{"list", "--filter", "name:web", "--sort-by", "~projectId", "--limit", "5"}); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.ReplaceAll(term.WaitOutput(t, strings.ReplaceAll(want, "\n", "\r\n"), 5*time.Second), "\r\n", "\n")
+	if got != want {
+		t.Errorf("on a terminal:\ngot  %q\nwant %q", got, want)
+	}
+}

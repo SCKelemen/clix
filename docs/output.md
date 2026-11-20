@@ -62,7 +62,7 @@ clix (42)
 
 ### The format extension
 
-`format.Extension{}` adds gh's output flags to the root: `--format` / `-f`, `--json [fields]`, `--jq` / `-q` and `--template` / `-t` (each short name unless your app uses it). `--format` takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. `--json`, `--jq` and `--template` are read from the command line only. All four flags are `Ambient` (see [Context flags](routing-and-flags.md#context-flags)), so `myapp --format json widgets create` still prompts for missing required flags. An app flag of the same name replaces the extension's, with the app's own options, and `format.Write` then ignores it. Shell completion offers `json`, `yaml` and `text` for `--format`. Print results with `format.Write(ctx, data)` (or `format.WriteWith` to choose table columns), which applies every flag; `format.OutputFormat(app)` returns the selected format for handlers that call `clix.FormatData` themselves, falling back to `text`, and `json` with `--json`. Without this extension there are no output flags; `config list` prints YAML and `version` prints text.
+`format.Extension{}` adds gh's output flags to the root: `--format` / `-f`, `--json [fields]`, `--jq` / `-q` and `--template` / `-t` (each short name unless your app uses it). `--format` takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. `--json`, `--jq` and `--template` are read from the command line only. All four flags are `Ambient` (see [Context flags](routing-and-flags.md#context-flags)), so `myapp --format json widgets create` still prompts for missing required flags. An app flag of the same name replaces the extension's, with the app's own options, and `format.Write` then ignores it. Shell completion offers `json`, `yaml` and `text` for `--format`. Print results with `format.Write(ctx, data)` (or `format.WriteWith` to choose table columns), which applies every flag; `format.OutputFormat(app)` returns the selected format for handlers that call `clix.FormatData` themselves, falling back to `text`, and `json` with `--json`. `format.ListFlags(cmd)` (or `format.WithListFlags()`) adds gcloud's `--filter`, `--sort-by` and `--limit` to a list command, which `format.Write` applies first, and `format.FiltersTopic` is a help topic about them (see [`--filter`, `--sort-by` and `--limit`](#--filter---sort-by-and---limit)). Without this extension there are no output flags; `config list` prints YAML and `version` prints text.
 
 ## Output formats
 
@@ -158,3 +158,54 @@ Besides `text/template`'s own functions (`and`, `or`, `not`, `len`, `index`, `sl
 | `timeago TIME` | `{{timeago .createdAt}}` | `less than a minute ago`, `about 3 hours ago`, `about 2 days ago`, `in about 1 hour` |
 | `timefmt LAYOUT TIME` | `{{timefmt "2006-01-02" .createdAt}}` | an RFC 3339 time in a Go time layout |
 | `hyperlink URL TEXT` | `{{hyperlink .url .name}}` | an OSC 8 terminal hyperlink when color is on, `TEXT` otherwise |
+
+## `--filter`, `--sort-by` and `--limit`
+
+Commands that list resources can take the Google Cloud CLI's list flags. They are opt-in per command, with `format.ListFlags(cmd)` or the command option `format.WithListFlags()`, and `format.Write` applies them, with or without the format extension:
+
+```go
+var projects []map[string]any
+
+list := clix.NewCommand("list", format.WithListFlags(),
+        clix.WithCommandRun(func(ctx *clix.Context) error {
+                return format.Write(ctx, projects) // a slice
+        }))
+app.AddHelpTopic("filters", "Filter, sort and limit lists", format.FiltersTopic) // optional: "myapp help filters"
+cmd.AddCommand(list)
+```
+
+```text
+$ myapp projects list --filter 'lifecycleState=ACTIVE AND labels.env=prod' --sort-by ~createTime --limit 5
+$ myapp projects list --filter 'name:web*' --json projectId,name
+$ myapp projects list --sort-by labels.env,~name --format yaml
+```
+
+| Flag | Does |
+| --- | --- |
+| `--filter EXPRESSION` | keeps the elements the expression selects (below) |
+| `--sort-by FIELD[,FIELD...]` | sorts them by those fields, ascending; `~FIELD` sorts by `FIELD` descending. Fields are keys of the JSON output: dotted paths such as `labels.env`, `[N]` for an element of a list and `[]` for its first element, as in gcloud. An empty value sorts nothing |
+| `--limit N` | keeps at most `N` (at least 1); `unlimited`, the default, keeps all |
+
+- **Order**: filter, then sort, then limit, then the output flags (`--format`, `--json`, `--jq`, `--template`) on what is left. This is the order gcloud applies them in (`_AddDisplayTaps` in its `calliope/display.py`). gcloud's help lists them as `--sort-by`, `--filter`, `--limit`; the result is the same because filtering keeps the order and the sort is stable.
+- **Sorting** follows gcloud's, which compares the text of the values (Python's `str()`, as gcloud does under Python 3): strings by code point, so `Z` sorts before `a`; numbers as text, so `10` sorts before `9` and `1.5`; a missing field and `null` as the text `None`; lists and objects by their Python text. Keys with the same direction form groups that are sorted from the last to the first with a stable sort, so the first key decides first and equal elements keep their order, in either direction.
+- **Where they come from**: the command line only (they depend on the command), and they are `Ambient`, so `myapp projects list --limit 5` still prompts for missing required flags when interactive. A flag the command already has keeps its meaning, and `format.Write` ignores it.
+- **What they apply to**: the value given to `format.Write`, which must be a list (or `nil`). A slice or array stays a slice of the same element type, so every output format prints the elements exactly as before; a value that encodes itself as a list is filtered as JSON. A single object is a usage error. Handlers that call `clix.FormatData` themselves ignore the flags.
+- **Errors**: an expression, field list or limit that does not parse is a usage error (exit status 2) before the command runs. A filter that clix cannot evaluate on the data exactly as gcloud would (below) is a usage error from `format.Write`, before anything is printed.
+
+### The filter subset
+
+`--filter` is a strict subset of gcloud's filter expressions (`gcloud topic filters`), implemented in clix (`internal/filter`, `internal/resource`) as a port of gcloud's own client-side evaluator. Within the subset the results are gcloud's: differential tests compare them with the gcloud library (opt-in, `CLIX_GCLOUD_SDK`; see `internal/gcloudtest`), over hand-written cases whose recorded gcloud results also run in CI, and over random filters and data. Anything outside the subset is an error that says it "is not supported in clix --filter", never a different result.
+
+| Supported | |
+| --- | --- |
+| Terms | `key:pattern` (contains, ignoring case, accents and HTML tags; one `*` anchors it to a line: `abc*` prefix, `*abc` suffix, `a*c` whole line; `key:*` is true when the key has a non-empty value), `key=value` (a line of the value equals it, ignoring case and accents), `key!=value`, `key<value`, `<=`, `>`, `>=` |
+| Lists of values | `key:(a b c)` and `key=(a,b,c)` match any of them |
+| Logic | `AND`, `OR`, `NOT` (upper case), `-term`, juxtaposition (`a b` is `a AND b`, with lower precedence than `OR`), parentheses. `AND` and `OR` in the same parentheses are a syntax error, as in gcloud: write `(a AND b) OR c` |
+| Keys | dotted paths, `[N]` and `[]`, quoted names (`"k.e.y".value`); `project_id` also finds `projectId` and the other way around; compute-style `items` metadata lists |
+| Values | words, `'quoted'` or `"quoted"` (a backslash escapes a quote) |
+
+- **Values that are lists** match when one of their elements does; for `:`, `=` and `!=`, objects match when one of their keys or values does. `key!=value` is true for a list when any element differs, while `-key=value` is false when any element is equal. A key `zone` or `region` alone also matches the part after the last `/` (`zone=us-central1-a` matches a zone URL).
+- **Numbers**: an operand that Python's `int()` or `float()` reads (`10`, `1.5`, `1e3`, `007`, `1_000`) compares numerically with values that are numbers or strings of numbers (`"10"` equals `10`); `true` and `false` are also `1` and `0`. Values compare with `<` and the others by code point otherwise, a value that is not a string by its Python text (`True`).
+- **Missing fields** are `null`, which equals the empty operand and `null`, compares as the empty string, and makes `key:*` false.
+- **Dates and times**: when the first non-empty value of a term (in list order) starts like a timestamp (`YYYY-MM-DD HH:MM:SS`, with `T` or a space), the term compares instants, as gcloud does: `createTime>=2018-01-15`. Operands and values must then be `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM[:SS[.F]]`, optionally with `Z` or an offset such as `+02:00`; without an offset, in the local time zone, as gcloud reads them.
+- **Not supported** (errors): the regular expression operators `~` and `!~`; terms without an operator (gcloud's global restrictions, such as a bare word); transforms in keys (`name.len()`) and the `*` map shorthand; `[name]` and `[1.5]` indices; `:` and lists of operands on dates and times; relative times such as `-P2W` and the other date forms gcloud's date parser reads (`2018`, `Jan 15 2018`); local times that daylight saving time skips or repeats; values of a date and time key that are not dates and times; digits outside ASCII in numbers. gcloud prints a warning when a `:` term would match differently under its planned new rules; clix evaluates the current rules and prints nothing.
