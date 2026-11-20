@@ -66,6 +66,13 @@ func (a *App) Run(ctx context.Context, args []string) error {
 		}
 	}
 
+	// Alias expansion can load a configuration before flag parsing. Keep the
+	// outer selection and its in-memory edits across every nested exit path.
+	if a.running && a.configurations {
+		end := a.enterNestedConfig()
+		defer end()
+	}
+
 	// Load configuration up front, but report a broken config file only after
 	// --help and --version have had a chance to run. With named
 	// configurations the file depends on --configuration, so it is loaded
@@ -606,6 +613,25 @@ func (a *App) prompter() Prompter {
 		in = a.In
 	}
 	return TextPrompter{In: in, Out: a.stderr()}
+}
+
+// enterNestedConfig isolates a profile switch. Reset on the nested manager
+// replaces its maps, leaving the outer manager intact. Runs using the same
+// file continue to share edits, including an explicit config reset.
+func (a *App) enterNestedConfig() func() {
+	outer := a.Config
+	loaded, path, loadErr := a.configLoaded, a.configLoadedPath, a.configLoadErr
+	if outer != nil {
+		inner := *outer
+		a.Config = &inner
+	}
+	return func() {
+		if outer != nil && a.Config != nil && a.configLoaded == loaded && a.configLoadedPath == path {
+			*outer = *a.Config
+		}
+		a.Config = outer
+		a.configLoaded, a.configLoadedPath, a.configLoadErr = loaded, path, loadErr
+	}
 }
 
 // ensureConfigLoaded loads the config file once. With named
