@@ -129,6 +129,7 @@ Key methods:
 - `ConfigDir() (string, error)` / `ConfigFile() (string, error)` - Locate the configuration directory and file (both create the directory, mode 0700; `Run` never does). With named configurations, `ConfigFile` is the file of the configuration in effect
 - `EnableConfigurations()`, `Configuration()`, `Configurations()`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` - Named configurations (see [Named configurations](configuration.md#named-configurations))
 - `IsInteractive() bool` - Whether a missing required flag will be prompted for (see [Non-interactive use](prompting-and-terminals.md#non-interactive-use))
+- `EnableQuiet(QuietOptions)`, `Quiet() bool` - The global `--quiet` flag (see [Quiet mode](prompting-and-terminals.md#quiet-mode---quiet))
 - `SaveConfig() error` - Persist `Config` values to the configuration file
 - `AddHelpTopic`, `HelpTopics`, `LookupHelpTopic` - Help topics; `SetAlias`, `ExpandAlias` and the other alias methods; `LookupPlugin`, `ListPlugins`, `PluginEnv` - see [Extensions](extensions.md)
 

@@ -4,7 +4,7 @@ Prompts and progress indicators write to `App.Err`, so what a command writes to 
 
 ## Structured output
 
-Structured output is opt-in and modeled on the GitHub CLI (`gh`). The format extension (`github.com/SCKelemen/clix/v2/ext/format`) registers four global flags: `--format`/`-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq`/`-q` and `--template`/`-t`. A handler prints its result with `format.Write`, which applies all of them:
+Structured output is opt-in and modeled on the GitHub CLI (`gh`). The format extension (`github.com/SCKelemen/clix/v2/ext/format`) registers four global flags: `--format`/`-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq`/`-q` and `--template`/`-t`. A handler prints its result with `format.Write`, which applies all of them. (A gcloud-like app that wants `-q` for `--quiet` can have it; `--jq` then keeps its long name only. See [Quiet mode](prompting-and-terminals.md#quiet-mode---quiet).)
 
 ```go
 import (
