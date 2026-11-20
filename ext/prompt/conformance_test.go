@@ -1,7 +1,8 @@
 package prompt_test
 
-// Conformance suite for the prompt options documented in the README
-// ("Core options" and "Advanced options"), in every mode:
+// Conformance suite for the prompt options documented in
+// docs/prompting-and-terminals.md ("Core options" and "Advanced options"),
+// in every mode:
 //
 //   - text: clix.TextPrompter reading a pipe (the core default)
 //   - line: prompt.TerminalPrompter with In not a terminal

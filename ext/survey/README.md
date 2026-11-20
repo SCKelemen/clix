@@ -8,6 +8,7 @@ The Survey extension enables chaining prompts together in a depth-first traversa
 - **Dynamic question flow**: Handlers can add new questions based on answers, creating conditional survey branches
 - **Functional style**: Chain prompts together using handlers that receive answers and can add more questions
 - **Recursive structures**: Support for loops and recursive question patterns (e.g., "add another child?" → add child → "add another child?")
+- **Every prompt type the prompter supports**: text input and confirm prompts with `clix.TextPrompter`; text input, confirm, select, and multi-select prompts with `prompt.TerminalPrompter` (from `ext/prompt`)
 
 ## Usage
 
@@ -89,9 +90,75 @@ if err := s.Run(); err != nil {
 }
 ```
 
+A question loops by pushing an earlier question again:
+
+```go
+questions := []survey.Question{
+    {
+        ID: "add-child",
+        Request: clix.PromptRequest{
+            Label: "Do you want to add a child?",
+            Options: []clix.SelectOption{
+                {Label: "Yes", Value: "yes"},
+                {Label: "No", Value: "no"},
+            },
+        },
+        Branches: map[string]survey.Branch{
+            "yes": survey.PushQuestion("child-name"),
+            "no":  survey.End(),
+        },
+    },
+    {
+        ID:      "child-name",
+        Request: clix.PromptRequest{Label: "Child's name"},
+        Branches: map[string]survey.Branch{
+            "": survey.PushQuestion("add-another"), // Default: always continue
+        },
+    },
+    {
+        ID: "add-another",
+        Request: clix.PromptRequest{
+            Label:   "Add another child?",
+            Confirm: true,
+        },
+        Branches: map[string]survey.Branch{
+            "y": survey.PushQuestion("child-name"), // Loop back
+            "n": survey.End(),
+        },
+    },
+}
+
+s := survey.NewFromQuestions(ctx, app.Prompter, questions, "add-child")
+if err := s.Run(); err != nil {
+    return err
+}
+```
+
+Questions can also be added one by one, then started:
+
+```go
+s := survey.New(ctx, app.Prompter)
+s.AddQuestion(survey.Question{
+    ID:       "name",
+    Request:  clix.PromptRequest{Label: "Name"},
+    Branches: map[string]survey.Branch{"": survey.End()},
+})
+s.Start("name")
+if err := s.Run(); err != nil {
+    return err
+}
+```
+
+The older fluent API does the same: `s.Question("name", clix.PromptRequest{Label: "Name"}).Then("choose")` asks `choose` next, and `.End()` ends the survey after a question.
+
 You can still mix in dynamic questions by calling `Survey.Ask` within branch handlers—`NewFromQuestions` simply seeds the initial tree.
 
-With `survey.WithUndoStack()`, users can press Esc or F12 to return to the previous question. Those keys are read by `prompt.TerminalPrompter` (from `ext/prompt`) on an interactive terminal; with the line-based `clix.TextPrompter`, users can still go back by answering `no` on the end card (`survey.WithEndCard()`).
+## Options
+
+- **`survey.WithUndoStack()`** lets users return to the previous question and change their answer. In raw mode (`prompt.TerminalPrompter` from `ext/prompt` on an interactive terminal) they press Esc or F12. In line mode (`clix.TextPrompter`, or input that is not a terminal) they type `back` at a text or confirm question. Going back restores the questions exactly as they were before that question was asked.
+- **`survey.WithEndCard()`** shows a formatted summary of all answers (with styling support; secret answers are masked) and asks for confirmation. If undo is enabled, users can answer `no` (or press Esc or F12 with `TerminalPrompter`) to go back and edit answers.
+- **`survey.WithEndCardText(text)`** replaces the end card's confirmation question.
+- **`survey.WithEndCardTheme(theme)`** styles the end card.
 
 ## Depth-First Traversal
 
@@ -107,14 +174,17 @@ Example flow:
 
 This prevents "topic jumping" - you complete a branch fully before moving on.
 
+The questions wait on a stack, which is last-in, first-out: questions added together with `Ask` are asked in the reverse of the order they were added. Add them in reverse to ask them in reading order, as the examples below do.
+
 ## Examples
 
 ### Simple Linear Survey
 
 ```go
 s := survey.New(ctx, app.Prompter)
-s.Ask(clix.PromptRequest{Label: "First name"}, nil)
+// Last in, first out: "First name" is asked first.
 s.Ask(clix.PromptRequest{Label: "Last name"}, nil)
+s.Ask(clix.PromptRequest{Label: "First name"}, nil)
 s.Run()
 ```
 
@@ -127,8 +197,9 @@ s.Ask(clix.PromptRequest{
     Confirm: true,
 }, func(answer string, s *survey.Survey) {
     if answer == "y" {
-        s.Ask(clix.PromptRequest{Label: "How many?"}, nil)
+        // Asks "How many?", then "Oldest child's name?".
         s.Ask(clix.PromptRequest{Label: "Oldest child's name?"}, nil)
+        s.Ask(clix.PromptRequest{Label: "How many?"}, nil)
     }
 })
 s.Run()
@@ -179,7 +250,7 @@ Register static questions and choose the first one to ask.
 
 ### `Survey.Ask(request clix.PromptRequest, handler func(answer string, survey *Survey))`
 
-Adds a question to the survey. The handler is called with the answer and can add more questions to the survey.
+Adds a question to the top of the survey's stack, so it is asked before the questions already waiting. The handler is called with the answer and can add more questions to the survey.
 
 ### `Survey.Run() error`
 
