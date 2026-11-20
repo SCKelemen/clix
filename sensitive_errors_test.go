@@ -59,3 +59,24 @@ func TestSensitiveValuesAreRedacted(t *testing.T) {
 		t.Fatalf("end-of-input error: %v", err)
 	}
 }
+
+type rejectingValue struct{}
+
+func (rejectingValue) Set(raw string) error {
+	return errors.New("invalid credential suffix " + strings.TrimPrefix(raw, "example-"))
+}
+func (rejectingValue) String() string { return "" }
+
+func TestSensitivePromptRedactsCustomValueError(t *testing.T) {
+	app, _ := newTestApp(t, "myapp", clix.WithAppIn(strings.NewReader("example-token\n")))
+	app.Interactive = clix.InteractiveAlways
+	app.Root.Run = noop
+	app.Flags().Var(clix.VarOptions{
+		FlagOptions: clix.FlagOptions{Name: "credential", Required: true, Sensitive: true},
+		Value:       rejectingValue{},
+	})
+	err := app.Run(t.Context(), []string{})
+	if err == nil || !strings.Contains(err.Error(), "--credential") || strings.Contains(err.Error(), "token") {
+		t.Fatalf("Run returned %v", err)
+	}
+}

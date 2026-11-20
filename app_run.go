@@ -795,6 +795,11 @@ func (a *App) trySetFromEnv(flag *Flag) (bool, error) {
 // text names a file (DecodeVar) reads it through r.
 func setAndValidate(r *fileReader, flag *Flag, raw string) error {
 	if err := flag.setValueWith(r, raw, ""); err != nil {
+		// File decoders already sanitize errors while retaining field paths.
+		// A custom Set error may quote just part of a sensitive value.
+		if _, fromFile := flag.Value.(fileReadingValue); flag.Sensitive && !fromFile {
+			return secretSetErr(flag, err)
+		}
 		return err
 	}
 	if flag.Validate != nil {
@@ -968,7 +973,7 @@ func (a *App) promptForRequiredFlags(ctx context.Context, cmd *Command, missing 
 			return err
 		}
 		if err := setAndValidate(a.files, flag, value); err != nil {
-			return fmt.Errorf("invalid value for --%s: %w", flag.Name, err)
+			return fmt.Errorf("invalid value for --%s: %w", flag.Name, redactErr(flag, err, value))
 		}
 		flag.set = true
 		flag.source = SourcePrompt
