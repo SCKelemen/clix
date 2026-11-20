@@ -353,6 +353,47 @@ An indicator ends once, at the first of `Done`, `Fail` (messages default to `don
 - **Ctrl-C**: the terminal is always put back. Under `App.Main`, the first signal cancels the context, which ends the indicator (`✗ Deploying: cancelled`) and shows the cursor. Without `Main`, on Unix, a running spinner also catches SIGINT and SIGTERM: it clears its line and shows the cursor, then delivers the signal again, so the signal has the effect it would have had without the indicator (the default action ends the process; a handler such as `signal.NotifyContext` receives it). On Windows it relies on the context.
 - Labels and messages are shown without escape sequences or control characters, so text from a server cannot move the cursor or break the line.
 
+## Logging and `--verbosity`
+
+Programs log what they are doing with `log/slog`, like gcloud's `WARNING: ...` and `DEBUG: ...` lines, and the person running them chooses how much to see with gcloud's global `--verbosity` flag. `app.EnableVerbosity()` registers it; `ctx.Logger()` (or `app.Logger()`) returns the app's `*slog.Logger`:
+
+```go
+var (
+        page     = 1
+        name     = "default"
+        err      error
+        projects []string
+)
+
+app := clix.NewApp("myapp")
+app.EnableVerbosity() // --verbosity=debug|info|warning|error|critical|none
+
+cmd.Run = func(ctx *clix.Context) error {
+        log := ctx.Logger()
+        log.Debug("fetching projects", "page", page)            // shown with --verbosity=debug
+        log.Info("using configuration", "name", name)           // info and below
+        log.Warn("quota almost used", "used", 95, "limit", 100) // the default shows warnings and above
+        log.Error("could not refresh token", "err", err)
+        log.Log(ctx, clix.LevelCritical, "credentials file is world-readable")
+        return format.Write(ctx, projects)                      // data goes to App.Out, logs never do
+}
+```
+
+```text
+$ myapp projects list --verbosity debug
+DEBUG: fetching projects page=1
+INFO: using configuration name=default
+WARNING: quota almost used used=95 limit=100
+```
+
+- **Levels**: `debug`, `info`, `warning` (the default), `error`, `critical` and `none`, which are `slog.LevelDebug`, `slog.LevelInfo`, `slog.LevelWarn`, `slog.LevelError`, `clix.LevelCritical` and `clix.LevelNone`. Each shows its own level and those above it; `none` shows nothing. Case is ignored.
+- **Sources**: the command line, then `<PREFIX>_VERBOSITY` (`MYAPP_VERBOSITY=debug`), then the `verbosity` config key (`myapp config set verbosity info`), then `warning`. The variable and the key are read even when `App.AutoEnv` or `App.AutoConfig` is off. Any other value is a usage error (exit status 2) that lists the levels, wherever it comes from, and shell completion offers the six levels.
+- **Ambient**: `--verbosity` says how much to log, not what to do, so `myapp --verbosity debug widgets create` still prompts for missing required flags (see [Context flags](routing-and-flags.md#context-flags)).
+- **Output**: one line per record on `App.Err` (as it is when the record is written), never `App.Out`: the level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`; other levels as slog names them, such as `INFO+2`), a colon, the message and the attributes as slog's text handler writes them (`key=value`, quoted when needed, groups as dotted keys), with no timestamp. Put untrusted values in attributes: they are quoted and escaped. A message with control characters is quoted too.
+- **Without `EnableVerbosity`** the logger works the same at the warning level, and an app flag named `--verbosity` replaces the global one (the logger then stays at warning), as app flags win over extensions'.
+- **When**: `Run` sets the level after reading the flags and before `PreRun` runs; every `Run` starts from `warning`, and a `Run` started by a handler puts the outer level back when it returns. Before the first `Run` the level is `warning`.
+- **Other handlers**: `app.LogLevel()` is the level in effect, a read-only `slog.Leveler`, so records can go elsewhere with the same filtering: `slog.New(slog.NewJSONHandler(f, &slog.HandlerOptions{Level: app.LogLevel()}))`.
+
 ## Styling
 
 Optional styling hooks allow integration with packages like [`lipgloss`](https://github.com/charmbracelet/lipgloss):

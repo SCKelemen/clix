@@ -151,6 +151,7 @@ type App struct {
 	configLoadErr error
 
 	configurations   bool   // EnableConfigurations was called
+	verbosity        bool   // EnableVerbosity was called
 	quiet            bool   // EnableQuiet was called
 	configLoadedPath string // the file Config was loaded from
 
@@ -173,6 +174,7 @@ type App struct {
 	topics []HelpTopic // added with AddHelpTopic
 
 	progress progressBoard // the progress indicators writing to Err (see Context.Progress)
+	logging  logState      // the logger and its level (see Logger and EnableVerbosity)
 	inMain   atomic.Bool   // Main is running the app, so it handles SIGINT and SIGTERM
 
 	ranPlugin bool // the last Run ran a plugin, whose exit status Main passes on

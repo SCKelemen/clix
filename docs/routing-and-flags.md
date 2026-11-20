@@ -130,6 +130,7 @@ Key methods:
 - `EnableConfigurations()`, `Configuration()`, `Configurations()`, `CreateConfiguration`, `ActivateConfiguration`, `DeleteConfiguration`, `RenameConfiguration` - Named configurations (see [Named configurations](configuration.md#named-configurations))
 - `IsInteractive() bool` - Whether a missing required flag will be prompted for (see [Non-interactive use](prompting-and-terminals.md#non-interactive-use))
 - `EnableQuiet(QuietOptions)`, `Quiet() bool` - The global `--quiet` flag (see [Quiet mode](prompting-and-terminals.md#quiet-mode---quiet))
+- `EnableVerbosity()`, `Logger() *slog.Logger`, `LogLevel() slog.Leveler` - The global `--verbosity` flag and the app's logger (see [Logging and `--verbosity`](prompting-and-terminals.md#logging-and---verbosity))
 - `SaveConfig() error` - Persist `Config` values to the configuration file
 - `AddHelpTopic`, `HelpTopics`, `LookupHelpTopic` - Help topics; `SetAlias`, `ExpandAlias` and the other alias methods; `LookupPlugin`, `ListPlugins`, `PluginEnv` - see [Extensions](extensions.md)
 
