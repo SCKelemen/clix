@@ -853,7 +853,7 @@ $ myapp instances list --format 'table[box,title=Instances](name, cpus:align=rig
 └─────────────────┴──────┘
 ```
 
-clix implements a strict subset of gcloud's formats (`gcloud topic formats` and `gcloud topic projections`), ported from the Cloud SDK's own printers. Within the subset the output is byte for byte what gcloud prints for the same JSON, which differential tests check against an installed Cloud SDK (set `CLIX_GCLOUD_SDK` and `CLIX_GCLOUD_PYTHON`; see `internal/gcloudtest`) and golden files check in CI. Anything outside it is a usage error that says it "is not supported in clix --format", never different output.
+clix implements a strict subset of gcloud's formats (`gcloud topic formats` and `gcloud topic projections`), ported from the Cloud SDK's own printers. Within the subset the output is byte for byte what gcloud prints for the same JSON, which differential tests check against an installed Cloud SDK (set `CLIX_GCLOUD_SDK` and `CLIX_GCLOUD_PYTHON`; see `internal/gcloudtest`) and golden files check in CI. Anything outside it is an error that says it "is not supported in clix --format" (a usage error before the command runs when it is in the expression), never different output.
 
 | Format | Attributes | Prints |
 | --- | --- | --- |

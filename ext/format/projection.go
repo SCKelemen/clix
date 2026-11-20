@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/SCKelemen/clix/v2"
@@ -63,7 +62,7 @@ func projectionError(err error) error {
 	var unsupported *resource.UnsupportedError
 	switch {
 	case errors.As(err, &unsupported):
-		return fmt.Errorf("%s is not supported in clix --format", unsupported.What)
+		return unsupportedIn(err, "--format")
 	case errors.Is(err, projection.ErrNeedsProjection):
 		return clix.UsageErrorf("--%w", err)
 	}

@@ -2,7 +2,6 @@ package projection
 
 import (
 	"bytes"
-	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,7 +10,9 @@ import (
 	"github.com/SCKelemen/clix/v2/internal/resource"
 )
 
-var update = flag.Bool("update", false, "rewrite the golden files in testdata/golden")
+// update rewrites the golden files in testdata/golden (go test -update),
+// the flag that also records gcloud's results (see gcloudtest.Golden).
+var update = gcloudtest.Update
 
 // goldenCases print testdata/instances.json. Each output is in
 // testdata/golden/<name>.txt; TestGoldenMatchesGcloud checks that each is

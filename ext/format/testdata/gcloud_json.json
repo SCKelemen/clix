@@ -1,0 +1,11 @@
+{"input_sha256": "17039692af59f2580d3642818a49bf72b4f055d1e11cc884f98b4ec1cf38f09f", "output": [
+"[\n  {\n    \"name\": \"clix\",\n    \"owner\": {\n      \"login\": \"sam\"\n    }\n  },\n  {\n    \"name\": \"jq\"\n  }\n]\n",
+"{\n  \"name\": \"clix\",\n  \"owner\": {\n    \"login\": \"sam\"\n  }\n}\n",
+"[\n  {\n    \"labels\": [\n      {\n        \"name\": \"cli\"\n      },\n      {\n        \"name\": \"go\"\n      }\n    ],\n    \"stars\": 42,\n    \"url\": \"clix\"\n  },\n  {\n    \"labels\": [],\n    \"stars\": 7,\n    \"url\": \"jq\"\n  }\n]\n",
+"{\n  \"labels\": [\n    {\n      \"name\": \"cli\"\n    },\n    {\n      \"name\": \"go\"\n    }\n  ],\n  \"stars\": 42,\n  \"url\": \"clix\"\n}\n",
+"[\n  {\n    \"createdAt\": \"2026-11-17T12:00:00Z\",\n    \"owner\": {\n      \"id\": 1,\n      \"login\": \"sam\"\n    }\n  },\n  {\n    \"createdAt\": \"2025-01-01T00:00:00Z\",\n    \"owner\": null\n  }\n]\n",
+"{\n  \"createdAt\": \"2026-11-17T12:00:00Z\",\n  \"owner\": {\n    \"id\": 1,\n    \"login\": \"sam\"\n  }\n}\n",
+"[\n  {\n    \"createdAt\": \"2026-11-17T12:00:00Z\",\n    \"displayName\": \"CLI kit\",\n    \"labels\": [\n      {\n        \"color\": \"green\",\n        \"name\": \"cli\"\n      },\n      {\n        \"color\": \"blue\",\n        \"name\": \"go\"\n      }\n    ],\n    \"name\": \"clix\",\n    \"owner\": {\n      \"id\": 1,\n      \"login\": \"sam\"\n    },\n    \"stars\": 42,\n    \"url\": \"https://example.com/clix\"\n  },\n  {\n    \"createdAt\": \"2025-01-01T00:00:00Z\",\n    \"displayName\": \"Query <&>\",\n    \"labels\": [],\n    \"name\": \"jq\",\n    \"owner\": null,\n    \"stars\": 7,\n    \"url\": \"https://example.com/jq\"\n  }\n]\n",
+"{\n  \"createdAt\": \"2026-11-17T12:00:00Z\",\n  \"displayName\": \"CLI kit\",\n  \"labels\": [\n    {\n      \"color\": \"green\",\n      \"name\": \"cli\"\n    },\n    {\n      \"color\": \"blue\",\n      \"name\": \"go\"\n    }\n  ],\n  \"name\": \"clix\",\n  \"owner\": {\n    \"id\": 1,\n    \"login\": \"sam\"\n  },\n  \"stars\": 42,\n  \"url\": \"https://example.com/clix\"\n}\n"
+]}
+

@@ -1,7 +1,6 @@
 package format
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -9,7 +8,6 @@ import (
 	"github.com/SCKelemen/clix/v2"
 	"github.com/SCKelemen/clix/v2/internal/jq"
 	"github.com/SCKelemen/clix/v2/internal/projection"
-	"github.com/SCKelemen/clix/v2/internal/resource"
 )
 
 // Extension registers the output flags on the app root, modeled on the
@@ -270,11 +268,10 @@ func validateProjectionFormat(value string) error {
 // does not support as --format's.
 func parseProjection(value string) (*projection.Format, error) {
 	f, err := projection.Parse(value)
-	var unsupported *resource.UnsupportedError
-	if errors.As(err, &unsupported) {
-		return nil, fmt.Errorf("%s is not supported in clix --format", unsupported.What)
+	if err != nil {
+		return nil, unsupportedIn(err, "--format")
 	}
-	return f, err
+	return f, nil
 }
 
 // splitFields splits a --json value on commas, trimming spaces and

@@ -300,7 +300,7 @@ func TestProjectedJSONMatchesGcloud(t *testing.T) {
 		cases = append(cases, c{f, formatJSON(t, wRepos)}, c{f, formatJSON(t, wRepos[0])})
 	}
 	var want []string
-	gcloudtest.Run(t, jsonPrinterScript, cases, &want)
+	gcloudtest.Golden(t, "testdata/gcloud_json.json", jsonPrinterScript, cases, &want)
 	for i, cs := range cases {
 		app, out, ran := projApp(t, format.Extension{Projections: true})
 		cmd := "list"

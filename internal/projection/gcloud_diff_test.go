@@ -120,6 +120,9 @@ var diffFormats = []string{
 	"flattened[no-pad,separator='=']", "list[compact,title=T]", "value[quote,separator=';',delimiter=','](tags,name)",
 }
 
+// TestPrintMatchesGcloud compares every format of diffFormats on every
+// document of diffDocs with gcloud, or without gcloud, with its recorded
+// output (see gcloudtest.Golden).
 func TestPrintMatchesGcloud(t *testing.T) {
 	var cases []printCase
 	for _, d := range diffDocs {
@@ -128,7 +131,7 @@ func TestPrintMatchesGcloud(t *testing.T) {
 		}
 	}
 	var want []printResult
-	gcloudtest.Run(t, printScript, cases, &want)
+	gcloudtest.Golden(t, "testdata/gcloud_print.json", printScript, cases, &want)
 	compared := 0
 	for i, c := range cases {
 		w := want[i]
