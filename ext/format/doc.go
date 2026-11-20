@@ -34,6 +34,27 @@
 // skips or repeats, and digits outside ASCII in numbers. FiltersTopic
 // describes the flags for users.
 //
+// # Filters and sorting as operations
+//
+// The list flags are also available as values a command uses on its own,
+// on records rather than in what Write prints: ParseFilter returns a
+// *Filter, whose Select returns the indices of the records it selects;
+// ParseSortBy returns a SortBy, whose Sort returns their order; and
+// ListOptions (with ApplyList for a slice) applies a filter, a sort and
+// a limit in gcloud's order. Records are read as their --format json
+// output, and Write applies the flags with the same code, so the
+// operations keep exactly the records Write prints. A FilterSelector
+// evaluates a list that comes in pages as one list.
+//
+// Filter.Expr returns the parse tree, read only: *FilterTerm (key,
+// operator and operands), *FilterAnd, *FilterOr and *FilterNot, and
+// NewFilter evaluates a subtree on its own. Filter.Split divides a filter
+// into the conjuncts a server can evaluate, such as an AIP-160 filter in
+// a List request, and the rest, which the client evaluates on what the
+// server returns. The rest is ANDed with the server's part, so evaluating
+// it can only narrow the server's results; see Split for when the
+// result is exactly the filter's.
+//
 // # The jq subset
 //
 // --jq is implemented in clix with the standard library only, as a strict
