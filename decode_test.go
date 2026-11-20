@@ -367,3 +367,67 @@ server:
 		t.Errorf("the target changed: %+v", s)
 	}
 }
+
+func TestStructuredConfigSurvivesSave(t *testing.T) {
+	path := writeTestFile(t, t.TempDir(), "config.yaml", `
+region.hosts:
+  - {}
+  - name: first
+    tags: [a, 'b,c']
+    ports: {'0': 0755}
+    children: [[{name: old}, {}]]
+  - null
+  - {}
+`)
+	m := clix.NewConfigManager("app")
+	if err := m.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	m.Set("region.hosts.1.children.0.0.name", "new")
+	m.Set("unrelated", "updated")
+	want := []any{map[string]any{}, map[string]any{
+		"name": "first", "tags": []any{"a", "b,c"},
+		"ports":    map[string]any{"0": float64(493)},
+		"children": []any{[]any{map[string]any{"name": "new"}, map[string]any{}}},
+	}, nil, map[string]any{}}
+	for _, phase := range []string{"before save", "after reload"} {
+		if phase == "after reload" {
+			if err := m.Save(path); err != nil {
+				t.Fatal(err)
+			}
+			m = clix.NewConfigManager("app")
+			if err := m.Load(path); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var got []any
+		if err := m.Decode("region.hosts", &got); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: got %#v, want %#v", phase, got, want)
+		}
+		if mode, ok := m.Get("region.hosts.1.ports.0"); !ok || mode != "0755" {
+			t.Errorf("%s: mode = %q, %v", phase, mode, ok)
+		}
+	}
+}
+
+func TestConfigDepthLimitLeavesPreviousValuesIntact(t *testing.T) {
+	doc := "field: " + strings.Repeat("[", 300) + "0" + strings.Repeat("]", 300)
+	m := clix.NewConfigManager("app")
+	m.Set("keep", "previous")
+	if err := m.Load(writeTestFile(t, t.TempDir(), "deep.yaml", doc)); err == nil || !strings.Contains(err.Error(), "nesting") {
+		t.Fatalf("Load returned %v", err)
+	}
+	if values := m.Values(); !reflect.DeepEqual(values, map[string]string{"keep": "previous"}) {
+		t.Fatalf("values after failed load: %v", values)
+	}
+	var target any = "previous"
+	if err := clix.UnmarshalStrict([]byte(doc), &target); err == nil || !strings.Contains(err.Error(), "nesting") {
+		t.Fatalf("UnmarshalStrict returned %v", err)
+	}
+	if target != "previous" {
+		t.Fatalf("target after failed decode: %v", target)
+	}
+}

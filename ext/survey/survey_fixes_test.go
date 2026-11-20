@@ -209,3 +209,18 @@ func TestSurveyEndCardASCIIBullets(t *testing.T) {
 		t.Fatalf("end card in a C locale:\n%s", sp.out.String())
 	}
 }
+
+func TestDynamicSurveyEndCardMasksSecrets(t *testing.T) {
+	out := &bytes.Buffer{}
+	in := strings.NewReader("password-example\npublic answer\ny\n")
+	s := survey.New(t.Context(), clix.TextPrompter{In: in, Out: out}, survey.WithEndCard())
+	s.Ask(clix.PromptRequest{Label: "Name"}, nil)
+	s.Ask(clix.PromptRequest{Label: "Password", Secret: true}, nil)
+	if err := s.Run(); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if strings.Contains(got, "password-example") || !strings.Contains(got, "********") || !strings.Contains(got, "public answer") {
+		t.Fatalf("end card: %q", got)
+	}
+}

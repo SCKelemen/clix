@@ -153,3 +153,57 @@ func TestActivateConfigurationIsAtomic(t *testing.T) {
 		}
 	}
 }
+
+func TestNestedRunRestoresNamedConfiguration(t *testing.T) {
+	app, _ := newConfigurationsApp(t)
+	for _, name := range []string{"prod", "dev"} {
+		if err := app.CreateConfiguration(name); err != nil {
+			t.Fatal(err)
+		}
+		path, err := app.ConfigurationFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("account: "+name+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	app.Root.AddCommand(clix.NewCommand("inner", clix.WithCommandRun(func(ctx *clix.Context) error {
+		if got, _ := ctx.String("account"); got != "dev" {
+			t.Fatalf("inner account = %q", got)
+		}
+		return nil
+	})))
+	app.Root.AddCommand(clix.NewCommand("outer", clix.WithCommandRun(func(ctx *clix.Context) error {
+		app.Config.Set("account", "edited")
+		if err := app.Run(ctx, []string{"--configuration", "dev", "inner"}); err != nil {
+			return err
+		}
+		if err := app.Run(ctx, []string{"--configuration", "missing", "inner"}); !errors.Is(err, clix.ErrConfigurationNotFound) {
+			t.Fatalf("missing configuration: %v", err)
+		}
+		if name, _, err := app.Configuration(); err != nil || name != "prod" {
+			t.Fatalf("outer config = %q, %v", name, err)
+		}
+		if got, _ := ctx.String("account"); got != "edited" {
+			t.Fatalf("outer account = %q", got)
+		}
+		return app.SaveConfig()
+	})))
+	if err := app.Run(t.Context(), []string{"--configuration", "prod", "outer"}); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"prod": "edited", "dev": "dev"} {
+		path, err := app.ConfigurationFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != "account: "+want+"\n" {
+			t.Fatalf("%s holds %q, %v", name, data, err)
+		}
+	}
+	if _, err := os.Stat(app.ConfigPath); !os.IsNotExist(err) {
+		t.Fatalf("default config: %v", err)
+	}
+}

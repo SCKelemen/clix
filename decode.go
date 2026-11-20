@@ -149,6 +149,43 @@ type decodeOptions struct {
 // aliases and merge keys before strict decoding gives up.
 const maxDecodeNodes = 1 << 20
 
+const maxYAMLDepth = 256
+
+// checkYAMLGraph validates the expanded YAML graph before flattening it or building paths.
+// An alias may refer to any ancestor. Repeated references to a completed
+// node are legal, but each expansion counts toward the document limit.
+func checkYAMLGraph(root *yaml.Node) error {
+	active := make(map[*yaml.Node]bool)
+	remaining := maxDecodeNodes
+	var visit func(*yaml.Node, int) error
+	visit = func(n *yaml.Node, depth int) error {
+		if depth > maxYAMLDepth {
+			return fmt.Errorf("line %d: YAML nesting exceeds %d levels", n.Line, maxYAMLDepth)
+		}
+		remaining--
+		if remaining < 0 {
+			return fmt.Errorf("the document expands to more than %d nodes (YAML aliases)", maxDecodeNodes)
+		}
+		if n.Kind == yaml.AliasNode {
+			if active[n.Alias] {
+				return fmt.Errorf("line %d: cyclic YAML alias", n.Line)
+			}
+			return visit(n.Alias, depth+1)
+		}
+		if len(n.Content) != 0 {
+			active[n] = true
+			for _, child := range n.Content {
+				if err := visit(child, depth+1); err != nil {
+					return err
+				}
+			}
+			delete(active, n)
+		}
+		return nil
+	}
+	return visit(root, 0)
+}
+
 // maxStrictProblems is how many problems a StrictError lists.
 const maxStrictProblems = 64
 
@@ -181,6 +218,9 @@ func decodeDocument(data []byte, v any, o decodeOptions) error {
 			return nil
 		}
 		n = n.Content[0]
+	}
+	if err := checkYAMLGraph(n); err != nil {
+		return o.wrap(err)
 	}
 	c := newYAMLConverter(o.base)
 	root, err := c.convert(n, "", nil)

@@ -163,12 +163,12 @@ func Handler(fn func(answer string, s *Survey)) Branch {
 //	)
 //	s.Run()
 type Survey struct {
-	prompter    clix.Prompter
-	ctx         context.Context
-	stack       []*Question
-	answers     []string
-	questionIDs []string             // Track question IDs in order for end card summary
-	questions   map[string]*Question // Static question registry
+	prompter          clix.Prompter
+	ctx               context.Context
+	stack             []*Question
+	answers           []string
+	answeredQuestions []*Question          // The actual question asked, including dynamic questions.
+	questions         map[string]*Question // Static question registry
 
 	// Undo/back functionality
 	withUndoStack bool
@@ -266,12 +266,11 @@ func (o endCardOption) Apply(s *Survey) {
 //	)
 func New(ctx context.Context, prompter clix.Prompter, options ...SurveyOption) *Survey {
 	s := &Survey{
-		prompter:    prompter,
-		ctx:         ctx,
-		stack:       make([]*Question, 0),
-		answers:     make([]string, 0),
-		questionIDs: make([]string, 0),
-		questions:   make(map[string]*Question),
+		prompter:  prompter,
+		ctx:       ctx,
+		stack:     make([]*Question, 0),
+		answers:   make([]string, 0),
+		questions: make(map[string]*Question),
 	}
 
 	// Apply options
@@ -330,7 +329,6 @@ func (s *Survey) Start(questionID string) {
 // For static surveys, use AddQuestion() or NewFromQuestions() instead.
 func (s *Survey) Ask(request clix.PromptRequest, handler func(answer string, survey *Survey)) {
 	q := &Question{
-		ID:       fmt.Sprintf("_dynamic_%d", len(s.questions)),
 		Request:  request,
 		Branches: map[string]Branch{"": HandlerBranch{Handler: handler}},
 	}
@@ -400,12 +398,12 @@ func (s *Survey) handleGoBack(current *Question) {
 		// waiting at that point.
 		s.stack = append(s.stack[:0], lastEntry.stack...)
 
-		// Remove the last saved answer/question id
+		// Remove the last saved answer and its question.
 		if len(s.answers) > 0 {
 			s.answers = s.answers[:len(s.answers)-1]
 		}
-		if len(s.questionIDs) > 0 {
-			s.questionIDs = s.questionIDs[:len(s.questionIDs)-1]
+		if len(s.answeredQuestions) > 0 {
+			s.answeredQuestions = s.answeredQuestions[:len(s.answeredQuestions)-1]
 		}
 
 		return
@@ -550,9 +548,9 @@ func (s *Survey) Run() error {
 			return fmt.Errorf("prompt failed: %w", err)
 		}
 
-		// Save answer and question ID
+		// Keep the question with its answer for the end card.
 		s.answers = append(s.answers, answer)
-		s.questionIDs = append(s.questionIDs, question.ID)
+		s.answeredQuestions = append(s.answeredQuestions, question)
 
 		// If undo is enabled, save to history before executing branch
 		// This happens even if branch might clear the stack - we need history for undo
@@ -692,31 +690,21 @@ func (s *Survey) renderSummary(out io.Writer) {
 
 	// Render each question/answer pair with styling
 	for i, answer := range s.answers {
-		if i >= len(s.questionIDs) {
+		if i >= len(s.answeredQuestions) {
 			continue
 		}
-		questionID := s.questionIDs[i]
-		question, ok := s.questions[questionID]
-		if !ok {
-			// Handle dynamic questions that might not be in registry
-			if strings.HasPrefix(questionID, "_dynamic_") {
-				// For dynamic questions, just show the answer
-				styledAnswer := answer
-				if theme.DefaultStyle != nil {
-					styledAnswer = renderText(theme.DefaultStyle, answer)
-				}
-				_, _ = fmt.Fprintf(out, "  %s %s\n", bullet, styledAnswer)
-			}
-			continue
-		}
-
-		// Get question label
-		label := question.Request.Label
-		if label == "" {
-			label = questionID
-		}
+		question := s.answeredQuestions[i]
 		if question.Request.Secret {
 			answer = secretMask
+		}
+		if s.questions[question.ID] != question {
+			// Dynamic questions have always displayed just the answer.
+			_, _ = fmt.Fprintf(out, "  %s %s\n", bullet, renderText(theme.DefaultStyle, answer))
+			continue
+		}
+		label := question.Request.Label
+		if label == "" {
+			label = question.ID
 		}
 
 		// Render with styles (compatible with lipgloss.Style)
