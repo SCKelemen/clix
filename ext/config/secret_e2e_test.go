@@ -71,7 +71,8 @@ func TestConfigE2E_SecretsAreNotPrinted(t *testing.T) {
 		t.Errorf("config list --format json:\n%s", got)
 	}
 	got, err := tryRun(app, out, "config", "get", "token")
-	if err == nil || got != "" || strings.Contains(err.Error(), "s3cr3t") || !strings.Contains(err.Error(), "--reveal") || clix.ExitCode(err) != 1 {
+	// Without --reveal the call is incomplete: a usage error.
+	if err == nil || got != "" || strings.Contains(err.Error(), "s3cr3t") || !strings.Contains(err.Error(), "--reveal") || clix.ExitCode(err) != 2 {
 		t.Errorf("config get token: out %q, err %v", got, err)
 	}
 	if got := run(t, app, out, "config", "get", "token", "--reveal"); got != "s3cr3t\n" {

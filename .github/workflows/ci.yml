@@ -46,6 +46,9 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Includes TestDocsCompile and TestDocsLinks (docs_test.go), which
+      # compile the Go code blocks of every Markdown file against the
+      # working tree and check relative links.
       - name: Test
         run: go test -race ./...
 

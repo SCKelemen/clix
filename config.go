@@ -35,7 +35,9 @@ type ConfigManager struct {
 	numbers map[string]string     // decimal form of YAML numbers written as 0x1F, 0755, 1e3, ...
 	lists   map[string][]string   // the items of YAML lists of scalars, for slice flags
 	nodes   map[string]*yaml.Node // the YAML node each loaded key came from, which Save writes back
+	seqs    map[string]bool       // keys that held YAML lists of maps or lists, flattened with indexes (see Decode)
 	schemas map[string]ConfigSchema
+	path    string // the file last loaded, for messages
 }
 
 // ConfigType represents the desired type for a configuration value.
@@ -170,9 +172,17 @@ func (m *ConfigManager) Load(path string) error {
 		lists:   make(map[string][]string),
 		nodes:   make(map[string]*yaml.Node),
 		weak:    make(map[string]bool),
+		seqs:    make(map[string]bool),
 	}
 	if err := f.document(&doc); err != nil {
 		return fmt.Errorf("config file %s: %w", path, err)
+	}
+	m.path = path
+	if m.seqs == nil {
+		m.seqs = make(map[string]bool)
+	}
+	for k := range f.seqs {
+		m.seqs[k] = true
 	}
 
 	if m.values == nil {
@@ -212,6 +222,7 @@ type flattener struct {
 	lists   map[string][]string // items of lists of scalars
 	nodes   map[string]*yaml.Node
 	weak    map[string]bool // keys set through a merge key, which later keys may override
+	seqs    map[string]bool // keys of lists flattened with indexes
 }
 
 // document flattens the top-level mapping of doc.
@@ -341,6 +352,7 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 			}
 			return f.set(key, strings.Join(parts, ","), "", parts, n, weak)
 		}
+		f.seqs[key] = true
 		for i, item := range n.Content {
 			if err := f.value(key+"."+strconv.Itoa(i), item, weak); err != nil {
 				return err
@@ -629,6 +641,8 @@ func (m *ConfigManager) Reset() {
 	m.numbers = nil
 	m.lists = nil
 	m.nodes = nil
+	m.seqs = nil
+	m.path = ""
 }
 
 // Values returns a copy of the stored values.
