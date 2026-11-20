@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.9.0] - 2026-11-20
+
 ### Added
 
 - `TestDocsCompile` and `TestDocsLinks` (`docs_test.go`), run by `go test ./...` and so by CI: every ```` ```go ```` block of every Markdown file is compiled against the working tree, with errors reported at the Markdown file and line, and relative links and their `#anchors` must resolve. A block that starts with `// Abridged` is a reference listing and is not compiled. This replaces a script that was run by hand.
@@ -47,7 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Dependencies
 
-- `golang.org/x/text`, for the Unicode decomposition (NFKD) with which `--filter` ignores accents as gcloud does.
 - `golang.org/x/text`, for the Unicode decomposition (NFKD) with which `--filter` ignores accents as gcloud does, and the East Asian widths of gcloud's table layout.
 
 ## [2.8.0] - 2026-11-19
@@ -326,7 +327,8 @@ Prepared as 1.0.0 (commit 464e98b, "Prepare for v1.0.0 release") but tagged as t
 - `ext/survey` – Chained prompts with branching logic
 - `ext/validation` – Common validation functions
 
-[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.8.0...HEAD
+[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.9.0...HEAD
+[2.9.0]: https://github.com/SCKelemen/clix/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/SCKelemen/clix/compare/v2.7.0...v2.8.0
 [2.7.0]: https://github.com/SCKelemen/clix/compare/v2.6.0...v2.7.0
 [2.6.0]: https://github.com/SCKelemen/clix/compare/v2.5.0...v2.6.0
