@@ -171,6 +171,8 @@ Three flag types take times and durations, using the [`iso8601`](../iso8601) pac
 - **`DurationVar`** binds a `time.Duration` and accepts Go's syntax (`90s`, `1h30m`) as before, and also ISO 8601 (`PT5M`, `P1DT12H`, `-PT2H`), as `--format json` and `yaml` print durations. Years and months are rejected (`duration "P1M" has years or months, whose length depends on the calendar`), and a day is 24 hours. Every value it accepted before reads the same, and the value still prints as `5m0s`.
 
 ```go
+import "github.com/SCKelemen/clix/v2/iso8601"
+
 var since time.Time
 var every iso8601.Duration
 cmd.Flags.TimeVar(clix.TimeVarOptions{
