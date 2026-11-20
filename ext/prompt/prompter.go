@@ -187,13 +187,13 @@ func renderHintLine(cfg *clix.PromptConfig, baseState clix.PromptKeyState) strin
 //
 // When In and Out are both terminals (and TERM is not "dumb"), prompts run
 // in raw mode: keys are read one at a time, the prompt is redrawn in place,
-// arrow keys and the other keys listed in the README work, bracketed paste
-// inserts text without acting on it, long option lists scroll, and key
-// bindings (WithKeyMap, WithCommandHandler) are honored for Esc, Tab, Enter
-// and F1-F12. Ctrl-C always cancels with clix.ErrCancelled and cannot be
-// bound. On Windows, raw mode needs a console with virtual terminal support
-// (Windows 10 1511 or later, Windows Terminal); legacy consoles use line
-// mode.
+// arrow keys and the other keys listed in docs/prompting-and-terminals.md
+// work, bracketed paste inserts text without acting on it, long option
+// lists scroll, and key bindings (WithKeyMap, WithCommandHandler) are
+// honored for Esc, Tab, Enter and F1-F12. Ctrl-C always cancels with
+// clix.ErrCancelled and cannot be bound. On Windows, raw mode needs a
+// console with virtual terminal support (Windows 10 1511 or later, Windows
+// Terminal); legacy consoles use line mode.
 //
 // Otherwise prompts run in line mode: one line is read per answer, with the
 // same answer rules, and key bindings are not used. Either way prompts

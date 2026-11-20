@@ -43,7 +43,7 @@ func TestValuesAssignedBetweenRunsWin(t *testing.T) {
 	}
 }
 
-// As the README says: a program's assignment between Runs is told apart
+// As docs/testing.md says: a program's assignment between Runs is told apart
 // from what the previous Run left only by its value, so assigning exactly
 // that value is undone like the rest, and any other value is kept.
 func TestAssignmentBetweenRunsIsToldByValue(t *testing.T) {

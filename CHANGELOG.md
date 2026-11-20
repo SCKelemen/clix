@@ -11,8 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `TestDocsCompile` and `TestDocsLinks` (`docs_test.go`), run by `go test ./...` and so by CI: every ```` ```go ```` block of every Markdown file is compiled against the working tree, with errors reported at the Markdown file and line, and relative links and their `#anchors` must resolve. A block that starts with `// Abridged` is a reference listing and is not compiled. This replaces a script that was run by hand.
 
+### Changed
+
+- Documentation: the README is short (what clix is, install, the Quick Start, a feature tour and the release process), and the reference moved to topic pages under `docs/`: commands, routing and flags; prompting and terminals; configuration; output; extensions; shell completion; testing your CLI; Windows notes; and compatibility and versioning. Contributing moved to `CONTRIBUTING.md`, and `ext/README.md` is an index of the extension packages.
+
 ### Fixed
 
+- Documentation that no longer matched the code: `config set` and `config unset` were said to write every value as a quoted string and lists as `a,b`, but they keep a key's YAML type and quoting and write a new value plain when YAML reads it back the same; the survey stack is last-in, first-out, so the "Simple Linear Survey" and "Conditional Branching" examples in `ext/survey/README.md` asked their questions in reverse; a command with children and a `Run` handler runs it whenever the next word is not a child, not only without arguments; commands with children prompt for missing required flags too, and only when the app is interactive; group flags rank between the command's and the root's in the precedence of sources, and prompt answers rank with the command line; `ext/README.md` listed `autocomplete [bash|zsh|fish]` without PowerShell, and progress indicators as a planned extension although `Context.Progress` exists; the abridged `App` listing, which claims to show the exported fields, left out `AutoEnv`, `AutoConfig`, `CaseSensitive`, `ExpandAliases` and `Plugins`; the flag types left out `ArgsVar`; the `Context` getters left out `Int`, `Int64`, `Float64`, `Duration` and `EffectiveDuration`; and the package documentation said clix requires Go 1.24 (it requires 1.27) and that flags are looked up on the command and then the root, skipping the groups between them.
 - Go examples in the README and `ext/README.md` that did not compile: the `format.Write` example used an undeclared `Owner` type and `listRepos` function, the `FormatDataWith`, `ext/format` and Progress examples used undeclared `repos` and `steps`, and the styling example needed lipgloss; it now uses `clix.StyleFunc` and points at `examples/lipgloss`.
 
 ## [2.8.0] - 2026-11-19
