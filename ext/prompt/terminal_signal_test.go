@@ -13,6 +13,19 @@ import (
 	"github.com/SCKelemen/clix/v2"
 )
 
+// readKey reads one key from in, like ReadKey, but returns early with
+// clix.ErrCancelled if a signal arrives while the terminal is in raw mode,
+// or with ctx.Err() when ctx is done. Nothing is left reading in, so a key
+// typed afterwards goes to the next prompt.
+//
+// The prompts read through readEvent; only these tests read single keys,
+// so readKey lives here, under this file's unix constraint, and is not
+// compiled where nothing uses it.
+func (ts *TerminalState) readKey(ctx context.Context, in *os.File) (Key, error) {
+	ev, err := ts.readEvent(ctx, in, nil, false)
+	return ev.key, err
+}
+
 func waitClosed(t *testing.T, ch <-chan struct{}, what string) {
 	t.Helper()
 	select {
