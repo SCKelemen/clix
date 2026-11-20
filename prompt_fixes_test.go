@@ -238,6 +238,7 @@ func TestReadLine(t *testing.T) {
 // Theme styles are written without ANSI escapes to a non-terminal or with
 // NO_COLOR; plain-text styling survives.
 func TestTextPrompterStripsANSIWithoutColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
 	t.Setenv("CLICOLOR_FORCE", "")
 	red := clix.StyleFunc(func(s ...string) string { return "\x1b[31m<" + strings.Join(s, "") + ">\x1b[0m" })
 	out := &bytes.Buffer{}

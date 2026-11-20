@@ -34,7 +34,7 @@ type ConfigManager struct {
 	values  map[string]string
 	numbers map[string]string     // decimal form of YAML numbers written as 0x1F, 0755, 1e3, ...
 	lists   map[string][]string   // the items of YAML lists of scalars, for slice flags
-	nodes   map[string]*yaml.Node // the YAML node each loaded key came from, which Save writes back
+	nodes   map[string]*yaml.Node // values for Save and Decode, including containers with no scalar leaves
 	seqs    map[string]bool       // keys that held YAML lists of maps or lists, flattened with indexes (see Decode)
 	schemas map[string]ConfigSchema
 	path    string // the file last loaded, for messages
@@ -166,6 +166,10 @@ func (m *ConfigManager) Load(path string) error {
 		return fmt.Errorf("failed to parse config file %s as YAML: %w", path, err)
 	}
 
+	if err := checkYAMLGraph(&doc); err != nil {
+		return fmt.Errorf("config file %s: %w", path, err)
+	}
+
 	f := flattener{
 		values:  make(map[string]string),
 		numbers: make(map[string]string),
@@ -197,8 +201,15 @@ func (m *ConfigManager) Load(path string) error {
 	if m.nodes == nil {
 		m.nodes = make(map[string]*yaml.Node)
 	}
+	for k, n := range f.nodes {
+		// A structure-only node does not overwrite a scalar from an earlier
+		// file. Decode reports a scalar with descendants as a mixed key.
+		_, oldValue := m.values[k]
+		if _, newValue := f.values[k]; newValue || !oldValue {
+			m.nodes[k] = n
+		}
+	}
 	for k, v := range f.values {
-		m.nodes[k] = f.nodes[k]
 		m.values[k] = v
 		if n, ok := f.numbers[k]; ok {
 			m.numbers[k] = n
@@ -332,6 +343,9 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 		}
 		return f.set(key, n.Value, yamlNumber(n), nil, n, weak)
 	case yaml.MappingNode:
+		if len(n.Content) == 0 {
+			f.recordShape(key, &yaml.Node{Kind: yaml.MappingNode})
+		}
 		return f.mapping(key, n, weak)
 	case yaml.SequenceNode:
 		scalars := true
@@ -354,13 +368,31 @@ func (f *flattener) value(key string, n *yaml.Node, weak bool) error {
 		}
 		f.seqs[key] = true
 		for i, item := range n.Content {
-			if err := f.value(key+"."+strconv.Itoa(i), item, weak); err != nil {
+			itemKey := key + "." + strconv.Itoa(i)
+			// Keep the position even when the element has no flattened
+			// leaves (an empty map, a map of unset keys, or a null).
+			item = resolveAlias(item)
+			switch {
+			case item.Kind == yaml.MappingNode:
+				f.recordShape(itemKey, &yaml.Node{Kind: yaml.MappingNode})
+			case item.ShortTag() == "!!null":
+				f.recordShape(itemKey, savedNode(item))
+			}
+			if err := f.value(itemKey, item, weak); err != nil {
 				return err
 			}
 		}
 		return nil
 	default:
 		return fmt.Errorf("line %d: unsupported value for %q", n.Line, key)
+	}
+}
+
+// recordShape keeps an empty container or a list position without making it
+// a scalar value visible through Get.
+func (f *flattener) recordShape(key string, n *yaml.Node) {
+	if _, scalar := f.values[key]; !scalar {
+		f.nodes[key] = n
 	}
 }
 
@@ -548,17 +580,25 @@ func resolveSymlinks(path string) (string, error) {
 	return "", fmt.Errorf("config file %s: too many levels of symbolic links", path)
 }
 
-// writeYAML encodes the values as a flat YAML mapping. A key loaded from
-// a file and not changed since is written as it was read (see savedNode);
-// any other value as newScalar describes.
+// writeYAML keeps the flat file format for ordinary keys. Descendants
+// of a structured sequence must be written together so Load can tell a
+// list from a mapping whose keys happen to be numbers.
 func (m *ConfigManager) writeYAML(w io.Writer) error {
-	data := make(map[string]interface{}, len(m.values))
-	for k, v := range m.values {
-		if n, ok := m.nodes[k]; ok {
-			data[k] = n
+	data := make(map[string]*yaml.Node)
+	sequences := make(map[string][]string)
+	for key, node := range m.nodes {
+		if root, ok := m.sequenceAncestor(key); ok {
+			sequences[root] = append(sequences[root], key)
 		} else {
-			data[k] = newScalar(v)
+			data[key] = node
 		}
+	}
+	for root, keys := range sequences {
+		node, err := m.buildYAML(root, keys)
+		if err != nil {
+			return err
+		}
+		data[root] = node
 	}
 
 	encoder := yaml.NewEncoder(w)
@@ -569,6 +609,16 @@ func (m *ConfigManager) writeYAML(w io.Writer) error {
 	}
 	// Close flushes any output the encoder is still buffering.
 	return encoder.Close()
+}
+
+// sequenceAncestor finds the outermost structured sequence at or above key.
+func (m *ConfigManager) sequenceAncestor(key string) (string, bool) {
+	for i := range len(key) {
+		if key[i] == '.' && m.seqs[key[:i]] {
+			return key[:i], true
+		}
+	}
+	return key, m.seqs[key]
 }
 
 // savedNode returns a copy of the scalar or list of scalars n, with its
@@ -613,10 +663,13 @@ func (m *ConfigManager) Set(key, value string) {
 	if m.values == nil {
 		m.values = make(map[string]string)
 	}
+	if m.nodes == nil {
+		m.nodes = make(map[string]*yaml.Node)
+	}
 	m.values[key] = value
+	m.nodes[key] = newScalar(value)
 	delete(m.numbers, key)
 	delete(m.lists, key)
-	delete(m.nodes, key)
 }
 
 // Delete removes a key from the configuration. It returns true if the key existed.

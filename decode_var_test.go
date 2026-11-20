@@ -297,3 +297,23 @@ func TestDecodeVarOutsideRun(t *testing.T) {
 		t.Fatalf("Set: spec = %+v, err = %v", spec, err)
 	}
 }
+
+func TestDecodeVarInlineScalarList(t *testing.T) {
+	for input, want := range map[string][]string{
+		"[]": {}, "[one, 'two,three']": {"one", "two,three"},
+	} {
+		t.Run(input, func(t *testing.T) {
+			app, _ := newTestApp(t, "myapp")
+			app.ConfigPath = writeTestFile(t, t.TempDir(), "config.yaml", "items: "+input)
+			items := []string{"default"}
+			app.Flags().DecodeVar(clix.DecodeVarOptions{FlagOptions: clix.FlagOptions{Name: "items"}, Value: &items})
+			app.Root.Run = noop
+			if err := app.Run(t.Context(), []string{}); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(items, want) {
+				t.Errorf("items = %#v, want %#v", items, want)
+			}
+		})
+	}
+}

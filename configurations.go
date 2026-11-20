@@ -64,6 +64,11 @@ type configurationValue struct{ s string }
 func (v *configurationValue) Set(s string) error { v.s = s; return nil }
 func (v *configurationValue) String() string     { return v.s }
 
+func (v *configurationValue) snapshot() func() {
+	name := v.s
+	return func() { v.s = name }
+}
+
 // Reset lets one App run more than once (see FlagSet.Var).
 func (v *configurationValue) Reset() { v.s = "" }
 
