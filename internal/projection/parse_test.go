@@ -157,18 +157,8 @@ func TestWithColumns(t *testing.T) {
 }
 
 func TestPrintErrors(t *testing.T) {
-	data, _ := resource.Decode([]byte(`[{"name":"a\u001b[31mred","ok":"tab\there","wide":"é"}]`))
+	data, _ := resource.Decode([]byte(`[{"ok":"tab\there","wide":"é"}]`))
 	var unsupported *resource.UnsupportedError
-	for _, expr := range []string{"table(name)", "value(name)", "csv(name)", "flattened(name)", "list(name)"} {
-		f, err := Parse(expr)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var b bytes.Buffer
-		if err := f.Print(&b, data, Options{UTF8: true}); !errors.As(err, &unsupported) || b.Len() != 0 {
-			t.Errorf("%s with an escape sequence: %v, printed %q; want an *UnsupportedError and nothing printed", expr, err, b.String())
-		}
-	}
 	f, _ := Parse("table(ok, wide)")
 	var b bytes.Buffer
 	if err := f.Print(&b, data, Options{UTF8: true}); err != nil {

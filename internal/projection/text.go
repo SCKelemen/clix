@@ -156,18 +156,6 @@ func pyCenter(s string, w int) string {
 func rstripSpace(s string) string { return strings.TrimRightFunc(s, isSpace) }
 func stripSpace(s string) string  { return strings.TrimFunc(s, isSpace) }
 
-// checkText rejects text that holds control characters other than tab
-// and newline: gcloud writes them to the terminal as they are, so a value
-// could move the cursor or change colors, and clix does not print them.
-func checkText(s string) error {
-	for _, r := range s {
-		if (r < 0x20 && r != '\t' && r != '\n') || (r >= 0x7f && r < 0xa0) {
-			return resource.Unsupportedf("printing the control character %U in %q", r, s)
-		}
-	}
-	return nil
-}
-
 var whitespaceRun = regexp.MustCompile(`[\t\n\v\f\r \x{1c}-\x{1f}\x{85}\x{a0}\x{1680}\x{2000}-\x{200a}\x{2028}\x{2029}\x{202f}\x{205f}\x{3000}]+`)
 
 // nextLine is table_printer._GetNextLineAndRemainder (without wrapping

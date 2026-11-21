@@ -7,7 +7,8 @@
 // gcloud prints for the same JSON resources, which differential tests
 // check against an installed Cloud SDK (see internal/gcloudtest);
 // anything outside it is a *resource.UnsupportedError, never different
-// output.
+// output. The one deliberate difference: control characters other than
+// tab and newline print as visible escapes (see Options.RawControl).
 //
 // # Grammar
 //
@@ -55,10 +56,11 @@
 // label of an earlier column (gcloud reads it as that column); keys that
 // are empty or only a transform; and indices that are not integers.
 //
-// At print time, text with control characters other than tab and newline
-// is rejected, because gcloud would write them to the terminal as they
-// are, and so is text outside ASCII in a table when the output is not
-// UTF-8 (gcloud prints such characters as "?").
+// At print time, control characters other than tab and newline, which
+// gcloud writes to the terminal as they are, print as visible escapes
+// (\x1b for ESC; see internal/termesc), unless Options.RawControl is set;
+// text outside ASCII in a table is rejected when the output is not UTF-8
+// (gcloud prints such characters as "?").
 //
 // # How values print
 //

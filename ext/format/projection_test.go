@@ -132,7 +132,6 @@ func TestProjectionErrors(t *testing.T) {
 		{[]string{"list", "--format", "table(name"}, true, "More tokens expected"},
 		{[]string{"list", "--format", "table()"}, true, "requires a non-empty projection"},
 		{[]string{"count", "--format", "table"}, true, "needs a projection"},
-		{[]string{"esc", "--format", "value(name)"}, false, "control character U+001B"},
 	} {
 		app, out, ran := projApp(t, format.Extension{Projections: true})
 		got, err := runWrite(t, app, out, ran, tt.args...)
