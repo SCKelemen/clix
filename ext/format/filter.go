@@ -158,7 +158,9 @@ func (s *FilterSelector) Select(records any) ([]int, error) {
 // gcloud's is not, is narrower and would drop records. When the server
 // may return more than server selects, evaluate f itself, not client,
 // on its results: f.Select keeps exactly f's records of any superset of
-// them.
+// them. gcloud's own server-side rewrite (resource_expr_rewrite in the
+// Cloud SDK) does that: when the server takes only part of a filter, the
+// client applies the whole filter.
 //
 // A term that compares dates and times decides so by the first value it
 // sees (see Select), and client sees only what the server returned, so
