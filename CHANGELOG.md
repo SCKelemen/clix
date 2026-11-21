@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-11-21
+
 ### Added
 
 - `clix/ext/format`: the list flags' filter and sort as operations on data, for commands that need them outside of printing, such as to filter each page of a listing before deciding whether to read the next. `format.ParseFilter` returns a `*format.Filter`, parsed exactly as `--filter` is and with the same errors, whose `Select(records)` returns the indices of the records it selects (the nil `*Filter` and the zero `Filter` select every record); `Filter.Selector()` returns a `*format.FilterSelector` that evaluates a list given in pages as one list, keeping the date and time decision a term makes on its first value. `format.ParseSortBy` returns a `format.SortBy` with `Keys()` (`format.SortKey`) and `Sort(records)`. `format.ListOptions{Filter, SortBy, Limit}` with `Select` and the generic `format.ApplyList(records, opts)` filter, sort and limit in gcloud's order. Records are any list `format.Write` takes, each read as its `--format json` output. `format.Write` now applies the list flags with this code, so the operations keep exactly the records it prints; its output and errors are unchanged.
@@ -347,7 +349,8 @@ Prepared as 1.0.0 (commit 464e98b, "Prepare for v1.0.0 release") but tagged as t
 - `ext/survey` – Chained prompts with branching logic
 - `ext/validation` – Common validation functions
 
-[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.9.1...HEAD
+[Unreleased]: https://github.com/SCKelemen/clix/compare/v2.10.0...HEAD
+[2.10.0]: https://github.com/SCKelemen/clix/compare/v2.9.1...v2.10.0
 [2.9.1]: https://github.com/SCKelemen/clix/compare/v2.9.0...v2.9.1
 [2.9.0]: https://github.com/SCKelemen/clix/compare/v2.8.0...v2.9.0
 [2.8.0]: https://github.com/SCKelemen/clix/compare/v2.7.0...v2.8.0
