@@ -235,8 +235,8 @@ We welcome issues and pull requests; see [CONTRIBUTING.md](CONTRIBUTING.md) for 
 2. Move the `Unreleased` entries in [`CHANGELOG.md`](CHANGELOG.md) under the new version and date, and update any docs or examples that mention the version.
 3. Tag the release with a `v2.x.y` tag and push the tag:
    ```bash
-   git tag -a v2.9.1 -m "clix v2.9.1"
-   git push origin v2.9.1
+   git tag -a v2.10.0 -m "clix v2.10.0"
+   git push origin v2.10.0
    ```
 4. The `Release` workflow (`.github/workflows/release.yml`) builds, vets, and tests the tagged commit, then publishes a GitHub Release with generated notes.
 
