@@ -39,7 +39,7 @@ func parseRowTemplate(source string) (*rowTemplate, error) {
 // A table header comes from the selected field paths, including for an empty list.
 func rowHeader(t *template.Template) (string, error) {
 	var header strings.Builder
-	for _, node := range t.Tree.Root.Nodes {
+	for _, node := range t.Root.Nodes {
 		switch n := node.(type) {
 		case *parse.TextNode:
 			header.Write(n.Text)
