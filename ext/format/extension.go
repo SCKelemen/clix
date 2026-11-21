@@ -87,6 +87,10 @@ type Extension struct {
 	// with any flag, "h" takes -h from --help, and an app's flag with the
 	// same letter keeps it (see clix.App.Validate).
 	FormatShort string
+
+	// RowTemplates accepts Docker-style Go templates in --format. Write
+	// renders the template once per list item, or once for a single object.
+	RowTemplates bool
 }
 
 // NoShort is the Extension.FormatShort that gives --format no short name.
@@ -118,10 +122,10 @@ func (e Extension) Extend(app *clix.App) error {
 	fs := app.Flags()
 	formatShort, jqShort, templateShort := e.shorts()
 	if _, ok := ours[*formatValue](app, "format"); !ok {
-		usage, validate, names := "Output format (json, yaml, text)", validateFormat, formats
+		usage, names := "Output format (json, yaml, text)", formats
+		value := &formatValue{projections: e.Projections, rowTemplates: e.RowTemplates}
 		if e.Projections {
 			usage = "Output format: json, yaml, text, or NAME[ATTRIBUTES](PROJECTION) with " + strings.Join(projection.Names, ", ")
-			validate = validateProjectionFormat
 			names = slices.Clone(formats)
 			for _, n := range projection.Names {
 				if !slices.Contains(names, n) {
@@ -129,18 +133,21 @@ func (e Extension) Extend(app *clix.App) error {
 				}
 			}
 		}
+		if e.RowTemplates {
+			usage += " or a row template such as '{{.name}}'"
+		}
 		fs.Var(clix.VarOptions{
 			FlagOptions: clix.FlagOptions{
 				Name:     "format",
 				Short:    formatShort,
 				Usage:    usage,
-				Validate: validate,
+				Validate: value.validate,
 				// An output setting, not an input: passing it does not stop
 				// Run from prompting for missing required flags.
 				Ambient: true,
 			},
 			Default: clix.FormatText,
-			Value:   &formatValue{projections: e.Projections},
+			Value:   value,
 		})
 		// Shell completion offers the formats, not file names. When the app
 		// has its own --format, that flag keeps its own completion.
@@ -224,8 +231,9 @@ func ours[V clix.Value](app *clix.App, name string) (V, bool) {
 // formatValue holds the --format flag's value. Its type marks the flag as
 // registered by this extension.
 type formatValue struct {
-	s           string
-	projections bool // Extension.Projections: gcloud format expressions are accepted
+	s            string
+	projections  bool // Extension.Projections: gcloud format expressions are accepted
+	rowTemplates bool
 }
 
 func (v *formatValue) Set(s string) error {
@@ -302,14 +310,28 @@ func isPlainFormat(value string) bool {
 	return value == "" || validateFormat(value) == nil
 }
 
-// validateProjectionFormat accepts json, yaml and text, in any case, and
-// gcloud format expressions within clix's subset (see Extension).
-func validateProjectionFormat(value string) error {
-	if isPlainFormat(value) {
-		return nil
-	}
-	_, err := parseProjection(value)
+func (v *formatValue) validate(value string) error {
+	_, _, err := v.parse(value)
 	return err
+}
+
+func (v *formatValue) parse(value string) (*projection.Format, *rowTemplate, error) {
+	if isPlainFormat(value) {
+		return nil, nil, nil
+	}
+	isTemplate := v.rowTemplates && strings.Contains(value, "{{")
+	if v.projections {
+		// A projection can have a quoted label or separator containing "{{".
+		p, err := parseProjection(value)
+		if err == nil || !isTemplate {
+			return p, nil, err
+		}
+	}
+	if isTemplate {
+		t, err := parseRowTemplate(value)
+		return nil, t, err
+	}
+	return nil, nil, validateFormat(value)
 }
 
 // parseProjection parses a gcloud format expression, naming what clix

@@ -113,7 +113,7 @@ func TestEscapeOnTerminal(t *testing.T) {
 	t.Setenv("NO_COLOR", "")
 	term := ptytest.New(t)
 	app := clix.NewApp("probe", clix.WithAppOut(term.TTY), clix.WithAppErr(&bytes.Buffer{}), clix.WithAppInteractive(clix.InteractiveNever))
-	app.AddExtension(format.Extension{Projections: true})
+	app.AddExtension(format.Extension{Projections: true, RowTemplates: true})
 	data := []map[string]any{{"name": "a\x1b[31mred\x1b[0m", "note": "safe\r\nEVIL", "labels": map[string]string{"k\x1b[1m": "v"}}}
 	app.Root.AddCommand(clix.NewCommand("hostile", clix.WithCommandRun(func(ctx *clix.Context) error {
 		return format.Write(ctx, data)
@@ -131,6 +131,8 @@ func TestEscapeOnTerminal(t *testing.T) {
 		{[]string{"hostile", "--template", `{{range .}}{{range $k, $v := .labels}}{{$k}}={{$v}}{{end}}{{"\n"}}{{end}}`}, `k\x1b[1m=v` + "\n"},
 		{[]string{"hostile", "--template", `{{range .}}{{color "red" .name}}{{"\n"}}{{end}}`}, "\x1b[31m" + `a\x1b[31mred\x1b[0m` + "\x1b[0m\n"},
 		{[]string{"hostile", "--format", "value(name)"}, `a\x1b[31mred\x1b[0m` + "\n"},
+		{[]string{"hostile", "--format", "{{.name}}"}, `a\x1b[31mred\x1b[0m` + "\n"},
+		{[]string{"raw", "--format", "{{.name}}"}, "a\x1b[31mred\x1b[0m\n"},
 		{[]string{"raw", "--jq", ".[].name"}, "a\x1b[31mred\x1b[0m\n"},
 		{[]string{"raw", "--template", `{{range .}}{{.name}}{{"\n"}}{{end}}`}, "a\x1b[31mred\x1b[0m\n"},
 	} {

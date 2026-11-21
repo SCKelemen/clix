@@ -99,7 +99,7 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 			return err
 		}
 	}
-	if !s.json && s.jq == "" && s.template == "" {
+	if len(s.jsonFlagNames) == 0 && s.rowTemplate == nil {
 		if s.projection != nil {
 			return writeProjection(out, data, s.projection, opts)
 		}
@@ -146,6 +146,8 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 		return nil
 	case s.template != "":
 		return executeTemplate(out, s.template, doc, escapeData(out, opts))
+	case s.rowTemplate != nil && !s.json:
+		return s.rowTemplate.write(out, doc, escapeData(out, opts))
 	default:
 		_, err := out.Write(doc)
 		return err
@@ -155,13 +157,22 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 // settings are the output flags of one Run.
 type settings struct {
 	projection    *projection.Format // a gcloud format expression in --format (Extension.Projections)
-	format        string             // --format as given, in lower case ("" when unset)
-	formatText    string             // --format as given
-	formatOnLine  bool               // --format was given on the command line
-	json          bool               // --json was given
+	rowTemplate   *rowTemplate
+	format        string // --format as given, in lower case ("" when unset)
+	formatText    string // --format as given
+	formatOnLine  bool   // --format was given on the command line
+	json          bool   // --json was given
 	fields        []string
 	jq, template  string
 	jsonFlagNames []string // the flags among --json, --jq and --template that were given
+}
+
+// UsesRowTemplate reports whether Write will render a --format row template.
+// A command can use it to supply JSON fields normally omitted at their default
+// values. Read it after flag parsing, from the running command.
+func UsesRowTemplate(app *clix.App) bool {
+	s, err := readSettings(app)
+	return err == nil && s.rowTemplate != nil && len(s.jsonFlagNames) == 0
 }
 
 func readSettings(app *clix.App) (settings, error) {
@@ -169,11 +180,12 @@ func readSettings(app *clix.App) (settings, error) {
 	if v, ok := ours[*formatValue](app, "format"); ok {
 		s.format, s.formatText = strings.ToLower(v.s), v.s
 		s.formatOnLine = app.Flags().Changed("format")
-		if v.projections && !isPlainFormat(v.s) {
-			f, err := parseProjection(v.s)
-			if err != nil {
-				return s, clix.UsageErrorf("invalid value for format: %w", err)
-			}
+		f, rows, err := v.parse(v.s)
+		if err != nil {
+			return s, clix.UsageErrorf("invalid value for format: %w", err)
+		}
+		s.rowTemplate = rows
+		if f != nil {
 			if (f.Name == clix.FormatJSON || f.Name == clix.FormatYAML) && !f.HasProjection {
 				s.format = f.Name // " json " and the like: the format itself
 			} else {
@@ -203,7 +215,7 @@ func (s settings) check() error {
 	}
 	if len(s.jsonFlagNames) > 0 && s.formatOnLine && s.format != "" && (s.format != clix.FormatJSON || s.projection != nil) {
 		format := s.format
-		if s.projection != nil {
+		if s.projection != nil || s.rowTemplate != nil {
 			format = s.formatText
 		}
 		return clix.UsageErrorf("%s works on JSON output and cannot be used with --format %s", strings.Join(s.jsonFlagNames, " and "), format)
