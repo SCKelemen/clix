@@ -1,6 +1,7 @@
 package format
 
 import (
+	"fmt"
 	"math/big"
 	"slices"
 
@@ -14,8 +15,8 @@ import (
 // evaluates it on records, Expr returns its parse tree, and Split divides
 // it between a server and the client.
 //
-// A Filter is immutable and safe for concurrent use. The nil *Filter
-// selects every record, as the empty expression does.
+// A Filter is immutable and safe for concurrent use. The zero Filter and
+// the nil *Filter select every record, as the empty expression does.
 type Filter struct {
 	f    *filter.Filter
 	expr FilterExpr // nil when f selects everything
@@ -44,7 +45,7 @@ var everything = func() *filter.Filter {
 }()
 
 func (f *Filter) inner() *filter.Filter {
-	if f == nil {
+	if f == nil || f.f == nil {
 		return everything
 	}
 	return f.f
@@ -53,11 +54,16 @@ func (f *Filter) inner() *filter.Filter {
 // NewFilter returns a Filter that selects the records e selects, as if e
 // were the whole expression: a subtree of a parsed Filter, such as one of
 // the conjuncts Split hands to a callback. A nil e selects every record.
+// NewFilter panics if e is not a node that Filter.Expr returned, such as
+// a zero &FilterTerm{}, which has no expression to evaluate.
 func NewFilter(e FilterExpr) *Filter {
 	if e == nil {
 		return &Filter{f: everything}
 	}
 	b := e.base()
+	if b == nil || b.src == nil {
+		panic(fmt.Sprintf("format: NewFilter of a %T that Filter.Expr did not return", e))
+	}
 	return &Filter{f: b.src.Sub(b.n), expr: e}
 }
 
@@ -103,7 +109,8 @@ func (f *Filter) Selector() *FilterSelector {
 // FilterSelector evaluates a Filter on a list that comes in parts, such as
 // the pages of a listing: calling Select on each part in turn selects
 // what one Filter.Select of the whole list would, part by part. It is not
-// safe for concurrent use.
+// safe for concurrent use. The zero FilterSelector and the nil
+// *FilterSelector select every record, as the zero Filter's does.
 type FilterSelector struct{ s *filter.Selector }
 
 // Select returns the indices in records of the records the filter
@@ -113,6 +120,9 @@ func (s *FilterSelector) Select(records any) ([]int, error) {
 	list, err := readRecords(records)
 	if err != nil {
 		return nil, err
+	}
+	if s == nil || s.s == nil {
+		return everything.Select(list) // keeps no state
 	}
 	return s.s.Select(list)
 }
@@ -209,13 +219,42 @@ type FilterExpr interface {
 	base() *filterNode
 }
 
-// filterNode is a node of src's tree.
+// filterNode is a node of src's tree. src is nil in a node that no parse
+// produced, such as a zero &FilterTerm{}.
 type filterNode struct {
 	src *filter.Filter
 	n   filter.Node
 }
 
-func (b *filterNode) base() *filterNode { return b }
+// The base methods return a node's filterNode, nil for a nil pointer.
+
+func (e *FilterAnd) base() *filterNode {
+	if e == nil {
+		return nil
+	}
+	return &e.filterNode
+}
+
+func (e *FilterOr) base() *filterNode {
+	if e == nil {
+		return nil
+	}
+	return &e.filterNode
+}
+
+func (e *FilterNot) base() *filterNode {
+	if e == nil {
+		return nil
+	}
+	return &e.filterNode
+}
+
+func (t *FilterTerm) base() *filterNode {
+	if t == nil {
+		return nil
+	}
+	return &t.filterNode
+}
 
 func newExpr(src *filter.Filter, n filter.Node) FilterExpr {
 	b := filterNode{src, n}

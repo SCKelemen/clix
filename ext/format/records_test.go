@@ -126,10 +126,11 @@ func TestFilterExprAccessors(t *testing.T) {
 	}
 }
 
-// The nil *Filter and an empty expression select every record.
+// The nil *Filter, the zero Filter and an empty expression select every
+// record, and so do their selectors and the zero and nil FilterSelector.
 func TestFilterEmpty(t *testing.T) {
 	var nilFilter *format.Filter
-	for _, f := range []*format.Filter{nilFilter, mustFilter(t, ""), mustFilter(t, "()"), format.NewFilter(nil)} {
+	for _, f := range []*format.Filter{nilFilter, new(format.Filter), mustFilter(t, ""), mustFilter(t, "()"), format.NewFilter(nil)} {
 		if f.Expr() != nil || f.String() != "" {
 			t.Errorf("%v: Expr %v, String %q", f, f.Expr(), f.String())
 		}
@@ -137,10 +138,42 @@ func TestFilterEmpty(t *testing.T) {
 		if err != nil || fmt.Sprint(got) != "[0 1 2 3]" {
 			t.Errorf("Select = %v, %v", got, err)
 		}
+		if got, err := f.Selector().Select(projects); err != nil || fmt.Sprint(got) != "[0 1 2 3]" {
+			t.Errorf("Selector().Select = %v, %v", got, err)
+		}
+		if got, err := (format.ListOptions{Filter: f}).Select(projects); err != nil || fmt.Sprint(got) != "[0 1 2 3]" {
+			t.Errorf("ListOptions.Select = %v, %v", got, err)
+		}
 		server, client := f.Split(func(format.FilterExpr) bool { t.Error("called without conjuncts"); return true })
 		if server.Expr() != nil || client.Expr() != nil || f.Conjuncts() != nil {
 			t.Errorf("Split = %q, %q; Conjuncts %v", server, client, f.Conjuncts())
 		}
+	}
+	var nilSelector *format.FilterSelector
+	for _, s := range []*format.FilterSelector{nilSelector, new(format.FilterSelector)} {
+		for range 2 {
+			if got, err := s.Select(projects); err != nil || fmt.Sprint(got) != "[0 1 2 3]" {
+				t.Errorf("%#v: Select = %v, %v", s, got, err)
+			}
+		}
+	}
+}
+
+// NewFilter panics on a node no parse produced, rather than selecting
+// every record or failing later.
+func TestNewFilterForeignNode(t *testing.T) {
+	var nilTerm *format.FilterTerm
+	for _, e := range []format.FilterExpr{&format.FilterTerm{}, &format.FilterAnd{}, &format.FilterOr{}, &format.FilterNot{}, nilTerm} {
+		func() {
+			defer func() {
+				r := recover()
+				if msg, _ := r.(string); !strings.Contains(msg, "Filter.Expr did not return") {
+					t.Errorf("NewFilter(%#v) panicked with %v", e, r)
+				}
+			}()
+			format.NewFilter(e)
+			t.Errorf("NewFilter(%#v) did not panic", e)
+		}()
 	}
 }
 

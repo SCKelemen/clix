@@ -299,14 +299,14 @@ fmt.Println(len(kept))
 
 | API | Does |
 | --- | --- |
-| `format.ParseFilter(expr) (*format.Filter, error)` | parses a filter; the empty expression, and the nil `*Filter`, select every record |
+| `format.ParseFilter(expr) (*format.Filter, error)` | parses a filter; the empty expression, the nil `*Filter` and the zero `Filter` select every record |
 | `(*Filter).Select(records) ([]int, error)` | the indices of the records it selects, in order |
 | `(*Filter).Selector() *format.FilterSelector` | evaluates a list that comes in pages as one list: `Select` on each page continues where the last one stopped |
 | `(*Filter).String() string` | the expression in a canonical form that parses back to the same tree |
 | `(*Filter).Expr() format.FilterExpr` | the parse tree, nil for the empty expression (below) |
 | `(*Filter).Conjuncts() []format.FilterExpr` | the operands of the top-level `AND`, or the expression alone |
 | `(*Filter).Split(canServer) (server, client *Filter)` | divides the conjuncts between a server and the client (below) |
-| `format.NewFilter(e) *format.Filter` | a filter of one subtree, evaluated as if it were the whole expression |
+| `format.NewFilter(e) *format.Filter` | a filter of one subtree, evaluated as if it were the whole expression; it panics on a node `Expr` did not return |
 | `format.ParseSortBy(value) (format.SortBy, error)` | parses a `--sort-by` value; `Keys()` returns its `SortKey`s (`Key`, `Descending`), and `Sort(records)` the order of the records |
 | `format.ListOptions{Filter, SortBy, Limit}` | `Select(records)` filters, sorts and limits, as the three flags do |
 | `format.ApplyList(records []T, opts) ([]T, error)` | the records `ListOptions.Select` keeps, in its order |
