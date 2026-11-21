@@ -150,6 +150,14 @@
 // control characters themselves. clix.FormatOptions.RawControlChars,
 // passed to WriteWith, prints them as they are.
 //
+// # Docker-style row templates
+//
+// With Extension.RowTemplates, a --format string containing a Go template
+// action runs once per list item. Fields use their case-sensitive JSON keys.
+// A single object is one row. A "table " prefix with direct field selectors
+// prints uppercase headings and aligns tabs. A list's filters, sorting and
+// limit apply first. See [Write] for how flags combine.
+//
 // # Template helpers
 //
 // --template is a Go text/template over the decoded JSON output (with

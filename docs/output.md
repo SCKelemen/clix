@@ -189,6 +189,18 @@ Besides `text/template`'s own functions (`and`, `or`, `not`, `len`, `index`, `sl
 | `timefmt LAYOUT TIME` | `{{timefmt "2006-01-02" .createdAt}}` | an RFC 3339 time in a Go time layout |
 | `hyperlink URL TEXT` | `{{hyperlink .url .name}}` | an OSC 8 terminal hyperlink when color is on, `TEXT` otherwise |
 
+## Docker-style row templates
+
+Apps can enable `format.Extension{RowTemplates: true}` alongside `Projections`. Handlers that use `format.Write` or `format.WriteWith` then accept a Go template in `--format`. It runs once per selected item, or once for a single object. Each execution ends with a newline. Fields use the exact names and case shown by `--format json`. An empty list prints zero rows.
+
+```shell
+myapp containers list --filter 'Status=running' --format '{{.Names}} {{.Status}} {{.Ports}}'
+myapp projects list --format 'table {{.name}}\t{{.displayName}}'
+myapp projects list --format '{{json .}}'
+```
+
+Row templates support Go's built-in template functions and the helpers `json VALUE`, `join LIST SEP`, `split STRING SEP`, `lower STRING` and `upper STRING`. A leading `table ` adds a heading derived from direct field selectors and aligns tab-separated columns, including in a pipe. `\t` and `\n` in the format string select tabs and newlines. An unknown field fails the render before any rows reach stdout. Data printed on a terminal follows the control-character escaping rules of `--template`. To format the complete list in a single template, use `--template`.
+
 ## gcloud format projections
 
 Apps modeled on gcloud can opt in to gcloud's `--format` expressions, `NAME[ATTRIBUTES](PROJECTION)`, with `format.Extension{Projections: true}`. Existing apps are unchanged: without the option, `--format` accepts `json`, `yaml` and `text` only, and with it those three alone still print exactly as before.
