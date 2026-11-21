@@ -114,10 +114,12 @@ func fieldKnown(f string, available []string) bool {
 type fieldTree struct {
 	whole    map[string]bool       // keys kept with all they hold
 	children map[string]*fieldTree // keys of which only some fields are kept
+	heads    []string              // the first part of each path, in the order given
+	paths    map[string][]string   // the dotted paths given for each head
 }
 
 func newFieldTree(fields []string) *fieldTree {
-	t := &fieldTree{whole: map[string]bool{}, children: map[string]*fieldTree{}}
+	t := &fieldTree{whole: map[string]bool{}, children: map[string]*fieldTree{}, paths: map[string][]string{}}
 	for _, f := range fields {
 		t.add(f)
 	}
@@ -129,93 +131,156 @@ func newFieldTree(fields []string) *fieldTree {
 func (t *fieldTree) add(path string) {
 	t.whole[path] = true
 	head, rest, found := strings.Cut(path, ".")
+	if !slices.Contains(t.heads, head) {
+		t.heads = append(t.heads, head)
+	}
 	if !found {
 		return
 	}
+	t.paths[head] = append(t.paths[head], path)
 	child := t.children[head]
 	if child == nil {
-		child = &fieldTree{whole: map[string]bool{}, children: map[string]*fieldTree{}}
+		child = &fieldTree{whole: map[string]bool{}, children: map[string]*fieldTree{}, paths: map[string][]string{}}
 		t.children[head] = child
 	}
 	child.add(rest)
 }
 
-// selectFields keeps only fields in doc (see Write).
+// headOf returns the head that the key name of an object selects, or ""
+// when the key is not selected.
+func (t *fieldTree) headOf(name string) string {
+	if t.children[name] != nil {
+		return name
+	}
+	if t.whole[name] {
+		head, _, _ := strings.Cut(name, ".")
+		return head
+	}
+	return ""
+}
+
+// selectFields keeps only fields in doc (see Write). An object that
+// lacks a selected key gets it with the value null; for a dotted path,
+// the first part the object lacks is null. The keys keep the order of
+// the full output, and a key added as null goes after the selected key
+// before it in the order of the objects that have them.
 func selectFields(doc []byte, fields []string) ([]byte, error) {
-	var out bytes.Buffer
-	dec := jsontext.NewDecoder(bytes.NewReader(doc), decodeOptions)
-	enc := jsontext.NewEncoder(&out, encodeOptions)
-	if err := copySelected(dec, enc, newFieldTree(fields)); err != nil {
+	tree, err := decodeTree(doc)
+	if err != nil {
 		return nil, err
 	}
-	return out.Bytes(), nil
+	t := newFieldTree(fields)
+	order := map[*fieldTree][]string{}
+	t.collectOrder(tree, order)
+	return encodeTree(t.apply(tree, order))
 }
 
-// copySelected copies the next value from dec to enc, keeping in objects
-// only the keys t names, and applying t to every element of a list.
-func copySelected(dec *jsontext.Decoder, enc *jsontext.Encoder, t *fieldTree) error {
-	switch dec.PeekKind() {
-	case '{':
-		if err := copyToken(dec, enc); err != nil {
-			return err
-		}
-		for dec.PeekKind() != '}' {
-			name, err := dec.ReadToken()
-			if err != nil {
-				return err
+// collectOrder records, for t and the trees below it, the order in which
+// the objects of v have the selected keys, merged over every object.
+func (t *fieldTree) collectOrder(v any, order map[*fieldTree][]string) {
+	switch x := v.(type) {
+	case *jsonObject:
+		var keys []string
+		for _, m := range x.members {
+			head := t.headOf(m.name)
+			if head == "" {
+				continue
 			}
-			key := name.String()
+			if !slices.Contains(keys, head) {
+				keys = append(keys, head)
+			}
+			if child := t.children[m.name]; child != nil && !t.whole[m.name] {
+				child.collectOrder(m.value, order)
+			}
+		}
+		order[t] = mergeKeyOrder(order[t], keys)
+	case []any:
+		for _, e := range x {
+			t.collectOrder(e, order)
+		}
+	}
+}
+
+// mergeKeyOrder adds the keys of one object to order, keeping the order
+// of every object seen so far: a new key goes after the key that precedes
+// it in the object and before the known key that follows it, as
+// clix.FormatData orders the columns of a table.
+func mergeKeyOrder(order, keys []string) []string {
+	prev := -1 // index in order of the last key of this object placed so far
+	for i, k := range keys {
+		if at := slices.Index(order, k); at >= 0 {
+			prev = at
+			continue
+		}
+		lo, hi := prev+1, len(order)
+		for _, next := range keys[i+1:] {
+			if j := slices.Index(order, next); j >= 0 {
+				hi = max(j, lo)
+				break
+			}
+		}
+		at := lo
+		for at < hi && order[at] < k {
+			at++
+		}
+		order = slices.Insert(order, at, k)
+		prev = at
+	}
+	return order
+}
+
+// apply returns v with only the keys t selects in its objects, applying
+// t to every element of a list, and with null for the selected keys an
+// object lacks.
+func (t *fieldTree) apply(v any, order map[*fieldTree][]string) any {
+	switch x := v.(type) {
+	case *jsonObject:
+		out := &jsonObject{}
+		for _, m := range x.members {
 			switch {
-			case t.whole[key]:
-				if err := enc.WriteToken(name); err != nil {
-					return err
-				}
-				v, err := dec.ReadValue()
-				if err != nil {
-					return err
-				}
-				if err := enc.WriteValue(v); err != nil {
-					return err
-				}
-			case t.children[key] != nil:
-				if err := enc.WriteToken(name); err != nil {
-					return err
-				}
-				if err := copySelected(dec, enc, t.children[key]); err != nil {
-					return err
-				}
-			default:
-				if err := dec.SkipValue(); err != nil {
-					return err
-				}
+			case t.whole[m.name]:
+				out.members = append(out.members, m)
+			case t.children[m.name] != nil:
+				out.members = append(out.members, jsonMember{m.name, t.children[m.name].apply(m.value, order)})
 			}
 		}
-		return copyToken(dec, enc)
-	case '[':
-		if err := copyToken(dec, enc); err != nil {
-			return err
+		t.fillNull(out, order[t])
+		return out
+	case []any:
+		list := make([]any, len(x))
+		for i, e := range x {
+			list[i] = t.apply(e, order)
 		}
-		for dec.PeekKind() != ']' {
-			if err := copySelected(dec, enc, t); err != nil {
-				return err
-			}
-		}
-		return copyToken(dec, enc)
-	default:
-		v, err := dec.ReadValue()
-		if err != nil {
-			return err
-		}
-		return enc.WriteValue(v)
+		return list
 	}
+	return v
 }
 
-func copyToken(dec *jsontext.Decoder, enc *jsontext.Encoder) error {
-	tok, err := dec.ReadToken()
-	if err != nil {
-		return err
+// fillNull adds null for each head o lacks (by its own name or by a
+// dotted path that is a key of o), after the head before it in seen, the
+// order of the objects that have them, or else in the order given.
+func (t *fieldTree) fillNull(o *jsonObject, seen []string) {
+	order := seen
+	for _, h := range t.heads {
+		if !slices.Contains(order, h) {
+			order = append(slices.Clip(order), h)
+		}
 	}
-	return enc.WriteToken(tok)
+	prev := -1
+	for _, h := range order {
+		i := o.index(h)
+		for _, p := range t.paths[h] {
+			if i >= 0 {
+				break
+			}
+			i = o.index(p)
+		}
+		if i < 0 {
+			i = prev + 1
+			o.insert(i, h, jsonNull)
+		}
+		prev = i
+	}
 }
 
 var (

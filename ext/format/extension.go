@@ -91,7 +91,28 @@ type Extension struct {
 	// RowTemplates accepts Docker-style Go templates in --format. Write
 	// renders the template once per list item, or once for a single object.
 	RowTemplates bool
+
+	// MissingFields says what a row template does with a field its record
+	// lacks. MissingError, the default, makes it a usage error, before any
+	// row is printed. MissingZero prints it as nothing: a missing field,
+	// or a field of a missing or null value, is nil in the template, so
+	// it prints as an empty string, is false in an if and ranges over
+	// nothing. The fields a Schema declares are never missing, since
+	// Write fills them in (see Document).
+	MissingFields Missing
 }
+
+// Missing is what a row template does with a field its record lacks
+// (see Extension.MissingFields).
+type Missing uint8
+
+const (
+	// MissingError makes a field the record lacks a usage error. It is
+	// the default.
+	MissingError Missing = iota
+	// MissingZero prints a field the record lacks as nothing.
+	MissingZero
+)
 
 // NoShort is the Extension.FormatShort that gives --format no short name.
 const NoShort = "-"
@@ -123,7 +144,7 @@ func (e Extension) Extend(app *clix.App) error {
 	formatShort, jqShort, templateShort := e.shorts()
 	if _, ok := ours[*formatValue](app, "format"); !ok {
 		usage, names := "Output format (json, yaml, text)", formats
-		value := &formatValue{projections: e.Projections, rowTemplates: e.RowTemplates}
+		value := &formatValue{projections: e.Projections, rowTemplates: e.RowTemplates, missing: e.MissingFields}
 		if e.Projections {
 			usage = "Output format: json, yaml, text, or NAME[ATTRIBUTES](PROJECTION) with " + strings.Join(projection.Names, ", ")
 			names = slices.Clone(formats)
@@ -234,6 +255,7 @@ type formatValue struct {
 	s            string
 	projections  bool // Extension.Projections: gcloud format expressions are accepted
 	rowTemplates bool
+	missing      Missing // Extension.MissingFields
 }
 
 func (v *formatValue) Set(s string) error {
@@ -328,7 +350,7 @@ func (v *formatValue) parse(value string) (*projection.Format, *rowTemplate, err
 		}
 	}
 	if isTemplate {
-		t, err := parseRowTemplate(value)
+		t, err := parseRowTemplate(value, v.missing)
 		return nil, t, err
 	}
 	return nil, nil, validateFormat(value)

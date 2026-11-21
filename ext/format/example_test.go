@@ -1,9 +1,12 @@
 package format_test
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
+	"github.com/SCKelemen/clix/v2"
 	"github.com/SCKelemen/clix/v2/ext/format"
 )
 
@@ -92,4 +95,36 @@ func ExampleFilter_Expr() {
 	// Output:
 	// term: labels.env = [prod]
 	// not: name:test*
+}
+
+// Document gives records from an encoder that leaves out default values
+// a schema, so that every output flag sees every field: format.Write
+// prints this canonical document for --format json, yaml and text, --json,
+// --jq, --template and row templates alike.
+func ExampleDocument() {
+	records := []json.RawMessage{
+		json.RawMessage(`{"name":"web-1","cpus":2,"zone":"eu-west1-b"}`),
+		json.RawMessage(`{"name":"web-2"}`), // cpus and zone left out
+	}
+	doc := format.Document{Value: records, Schema: format.Fields{
+		{Name: "name", Zero: ""},
+		{Name: "cpus", Zero: 0},
+		{Name: "zone", Nullable: true},
+	}}
+	if err := clix.FormatData(os.Stdout, doc, clix.FormatJSON); err != nil {
+		panic(err)
+	}
+	// Output:
+	// [
+	//   {
+	//     "name": "web-1",
+	//     "cpus": 2,
+	//     "zone": "eu-west1-b"
+	//   },
+	//   {
+	//     "name": "web-2",
+	//     "cpus": 0,
+	//     "zone": null
+	//   }
+	// ]
 }
