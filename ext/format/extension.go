@@ -82,7 +82,10 @@ type Extension struct {
 	// FormatShort is the short name of --format: empty for the default,
 	// "f", or NoShort to register --format by its long name only. A
 	// letter that --jq (-q) or --template (-t) would use goes to
-	// --format, and that flag keeps only its long name.
+	// --format, and that flag keeps only its long name (unless the app
+	// defines its own --format, which then has its own short name). As
+	// with any flag, "h" takes -h from --help, and an app's flag with the
+	// same letter keeps it (see clix.App.Validate).
 	FormatShort string
 }
 
@@ -144,6 +147,11 @@ func (e Extension) Extend(app *clix.App) error {
 		if _, ok := ours[*formatValue](app, "format"); ok {
 			fs.SetCompletion("format", clix.CompleteValues(names...))
 		}
+	}
+	// --jq and --template give their letter up only to this extension's
+	// --format, not to an app's own.
+	if _, ok := ours[*formatValue](app, "format"); !ok {
+		jqShort, templateShort = "q", "t"
 	}
 	if _, ok := ours[*fieldsValue](app, "json"); !ok {
 		fs.Var(clix.VarOptions{

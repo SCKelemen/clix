@@ -132,4 +132,22 @@ func TestFormatShort(t *testing.T) {
 			}
 		})
 	}
+
+	// When the app has its own --format, the extension registers none, so
+	// --jq and --template keep -q and -t whatever FormatShort says.
+	t.Run("app's own --format", func(t *testing.T) {
+		app := clix.NewApp("myapp", clix.WithAppOut(&bytes.Buffer{}), clix.WithAppErr(&bytes.Buffer{}))
+		var own string
+		app.Flags().StringVar(clix.StringVarOptions{FlagOptions: clix.FlagOptions{Name: "format", Short: "o"}, Value: &own})
+		app.AddExtension(format.Extension{FormatShort: "q"})
+		app.AddExtension(format.Extension{FormatShort: "t"}) // registers nothing more
+		app.Root.AddCommand(clix.NewCommand("run", clix.WithCommandRun(func(*clix.Context) error { return nil })))
+		// Validate reports the replaced --format, and nothing about -q or -t.
+		if err := app.Validate(); err == nil || strings.Contains(err.Error(), "-q") || strings.Contains(err.Error(), "-t") {
+			t.Errorf("Validate = %v", err)
+		}
+		if got := [3]string{shortOf(app, "format"), shortOf(app, "jq"), shortOf(app, "template")}; got != [3]string{"o", "q", "t"} {
+			t.Errorf("short names %q", got)
+		}
+	})
 }
