@@ -81,7 +81,7 @@ func writeTable(w io.Writer, data interface{}, rows []map[string]interface{}, op
 			header[j] = columnHeader(col)
 		}
 	}
-	topts := table.Options{Terminal: term.on, Width: term.width, Ellipsis: term.ellipsis}
+	topts := table.Options{Terminal: term.on, Width: term.width, Ellipsis: term.ellipsis, RawControl: opts.RawControlChars}
 	if term.on && term.color {
 		style := opts.HeaderStyle
 		topts.Header = func(s string) string {

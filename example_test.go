@@ -643,3 +643,30 @@ func ExampleApp_ConfigDir() {
 		fmt.Fprintf(os.Stderr, "Error saving config: %v\n", err)
 	}
 }
+
+// EscapeControlChars shows the escape sequences in a string a server sent
+// as text, so printing it cannot recolor the terminal or overwrite the
+// line, while plain text is unchanged.
+func ExampleEscapeControlChars() {
+	fmt.Println(clix.EscapeControlChars("\x1b[31mprod\x1b[0m"))
+	fmt.Println(clix.EscapeControlChars("deleted\rcreated"))
+	fmt.Println(clix.EscapeControlChars(`Café C:\dir`))
+	// Output:
+	// \x1b[31mprod\x1b[0m
+	// deleted\rcreated
+	// Café C:\dir
+}
+
+// FormatData's text output escapes control characters; RawControlChars
+// prints them as they are, for values that hold escape sequences on
+// purpose.
+func ExampleFormatOptions_rawControlChars() {
+	status := map[string]string{"status": "\x1b[32mOK\x1b[0m"}
+	var escaped, raw strings.Builder
+	_ = clix.FormatData(&escaped, status, clix.FormatText)
+	_ = clix.FormatDataWith(&raw, status, clix.FormatOptions{RawControlChars: true})
+	fmt.Printf("%q\n%q\n", escaped.String(), raw.String())
+	// Output:
+	// "status = \\x1b[32mOK\\x1b[0m\n"
+	// "status = \x1b[32mOK\x1b[0m\n"
+}

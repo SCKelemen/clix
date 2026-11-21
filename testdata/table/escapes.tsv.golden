@@ -1,3 +1,3 @@
 tab\there	C:\\dir
-two\nlines	esc[31mred[0m
-cr\rx	del c1
+two\nlines	esc\x1b[31mred\x1b[0m
+cr\rx	del\x7f c1\u0085
