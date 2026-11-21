@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `ext/format/protoformat` lets commands render protobuf messages with clix's existing output flags. The adapter preserves protobuf field presence for expressions and supports custom `Any` resolvers for composite output.
 - `ext/format` supports opt-in Docker-style row templates through `format.Extension{RowTemplates: true}`. Use `--format '{{.name}} {{.status}}'` to print a line per resource, or `--format 'table {{.name}}\t{{.status}}'` for a table with headings.
 
 ## [2.10.0] - 2026-11-21

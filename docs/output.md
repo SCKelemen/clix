@@ -189,6 +189,18 @@ Besides `text/template`'s own functions (`and`, `or`, `not`, `len`, `index`, `sl
 | `timefmt LAYOUT TIME` | `{{timefmt "2006-01-02" .createdAt}}` | an RFC 3339 time in a Go time layout |
 | `hyperlink URL TEXT` | `{{hyperlink .url .name}}` | an OSC 8 terminal hyperlink when color is on, `TEXT` otherwise |
 
+## Protocol buffer messages
+
+Register `format.Extension` as usual and import `github.com/SCKelemen/clix/v2/ext/format/protoformat` in the handler. Calling `return protoformat.Write(ctx, message)` renders the message with the command's output flags. Timestamps retain their string encoding, 64-bit integers retain their precision, and enum names follow the protobuf JSON specification.
+
+| Output request | Fields supplied by the adapter with default options |
+| --- | --- |
+| Plain JSON, YAML, text, or a gcloud projection | Populated fields, using standard protobuf JSON |
+| `--jq`, `--template`, or a Docker row template | Also includes implicit scalar defaults and empty lists and maps. Absent fields with explicit presence stay absent. |
+| Explicit `--json fields`, including a selection piped through `--jq` | Also includes absent fields that protobuf JSON can represent as `null`. Unset oneof members stay absent. |
+
+For a list or a document containing multiple messages, call `protoformat.MarshalOptions(ctx.App, base)` once. Marshal each message with the result, use the encoded bytes as `json.RawMessage` in the document, and pass the document to `format.Write`. The base options can supply an `Any` resolver or request protobuf field names. For commands that filter paginated records before rendering, evaluate the filter against a separate input encoded with `EmitDefaultValues` and use the matching indices to select the original messages for output.
+
 ## Docker-style row templates
 
 Apps can enable `format.Extension{RowTemplates: true}` alongside `Projections`. Handlers that use `format.Write` or `format.WriteWith` then accept a Go template in `--format`. It runs once per selected item, or once for a single object. Each execution ends with a newline. Fields use the exact names and case shown by `--format json`. An empty list prints zero rows.
