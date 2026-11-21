@@ -102,3 +102,46 @@ func TestProjectionOnTerminal(t *testing.T) {
 		}
 	}
 }
+
+// On a terminal, --jq string results and the strings and keys of
+// --template data are escaped, while the template's own color helper
+// still writes its escape sequences; RawControlChars prints them raw.
+func TestEscapeOnTerminal(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("TERM", "xterm-256color")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	t.Setenv("NO_COLOR", "")
+	term := ptytest.New(t)
+	app := clix.NewApp("probe", clix.WithAppOut(term.TTY), clix.WithAppErr(&bytes.Buffer{}), clix.WithAppInteractive(clix.InteractiveNever))
+	app.AddExtension(format.Extension{Projections: true})
+	data := []map[string]any{{"name": "a\x1b[31mred\x1b[0m", "note": "safe\r\nEVIL", "labels": map[string]string{"k\x1b[1m": "v"}}}
+	app.Root.AddCommand(clix.NewCommand("hostile", clix.WithCommandRun(func(ctx *clix.Context) error {
+		return format.Write(ctx, data)
+	})))
+	app.Root.AddCommand(clix.NewCommand("raw", clix.WithCommandRun(func(ctx *clix.Context) error {
+		return format.WriteWith(ctx, data, clix.FormatOptions{RawControlChars: true})
+	})))
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"hostile", "--jq", ".[].name"}, `a\x1b[31mred\x1b[0m` + "\n"},
+		{[]string{"hostile", "--jq", ".[].note"}, "safe\r\nEVIL\n"}, // written whole: a Windows line ending is kept
+		{[]string{"hostile", "--template", `{{range .}}{{.name}}|{{.note}}{{"\n"}}{{end}}`}, `a\x1b[31mred\x1b[0m|safe\r` + "\nEVIL\n"},
+		{[]string{"hostile", "--template", `{{range .}}{{range $k, $v := .labels}}{{$k}}={{$v}}{{end}}{{"\n"}}{{end}}`}, `k\x1b[1m=v` + "\n"},
+		{[]string{"hostile", "--template", `{{range .}}{{color "red" .name}}{{"\n"}}{{end}}`}, "\x1b[31m" + `a\x1b[31mred\x1b[0m` + "\x1b[0m\n"},
+		{[]string{"hostile", "--format", "value(name)"}, `a\x1b[31mred\x1b[0m` + "\n"},
+		{[]string{"raw", "--jq", ".[].name"}, "a\x1b[31mred\x1b[0m\n"},
+		{[]string{"raw", "--template", `{{range .}}{{.name}}{{"\n"}}{{end}}`}, "a\x1b[31mred\x1b[0m\n"},
+	} {
+		term.ResetOutput()
+		if err := app.Run(context.Background(), tc.args); err != nil {
+			t.Fatalf("%q: %v", tc.args, err)
+		}
+		// The terminal turns each "\n" into "\r\n" (ONLCR).
+		want := strings.ReplaceAll(tc.want, "\n", "\r\n")
+		if got := term.WaitOutput(t, want, 5*time.Second); got != want {
+			t.Errorf("%q on a terminal:\ngot  %q\nwant %q", tc.args, got, want)
+		}
+	}
+}

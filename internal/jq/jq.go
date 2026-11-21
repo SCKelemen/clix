@@ -36,6 +36,14 @@ func Parse(expr string) (*Query, error) {
 // regex the filter computes, regex flags, a slice) is an *UnsupportedError,
 // which "?" does not catch. A malformed input is a plain error.
 func (q *Query) Write(w io.Writer, input []byte) error {
+	return q.WriteStrings(w, input, nil)
+}
+
+// WriteStrings is Write with the text of each string result passed
+// through str before it is written, such as to escape control
+// characters; nil writes it as it is. Other results are JSON, whose
+// encoding escapes control characters itself.
+func (q *Query) WriteStrings(w io.Writer, input []byte, str func(string) string) error {
 	v, err := decode(input)
 	if err != nil {
 		return err
@@ -43,6 +51,9 @@ func (q *Query) Write(w io.Writer, input []byte) error {
 	return q.run(v, func(out any) error {
 		var b []byte
 		if s, ok := out.(string); ok {
+			if str != nil {
+				s = str(s)
+			}
 			b = append([]byte(s), '\n')
 		} else {
 			b = append(appendJSON(nil, out, true, 0), '\n')

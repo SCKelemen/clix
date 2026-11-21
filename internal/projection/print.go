@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/SCKelemen/clix/v2/internal/resource"
+	"github.com/SCKelemen/clix/v2/internal/termesc"
 )
 
 // Options configure Print.
@@ -18,6 +19,33 @@ type Options struct {
 	// ASCII and text outside ASCII in a table is an error (gcloud would
 	// print it as "?").
 	UTF8 bool
+
+	// RawControl prints control characters as they are, as gcloud does
+	// (though a table counts each of them as a column wide, where gcloud
+	// skips ESC [ sequences when TERM names a terminal with ANSI
+	// support). By default they are shown as visible escapes (see
+	// termesc): in csv, value, flattened and list as termesc.Text writes
+	// them, and in a table without the CR of a Windows line ending, since
+	// a table splits a cell into lines and pads them.
+	RawControl bool
+}
+
+// text returns s as the printers write a field: escaped (termesc.Text)
+// unless o.RawControl.
+func (o Options) text(s string) string {
+	if o.RawControl {
+		return s
+	}
+	return termesc.Text(s)
+}
+
+// cell returns s as a table writes a cell, a heading or its title: as
+// text does, with every CR escaped.
+func (o Options) cell(s string) string {
+	if o.RawControl {
+		return s
+	}
+	return termesc.Escape(s, termesc.Tab|termesc.Newline)
 }
 
 // ErrNeedsProjection is returned (wrapped) for table, csv and value with
@@ -42,11 +70,11 @@ func (f *Format) Print(w io.Writer, data any, opts Options) error {
 	case "table":
 		return f.printTable(w, records, opts)
 	case "csv", "value":
-		return f.printCSV(w, records)
+		return f.printCSV(w, records, opts)
 	case "flattened":
-		return f.printFlattened(w, records, single)
+		return f.printFlattened(w, records, single, opts)
 	case "list":
-		return f.printList(w, records)
+		return f.printList(w, records, opts)
 	case "none":
 		return nil
 	}
@@ -150,22 +178,22 @@ func (f *Format) printTable(w io.Writer, records []any, opts Options) error {
 	for i, row := range rows {
 		cells[i] = make([]string, len(row))
 		for j, v := range row {
-			cells[i][j] = stringify(v)
+			cells[i][j] = opts.cell(stringify(v))
 		}
 	}
 	var heading []string
 	if _, ok := f.attr("no-heading"); !ok {
-		heading = f.labels()
+		for _, l := range f.labels() {
+			heading = append(heading, opts.cell(l))
+		}
 	}
 	title, hasTitle := f.attrs["title"]
+	title.str = opts.cell(title.str)
 	texts := slices.Concat(heading, []string{title.str})
 	for _, row := range cells {
 		texts = append(texts, row...)
 	}
 	for _, s := range texts {
-		if err := checkText(s); err != nil {
-			return err
-		}
 		if !opts.UTF8 && strings.IndexFunc(s, func(r rune) bool { return r > 0x7f }) >= 0 {
 			return resource.Unsupportedf("text outside ASCII in a table when the output is not UTF-8")
 		}
@@ -418,7 +446,7 @@ func numify(v any) resource.Number {
 }
 
 // printCSV is csv_printer.CsvPrinter and ValuePrinter.
-func (f *Format) printCSV(w io.Writer, records []any) error {
+func (f *Format) printCSV(w io.Writer, records []any, opts Options) error {
 	if err := f.needColumns(); err != nil {
 		return err
 	}
@@ -437,6 +465,7 @@ func (f *Format) printCSV(w io.Writer, records []any) error {
 		quote = ""
 	}
 	quoteField := func(field string) string {
+		field = opts.text(field)
 		if field == "" || quote == "" {
 			return field
 		}
@@ -462,9 +491,6 @@ func (f *Format) printCSV(w io.Writer, records []any) error {
 					fields := make([]string, len(labels))
 					for i, l := range labels {
 						fields[i] = quoteField(resource.Lower(l))
-						if err := checkText(fields[i]); err != nil {
-							return err
-						}
 					}
 					b.WriteString(strings.Join(fields, separator) + terminator)
 				}
@@ -497,11 +523,6 @@ func (f *Format) printCSV(w io.Writer, records []any) error {
 				line[i] = quoteField(resource.Str(col))
 			}
 		}
-		for _, field := range line {
-			if err := checkText(field); err != nil {
-				return err
-			}
-		}
 		b.WriteString(strings.Join(line, separator) + terminator)
 	}
 	_, err := io.WriteString(w, b.String())
@@ -509,7 +530,7 @@ func (f *Format) printCSV(w io.Writer, records []any) error {
 }
 
 // printFlattened is flattened_printer.FlattenedPrinter.
-func (f *Format) printFlattened(w io.Writer, records []any, single bool) error {
+func (f *Format) printFlattened(w io.Writer, records []any, single bool, opts Options) error {
 	var labels map[string]string
 	if len(f.Columns) > 0 {
 		labels = map[string]string{}
@@ -568,8 +589,9 @@ func (f *Format) printFlattened(w io.Writer, records []any, single bool) error {
 		}
 		flatten(record, "")
 		maxKey := 0
-		for _, p := range pairs {
-			maxKey = max(maxKey, runeLen(p.key))
+		for i, p := range pairs {
+			pairs[i].key = opts.text(p.key)
+			maxKey = max(maxKey, runeLen(pairs[i].key))
 		}
 		for _, p := range pairs {
 			b.WriteString(p.key + separator)
@@ -581,10 +603,7 @@ func (f *Format) printFlattened(w io.Writer, records []any, single bool) error {
 			if strings.Contains(val, "\n") || (len(r) > 0 && (isSpace(r[0]) || isSpace(r[len(r)-1]))) {
 				val = stringQuote(val)
 			}
-			if err := checkText(p.key + val); err != nil {
-				return err
-			}
-			b.WriteString(val + "\n")
+			b.WriteString(opts.text(val) + "\n")
 		}
 	}
 	_, err := io.WriteString(w, b.String())
@@ -618,7 +637,7 @@ func stringQuote(s string) string {
 }
 
 // printList is list_printer.ListPrinter.
-func (f *Format) printList(w io.Writer, records []any) error {
+func (f *Format) printList(w io.Writer, records []any, opts Options) error {
 	separator := "\n   "
 	if _, ok := f.attr("compact"); ok {
 		separator = " "
@@ -627,7 +646,7 @@ func (f *Format) printList(w io.Writer, records []any) error {
 	title, hasTitle := f.attrs["title"]
 	if hasTitle && title.str != "" {
 		if _, ok := f.attr("always-display-title"); ok {
-			b.WriteString(title.str + "\n")
+			b.WriteString(opts.text(title.str) + "\n")
 			hasTitle = false
 		}
 	}
@@ -668,14 +687,13 @@ func (f *Format) printList(w io.Writer, records []any) error {
 			items = []string{listScalar(r)}
 		}
 		if hasTitle && title.str != "" {
-			b.WriteString(title.str + "\n")
+			b.WriteString(opts.text(title.str) + "\n")
 			hasTitle = false
 		}
-		line := " - " + strings.Join(items, separator) + "\n"
-		if err := checkText(line[:len(line)-1]); err != nil {
-			return err
+		for i, item := range items {
+			items[i] = opts.text(item)
 		}
-		b.WriteString(line)
+		b.WriteString(" - " + strings.Join(items, separator) + "\n")
 	}
 	_, err := io.WriteString(w, b.String())
 	return err

@@ -104,8 +104,8 @@ func TestTableGolden(t *testing.T) {
 
 				switch mode {
 				case "tsv":
-					// Escape sequences in the data pass through; TSV adds none.
-					if name != "escapes" && strings.ContainsRune(b.String(), 0x1b) {
+					// Escape sequences in the data are escaped; TSV adds none.
+					if strings.ContainsRune(b.String(), 0x1b) {
 						t.Errorf("TSV output has an escape sequence: %q", b.String())
 					}
 					for _, line := range strings.Split(strings.TrimSuffix(b.String(), "\n"), "\n") {

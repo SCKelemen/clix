@@ -50,7 +50,7 @@ func writeProjection(out io.Writer, data any, f *projection.Format, opts clix.Fo
 		}
 		return clix.FormatData(out, json.RawMessage(b), f.Name)
 	}
-	if err := f.Print(out, doc, projection.Options{UTF8: tty.UTF8()}); err != nil {
+	if err := f.Print(out, doc, projection.Options{UTF8: tty.UTF8(), RawControl: opts.RawControlChars}); err != nil {
 		return projectionError(err)
 	}
 	return nil

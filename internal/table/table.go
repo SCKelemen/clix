@@ -4,11 +4,10 @@
 package table
 
 import (
-	"fmt"
 	"io"
 	"strings"
-	"unicode/utf8"
 
+	"github.com/SCKelemen/clix/v2/internal/termesc"
 	"github.com/SCKelemen/clix/v2/internal/tty"
 )
 
@@ -29,6 +28,12 @@ type Options struct {
 	// Header styles the header row of a terminal table; nil leaves it
 	// plain.
 	Header func(string) string
+
+	// RawControl writes the control characters of tab-separated cells as
+	// they are, with only the linear TSV escapes (see Write). A terminal
+	// table escapes them regardless, since it lays cells out by their
+	// display width.
+	RawControl bool
 }
 
 // Separator is the space between two columns of a terminal table.
@@ -39,17 +44,20 @@ const Separator = "  "
 // On a terminal (Options.Terminal) the header comes first, the columns are
 // aligned by display width and separated by two spaces, the last column is
 // not padded, and control characters in a cell are shown escaped ("\n",
-// "\t", "\x1b"), so a value can neither break the layout nor send escape
-// sequences to the terminal.
+// "\t", "\x1b"; see termesc.Line), so a value can neither break the layout
+// nor send escape sequences to the terminal.
 //
 // Otherwise every row is one line of tab-separated values, with no header,
 // no padding and no truncation, in the linear TSV convention: a backslash,
 // tab, newline or carriage return in a cell is written as \\, \t, \n or
-// \r, so every line is one row and every tab separates two cells.
+// \r, so every line is one row and every tab separates two cells. The other
+// control characters are escaped as on a terminal ("\x1b"), since TSV
+// often reaches one through grep or less; with the backslash escaped, the
+// escapes stay unambiguous.
 // https://www.iana.org/assignments/media-types/text/tab-separated-values
 func Write(w io.Writer, header []string, rows [][]string, opts Options) error {
 	if !opts.Terminal {
-		return writeTSV(w, rows)
+		return writeTSV(w, rows, opts.RawControl)
 	}
 	all := make([][]string, 0, len(rows)+1)
 	if header != nil {
@@ -59,7 +67,7 @@ func Write(w io.Writer, header []string, rows [][]string, opts Options) error {
 	for r, row := range all {
 		cells := make([]string, len(row))
 		for i, c := range row {
-			cells[i] = escapeControls(c)
+			cells[i] = termesc.Line(c)
 		}
 		all[r] = cells
 	}
@@ -94,7 +102,7 @@ func Write(w io.Writer, header []string, rows [][]string, opts Options) error {
 	return nil
 }
 
-func writeTSV(w io.Writer, rows [][]string) error {
+func writeTSV(w io.Writer, rows [][]string, raw bool) error {
 	var b strings.Builder
 	for _, row := range rows {
 		b.Reset()
@@ -102,7 +110,11 @@ func writeTSV(w io.Writer, rows [][]string) error {
 			if i > 0 {
 				b.WriteByte('\t')
 			}
-			b.WriteString(EscapeTSV(cell))
+			cell = EscapeTSV(cell)
+			if !raw {
+				cell = termesc.Text(cell)
+			}
+			b.WriteString(cell)
 		}
 		b.WriteByte('\n')
 		if _, err := io.WriteString(w, b.String()); err != nil {
@@ -122,40 +134,6 @@ func EscapeTSV(s string) string {
 		return s
 	}
 	return tsvEscaper.Replace(s)
-}
-
-// escapeControls shows the control characters in s (C0, DEL and C1, which
-// include ESC and CSI) as escapes: \t, \n and \r, and \xHH or \u00HH for
-// the others. Invalid UTF-8 bytes become U+FFFD.
-func escapeControls(s string) string {
-	clean := true
-	for _, r := range s {
-		if r < 0x20 || (r >= 0x7f && r < 0xa0) || r == utf8.RuneError {
-			clean = false
-			break
-		}
-	}
-	if clean {
-		return s
-	}
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r == '\t':
-			b.WriteString(`\t`)
-		case r == '\n':
-			b.WriteString(`\n`)
-		case r == '\r':
-			b.WriteString(`\r`)
-		case r < 0x20 || r == 0x7f:
-			fmt.Fprintf(&b, `\x%02x`, r)
-		case r >= 0x80 && r < 0xa0:
-			fmt.Fprintf(&b, `\u%04x`, r)
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }
 
 // Truncate shortens s to at most width display columns, ending it with

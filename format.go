@@ -22,6 +22,11 @@ import (
 //
 // Text output is meant for people:
 //
+//   - Control characters in keys and values are shown as visible escapes,
+//     so that strings from a server cannot send escape sequences to the
+//     terminal: ESC [ 3 1 m prints as \x1b[31m (see EscapeControlChars).
+//     Tab and newline print as they are, except in tables.
+//     FormatOptions.RawControlChars turns this off.
 //   - nil prints nothing.
 //   - Strings, numbers, booleans, fmt.Stringer and error values print on
 //     one line (a Stringer through its String method).
@@ -108,6 +113,19 @@ type FormatOptions struct {
 	// HeaderStyle styles the header of a terminal table, when color is on.
 	// nil means bold.
 	HeaderStyle TextStyle
+
+	// RawControlChars writes the control characters of text output as
+	// they are, instead of as the visible escapes of EscapeControlChars:
+	// for an app whose values hold escape sequences on purpose, such as
+	// colors it added itself, or for output that must keep the exact
+	// bytes and never reaches a terminal. Tab-separated values keep their
+	// linear TSV escapes (\t, \n, \r and \\), and a table on a terminal
+	// escapes control characters regardless, since it lays cells out by
+	// their display width. Strings from a server or a user must not be
+	// printed this way: an escape sequence in them could rewrite what the
+	// terminal shows. JSON and YAML output are not affected; their
+	// encoders escape control characters themselves.
+	RawControlChars bool
 }
 
 // FormatDataWith formats data to w as FormatData does, with the options
@@ -274,10 +292,14 @@ func jsonNumbers(v interface{}) interface{} {
 
 // formatText formats data as plain text (default).
 func formatText(w io.Writer, data interface{}, opts FormatOptions) error {
+	esc := EscapeControlChars
+	if opts.RawControlChars {
+		esc = func(s string) string { return s }
+	}
 	switch v := data.(type) {
 	case map[string]interface{}:
 		if scalarMap(v) {
-			return formatTextMap(w, v)
+			return formatTextMap(w, v, esc)
 		}
 	case map[string]string:
 		// Convert map[string]string to map[string]interface{}
@@ -285,10 +307,10 @@ func formatText(w io.Writer, data interface{}, opts FormatOptions) error {
 		for k, val := range v {
 			m[k] = val
 		}
-		return formatTextMap(w, m)
+		return formatTextMap(w, m, esc)
 	case []interface{}:
 		if scalarList(v) {
-			return formatTextList(w, v)
+			return formatTextList(w, v, esc)
 		}
 	case []string:
 		// Convert []string to []interface{}
@@ -296,16 +318,18 @@ func formatText(w io.Writer, data interface{}, opts FormatOptions) error {
 		for i, val := range v {
 			list[i] = val
 		}
-		return formatTextList(w, list)
+		return formatTextList(w, list, esc)
 	}
 	node := textNode(data)
 	if rows, ok := tableRows(node); ok {
 		return writeTable(w, data, rows, opts, terminalOf(w))
 	}
-	return writeTextNode(w, node)
+	return writeTextNode(w, node, esc)
 }
 
-func formatTextMap(w io.Writer, m map[string]interface{}) error {
+// formatTextMap, formatTextList and the text node writers write each
+// line through esc, EscapeControlChars unless the output is raw.
+func formatTextMap(w io.Writer, m map[string]interface{}, esc func(string) string) error {
 	// Sort keys for consistent output
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -314,16 +338,16 @@ func formatTextMap(w io.Writer, m map[string]interface{}) error {
 	sort.Strings(keys)
 
 	for _, key := range keys {
-		if _, err := fmt.Fprintf(w, "%s = %s\n", key, formatValue(m[key])); err != nil {
+		if _, err := fmt.Fprintf(w, "%s = %s\n", esc(key), esc(formatValue(m[key]))); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func formatTextList(w io.Writer, list []interface{}) error {
+func formatTextList(w io.Writer, list []interface{}, esc func(string) string) error {
 	for _, item := range list {
-		if _, err := fmt.Fprintf(w, "%s\n", formatValue(item)); err != nil {
+		if _, err := fmt.Fprintf(w, "%s\n", esc(formatValue(item))); err != nil {
 			return err
 		}
 	}
@@ -600,31 +624,31 @@ func textLine(node interface{}) string {
 }
 
 // writeTextNode prints a node from textNode.
-func writeTextNode(w io.Writer, node interface{}) error {
+func writeTextNode(w io.Writer, node interface{}, esc func(string) string) error {
 	switch n := node.(type) {
 	case nil:
 		return nil
 	case map[string]interface{}:
 		var lines []string
 		flattenText("", n, &lines)
-		return writeLines(w, lines)
+		return writeLines(w, lines, esc)
 	case []interface{}:
-		return writeTextList(w, n)
+		return writeTextList(w, n, esc)
 	default:
-		_, err := fmt.Fprintf(w, "%s\n", textLine(n))
+		_, err := fmt.Fprintf(w, "%s\n", esc(textLine(n)))
 		return err
 	}
 }
 
 // writeTextList prints a list: plain values one per line, otherwise each
 // item as a block separated by a blank line.
-func writeTextList(w io.Writer, items []interface{}) error {
+func writeTextList(w io.Writer, items []interface{}, esc func(string) string) error {
 	if allScalarNodes(items) {
 		lines := make([]string, len(items))
 		for i, item := range items {
 			lines[i] = textLine(item)
 		}
-		return writeLines(w, lines)
+		return writeLines(w, lines, esc)
 	}
 	for i, item := range items {
 		if i > 0 {
@@ -632,7 +656,7 @@ func writeTextList(w io.Writer, items []interface{}) error {
 				return err
 			}
 		}
-		if err := writeTextNode(w, item); err != nil {
+		if err := writeTextNode(w, item, esc); err != nil {
 			return err
 		}
 	}
@@ -691,9 +715,9 @@ func allScalarNodes(items []interface{}) bool {
 	return true
 }
 
-func writeLines(w io.Writer, lines []string) error {
+func writeLines(w io.Writer, lines []string, esc func(string) string) error {
 	for _, line := range lines {
-		if _, err := io.WriteString(w, line+"\n"); err != nil {
+		if _, err := io.WriteString(w, esc(line)+"\n"); err != nil {
 			return err
 		}
 	}

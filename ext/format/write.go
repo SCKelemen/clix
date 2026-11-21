@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
 	"github.com/SCKelemen/clix/v2"
 	"github.com/SCKelemen/clix/v2/internal/jq"
 	"github.com/SCKelemen/clix/v2/internal/projection"
+	"github.com/SCKelemen/clix/v2/internal/tty"
 )
 
 // Write prints data, a command's result, to ctx.App.Out as the output
@@ -34,15 +36,24 @@ import (
 //     too).
 //   - --jq runs a jq expression over that JSON (all of it, or the --json
 //     fields) and prints each result on its own line: a string as its
-//     raw text, as gh and "jq -r" print it, on a terminal and in a pipe,
-//     and any other value as jq prints it, indented by two spaces. The
-//     output is byte for byte what "jq -r EXPR" prints for the --json
-//     output. Only a strict subset of jq is implemented in clix (no
-//     dependencies); see the package documentation.
+//     raw text, as gh and "jq -r" print it, and any other value as jq
+//     prints it, indented by two spaces. In a pipe or a file the output
+//     is byte for byte what "jq -r EXPR" prints for the --json output; on
+//     a terminal, control characters in a string result print as visible
+//     escapes, as in text output (see clix.EscapeControlChars). Only a
+//     strict subset of jq is implemented in clix (no dependencies); see
+//     the package documentation.
 //   - --template executes a Go text/template with the decoded JSON as its
 //     data (objects are map[string]any, lists []any, whole numbers int64
 //     or uint64, other numbers float64), with the helpers listed in the
-//     package documentation.
+//     package documentation. On a terminal, control characters in the
+//     data's strings and keys are escaped before the template runs (tab
+//     and newline excepted), so the data cannot write escape sequences;
+//     the template's own text and the color and hyperlink helpers can.
+//
+// Text output, gcloud format expressions, --jq on a terminal and
+// --template on a terminal escape control characters unless
+// opts.RawControlChars is set (see clix.FormatOptions).
 //
 // With Extension.Projections, a gcloud format expression in --format
 // (anything but json, yaml or text alone) prints data as gcloud's printer
@@ -125,12 +136,16 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 		if err != nil {
 			return clix.UsageErrorf("invalid value for jq: %w", err)
 		}
-		if err := q.Write(out, doc); err != nil {
+		var str func(string) string
+		if escapeData(out, opts) {
+			str = clix.EscapeControlChars
+		}
+		if err := q.WriteStrings(out, doc, str); err != nil {
 			return fmt.Errorf("--jq: %w", err)
 		}
 		return nil
 	case s.template != "":
-		return executeTemplate(out, s.template, doc)
+		return executeTemplate(out, s.template, doc, escapeData(out, opts))
 	default:
 		_, err := out.Write(doc)
 		return err
@@ -219,4 +234,12 @@ func fieldsError(field string, available []string) error {
 		b.WriteString(f)
 	}
 	return clix.UsageErrorf("%s", b.String())
+}
+
+// escapeData reports whether --jq and --template escape the control
+// characters of the data they print: on a terminal, which a person reads,
+// unless opts.RawControlChars. In a pipe or a file the output is for a
+// program, which needs the exact text, as "jq -r" prints it.
+func escapeData(out io.Writer, opts clix.FormatOptions) bool {
+	return !opts.RawControlChars && tty.IsTerminal(out)
 }

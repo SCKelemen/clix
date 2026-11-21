@@ -131,14 +131,30 @@
 // Anything else, such as gcloud's other formats and transforms (date()
 // among them), unknown attributes, or an order other than
 // NAME[ATTRIBUTES](PROJECTION), is a usage error that says it "is not
-// supported in clix --format", never different output. Tables print the
-// same on a terminal as in a pipe, as gcloud's do, with Unicode box
-// characters only in a UTF-8 locale.
+// supported in clix --format", never different output, with one
+// deliberate difference: control characters print as visible escapes
+// (see below). Tables print the same on a terminal as in a pipe, as
+// gcloud's do, with Unicode box characters only in a UTF-8 locale.
+//
+// # Control characters
+//
+// Strings from a server can hold escape sequences that would rewrite
+// what a terminal shows (the class of kubectl's CVE-2021-25743). Write
+// prints the control characters in them as visible escapes, such as
+// \x1b for ESC, as clix.FormatData's text output does (see
+// clix.EscapeControlChars): in text and its tables, in the gcloud
+// formats table, csv, value, flattened and list (gcloud prints them as
+// they are), and, on a terminal only, in --jq's string results and in
+// the strings and keys of --template's data. In a pipe or a file, --jq
+// and --template keep the exact text for programs. JSON and YAML escape
+// control characters themselves. clix.FormatOptions.RawControlChars,
+// passed to WriteWith, prints them as they are.
 //
 // # Template helpers
 //
-// --template is a Go text/template over the decoded JSON output, with
-// text/template's own functions and gh's helpers:
+// --template is a Go text/template over the decoded JSON output (with
+// control characters in its strings and keys escaped on a terminal; see
+// above), with text/template's own functions and gh's helpers:
 //
 //   - color STYLE TEXT (and autocolor): TEXT in a style such as
 //     "green+b" or "red:white", only when color is on for the output

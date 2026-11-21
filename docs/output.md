@@ -70,7 +70,7 @@ clix (42)
 
 - **JSON**: `encoding/json/v2` with `encoding/json`'s rules (field names, `omitempty`, `,string`, `MarshalJSON`, embedded fields), plus two-space indentation and a trailing newline, sorted map keys, `<`, `>` and `&` not escaped, durations as ISO 8601 (`"PT1M30S"`), times as RFC 3339 (fractional seconds only when non-zero), and `[]` and `{}` for nil slices and maps.
 - **YAML** (`go.yaml.in/yaml/v3`): `json.RawMessage` is decoded first; durations are ISO 8601 at the top level and in maps, slices, arrays and pointers, while struct fields keep YAML's own names and `1m30s`, which `yaml.Unmarshal` can read back into a `time.Duration` field.
-- **Text**: sorted `key = value` lines with nested keys flattened as `a.b`, one line per element of a list of plain values, structs through their JSON field names (fields tagged `json:"-"` never print), durations as `1m30s`, `fmt.Stringer` values through `String`, and nothing for nil. A list of objects (structs or maps) is a table, as below. Everything that is not a list of objects prints exactly as in 2.7.0.
+- **Text**: sorted `key = value` lines with nested keys flattened as `a.b`, one line per element of a list of plain values, structs through their JSON field names (fields tagged `json:"-"` never print), durations as `1m30s`, `fmt.Stringer` values through `String`, and nothing for nil. A list of objects (structs or maps) is a table, as below. Control characters in keys and values print as visible escapes, such as `\x1b` for ESC (see [Control characters](#control-characters-and-escape-sequences)). Everything else that is not a list of objects prints exactly as in 2.7.0.
 
 ## Tables
 
@@ -82,7 +82,7 @@ A list whose elements are all objects prints as a table in text, the way gh prin
 | Header | Column names upper-cased and split into words (`displayName` is `DISPLAY NAME`) | None |
 | Color | Bold header, unless `NO_COLOR`, `CLICOLOR=0` or `TERM=dumb` | Never, even with `CLICOLOR_FORCE` |
 | Width | The widest columns are truncated with `…` (`...` outside UTF-8 locales) to fit the terminal | Nothing is truncated |
-| Special characters | Control characters show escaped (`\n`, `\t`, `\x1b`), so data cannot move the cursor or change colors | `\`, tab, newline and carriage return are written as `\\`, `\t`, `\n` and `\r` (linear TSV), so every line is a row; nothing else changes |
+| Special characters | Control characters show escaped (`\n`, `\t`, `\x1b`), so data cannot move the cursor or change colors | `\`, tab, newline and carriage return are written as `\\`, `\t`, `\n` and `\r` (linear TSV), so every line is a row; other control characters show escaped as on a terminal (`\x1b`), since TSV often reaches one through `grep` or `less` |
 
 The columns are the fields in the order the JSON output has them: struct fields in declaration order (an `omitempty` field missing from the first elements still goes where it is declared) and map keys sorted. A cell holds the field's text as in `key = value` lines: strings as they are, numbers, booleans, durations as `1m30s`, nothing for null, a list of plain values joined with `, `, and nested objects as compact JSON. Choose the columns with `clix.FormatDataWith` (or `format.WriteWith`); a column may be a dotted path into nested objects, and a path through a list collects the field of each element:
 
@@ -99,6 +99,36 @@ return clix.FormatDataWith(ctx.App.Out, repos, clix.FormatOptions{
 ```
 
 `FormatOptions.HeaderStyle` (a `clix.TextStyle`, such as a lipgloss style) replaces the bold header.
+
+## Control characters and escape sequences
+
+A string a command prints may come from a server, and a terminal acts on the control characters in it: `ESC [ 2 J` clears the screen, `ESC ] 0 ; ... BEL` sets the window title, `ESC ] 8 ; ; URL` makes a hyperlink whose text hides where it goes, a carriage return moves back to the start of the line so that what follows overwrites it, and a bidirectional override reverses the text after it (`invoice` + U+202E + `fdp.exe` shows as `invoiceexe.pdf`). Printed as they are, such strings can spoof or rewrite what the user sees. kubectl had this bug ([CVE-2021-25743](https://github.com/kubernetes/kubernetes/issues/101695)); its fix, [kubernetes/kubernetes#112553](https://github.com/kubernetes/kubernetes/pull/112553), escapes ESC as `^[` and carriage return as `\r` in its human-readable output (`printers.EscapeTerminal` in `cli-runtime/pkg/printers/terminal.go`, used by the table printer and `kubectl describe`).
+
+clix's text output escapes more: every C0 control character but tab and newline, DEL, the C1 control characters (among them the one-byte CSI, U+009B), the bidirectional embedding, override and isolate controls (U+202A to U+202E and U+2066 to U+2069, as in "Trojan Source", CVE-2021-42574) and the bytes of invalid UTF-8. They print as visible escapes: `\r` for carriage return, `\xHH` for the other C0 controls and DEL, `\uHHHH` for the rest, and `\xHH` for an invalid byte, so `ESC [ 3 1 m red` prints as `\x1b[31mred`. A backslash in the data is not escaped (except in tab-separated values, where it is `\\`), so plain ASCII and UTF-8 text prints byte for byte as before.
+
+| Output | Control characters |
+| --- | --- |
+| Text: `key = value` lines, lists and single values | escaped; tab and newline print as they are, and so does a carriage return right before a newline (a Windows line ending) |
+| Tables on a terminal | escaped, tab, newline and carriage return included (`\t`, `\n`, `\r`), always |
+| Tab-separated values (a list of objects, not on a terminal) | the linear TSV escapes, and the others escaped as on a terminal |
+| gcloud formats: `table`, `value`, `csv`, `flattened` and `list` | escaped, where clix used to fail on them; tab and newline print as gcloud prints them, and a table also escapes the carriage return of a Windows line ending, since it splits a cell into lines and pads them |
+| `--format json` and `--json` | unchanged: the encoder writes C0 controls as `\u001b` and so on, and DEL, C1 and bidirectional controls as they are |
+| `--format yaml` | unchanged: the encoder escapes C0, DEL and C1 controls (`\e`, `\x9B`); bidirectional controls print as they are |
+| `--jq` | on a terminal, a string result is escaped as text is; in a pipe or a file it is its exact text, as `jq -r` prints it. Other results are JSON |
+| `--template` | on a terminal, the strings and keys of the data are escaped (tab and newline excepted) before the template runs, so `{{.name}}` cannot write an escape sequence while `color` and `hyperlink` still can; in a pipe or a file the data is as it is |
+
+`--jq` and `--template` escape only on a terminal because their output is often read by a program, which needs the exact text: `myapp list --jq '.[].id' | xargs ...`. A person reading them on a terminal gets the escapes. (kubectl leaves templates alone for the same reason; its fix notes that output piped to `grep` reaches the terminal too, which is why every other text output escapes in a pipe as well.) On Windows, clix turns on the console's virtual terminal processing for color and leaves it on, so the console acts on escape sequences as other terminals do; the escaping is the same on every platform.
+
+To print control characters as they are, for values that hold escape sequences on purpose (colors the app added itself) or output that must keep the exact bytes, set `clix.FormatOptions{RawControlChars: true}` with `clix.FormatDataWith` or `format.WriteWith`. It covers text, tab-separated values (which keep the linear TSV escapes), the gcloud formats (which then print what gcloud prints), `--jq` and `--template`; a table on a terminal still escapes, since it lays cells out by their width. Never use it for strings from a server or a user.
+
+A command that prints strings itself, rather than through `clix.FormatData` or `format.Write`, can escape them the same way with `clix.EscapeControlChars`:
+
+```go
+// reportDeleted prints a name the server returned.
+func reportDeleted(ctx *clix.Context, name string) {
+        fmt.Fprintf(ctx.App.Out, "Deleted %s\n", clix.EscapeControlChars(name))
+}
+```
 
 ## `--json`, `--jq` and `--template`
 
@@ -120,8 +150,8 @@ return clix.FormatDataWith(ctx.App.Out, repos, clix.FormatOptions{
 - **Ambient**: all four flags choose how the result is printed, so `myapp --json name widgets create` still prompts for missing required flags (see [Context flags](routing-and-flags.md#context-flags)).
 - **Errors**: a `--jq` expression or a `--template` that does not parse, or a malformed `--json` field, is a usage error (exit status 2) before the command runs. Unknown fields and the field list are usage errors that `format.Write` returns before printing anything. An error while a jq expression or a template runs (exit status 1) comes after the output produced before it, as in jq.
 - **`--json` output** is indented like `--format json`; with every field selected it is byte for byte the same.
-- **`--jq` output**: each result goes on its own line. A string prints as its raw text, without quotes, on a terminal and in a pipe alike, as gh does (`jq -r`); every other value prints as jq prints it, indented by two spaces. The output is byte for byte what `myapp list --json f | jq -r EXPR` prints with jq 1.8.1.
-- **`--template` data**: objects are `map[string]any`, lists `[]any`, whole numbers `int64` (or `uint64`), other numbers `float64`, so `{{.stars}}` prints `42` and `{{if gt .stars 10}}` compares numbers. A missing key prints `<no value>`, as in gh.
+- **`--jq` output**: each result goes on its own line. A string prints as its raw text, without quotes, as gh does (`jq -r`), with its control characters escaped on a terminal (see [Control characters](#control-characters-and-escape-sequences)); every other value prints as jq prints it, indented by two spaces. In a pipe or a file, the output is byte for byte what `myapp list --json f | jq -r EXPR` prints with jq 1.8.1.
+- **`--template` data**: objects are `map[string]any`, lists `[]any`, whole numbers `int64` (or `uint64`), other numbers `float64`, so `{{.stars}}` prints `42` and `{{if gt .stars 10}}` compares numbers. A missing key prints `<no value>`, as in gh. On a terminal, control characters in the data's strings and keys are escaped before the template runs (see [Control characters](#control-characters-and-escape-sequences)).
 
 `--json` takes an optional value: a custom flag `Value` with an `OptionalValue() bool` method returning true may be written without a value, last or before another flag (see `clix.VarOptions`). Its value never starts with `-`; write `--json=-x` for that.
 
@@ -204,7 +234,7 @@ clix implements a strict subset of gcloud's formats (`gcloud topic formats` and 
 - **Without a projection**, `table`, `csv` and `value` print the command's `FormatOptions.Columns` (from `format.WriteWith`), or else every top-level field, in the order they first appear; gcloud's commands have a default projection instead. A command whose output has no fields needs a projection.
 - **Terminals**: projection tables print the same on a terminal as in a pipe, as gcloud's do: no truncation, no color, headings always (unless `no-heading`). Box characters are Unicode in a UTF-8 locale and ASCII otherwise.
 - **json and yaml** with a projection keep only the projected keys, as gcloud does, and print them with clix's JSON and YAML encoders: the JSON is what gcloud prints, and the YAML is a sequence, as for `--format yaml`, not gcloud's stream of YAML documents.
-- **Rejected**: gcloud's formats `config`, `default`, `diff`, `disable`, `get`, `multi` and `object`; `text` with attributes or a projection (`text` stays clix's format, not gcloud's alias for `flattened`); every other attribute (gcloud ignores unknown ones); other key attributes (`alias`, `format`, `optional`, `width`, `wrap`); other transforms, among them `date()`, which depends on python-dateutil and the local time zone; a key that repeats an earlier column's label (gcloud reads it as that column); an order other than `NAME[ATTRIBUTES](PROJECTION)`; and, when printing, control characters other than tab and newline in the text (gcloud writes them to the terminal as they are), and text outside ASCII in a table when the locale is not UTF-8.
+- **Rejected**: gcloud's formats `config`, `default`, `diff`, `disable`, `get`, `multi` and `object`; `text` with attributes or a projection (`text` stays clix's format, not gcloud's alias for `flattened`); every other attribute (gcloud ignores unknown ones); other key attributes (`alias`, `format`, `optional`, `width`, `wrap`); other transforms, among them `date()`, which depends on python-dateutil and the local time zone; a key that repeats an earlier column's label (gcloud reads it as that column); an order other than `NAME[ATTRIBUTES](PROJECTION)`; and, when printing, text outside ASCII in a table when the locale is not UTF-8. Control characters other than tab and newline, which gcloud writes to the terminal as they are, print as visible escapes (see [Control characters](#control-characters-and-escape-sequences)).
 
 How `--format` relates to the other output flags, and where it comes from:
 

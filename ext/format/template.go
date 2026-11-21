@@ -5,13 +5,16 @@ import (
 	jsonv1 "encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
 	"time"
 
 	"github.com/SCKelemen/clix/v2/internal/table"
+	"github.com/SCKelemen/clix/v2/internal/termesc"
 	"github.com/SCKelemen/clix/v2/internal/tty"
 )
 
@@ -44,8 +47,10 @@ func parseTemplate(text string, st *templateState) (*template.Template, error) {
 }
 
 // executeTemplate runs a --template over doc, the JSON output, and
-// renders any table rows left at the end.
-func executeTemplate(out io.Writer, text string, doc []byte) error {
+// renders any table rows left at the end. With escape, the control
+// characters in the data's strings and keys are escaped first (see
+// escapeStrings).
+func executeTemplate(out io.Writer, text string, doc []byte, escape bool) error {
 	st := &templateState{out: out}
 	if tty.IsTerminal(out) {
 		st.terminal = true
@@ -59,6 +64,9 @@ func executeTemplate(out io.Writer, text string, doc []byte) error {
 	data, err := templateData(doc)
 	if err != nil {
 		return err
+	}
+	if escape {
+		data = escapeStrings(data)
 	}
 	if err := tmpl.Execute(out, data); err != nil {
 		return fmt.Errorf("--template: %w", err)
@@ -79,6 +87,36 @@ func templateData(doc []byte) (any, error) {
 		return nil, err
 	}
 	return templateNumbers(v), nil
+}
+
+// escapeStrings escapes the control characters of the strings and keys
+// in v, data from templateData, keeping tab and newline. Every CR is
+// escaped, even before a newline: a template can cut a string (truncate)
+// or write more after it on the line. When escaped keys of an object
+// collide, a key that needed no escaping keeps its entry, and otherwise
+// the first in sorted order does, so the output does not depend on map
+// order.
+func escapeStrings(v any) any {
+	const keep = termesc.Tab | termesc.Newline
+	switch x := v.(type) {
+	case string:
+		return termesc.Escape(x, keep)
+	case []any:
+		for i, e := range x {
+			x[i] = escapeStrings(e)
+		}
+	case map[string]any:
+		out := make(map[string]any, len(x))
+		for _, k := range slices.Sorted(maps.Keys(x)) {
+			ek := termesc.Escape(k, keep)
+			if _, taken := out[ek]; taken && ek != k {
+				continue
+			}
+			out[ek] = escapeStrings(x[k])
+		}
+		return out
+	}
+	return v
 }
 
 func templateNumbers(v any) any {
