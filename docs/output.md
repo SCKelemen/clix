@@ -199,7 +199,7 @@ myapp projects list --format 'table {{.name}}\t{{.displayName}}'
 myapp projects list --format '{{json .}}'
 ```
 
-Row templates support Go's built-in template functions and the helpers `json VALUE`, `join LIST SEP`, `split STRING SEP`, `lower STRING` and `upper STRING`. A leading `table ` adds a heading derived from direct field selectors and aligns tab-separated columns, including in a pipe. `\t` and `\n` in the format string select tabs and newlines. An unknown field fails the render before any rows reach stdout. Data printed on a terminal follows the control-character escaping rules of `--template`. To format the complete list in a single template, use `--template`.
+Row templates support Go's built-in template functions and the helpers `json VALUE`, `join LIST SEP`, `split STRING SEP`, `lower STRING` and `upper STRING`. A leading `table ` adds a heading derived from direct field selectors and aligns tab-separated columns, including in a pipe. In literal text between template actions, `\t` and `\n` select tabs and newlines. Quoted arguments inside `{{...}}` use Go template string syntax. An unknown field fails the render before any rows reach stdout. Data printed on a terminal follows the control-character escaping rules of `--template`. To format the complete list in a single template, use `--template`.
 
 ## gcloud format projections
 

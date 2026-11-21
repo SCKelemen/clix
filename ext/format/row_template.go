@@ -21,7 +21,6 @@ type rowTemplate struct {
 
 func parseRowTemplate(source string) (*rowTemplate, error) {
 	body, table := strings.CutPrefix(source, "table ")
-	body = strings.NewReplacer(`\t`, "\t", `\n`, "\n").Replace(body)
 	t, err := template.New("row").Option("missingkey=error").Funcs(template.FuncMap{
 		"json": rowJSON, "join": rowJoin, "split": strings.Split,
 		"lower": strings.ToLower, "upper": strings.ToUpper,
@@ -29,11 +28,40 @@ func parseRowTemplate(source string) (*rowTemplate, error) {
 	if err != nil {
 		return nil, err
 	}
+	for _, definition := range t.Templates() {
+		expandRowText(definition.Root)
+	}
 	rows := &rowTemplate{template: t, table: table}
 	if table {
 		rows.header, err = rowHeader(t)
 	}
 	return rows, err
+}
+
+var rowTextEscapes = strings.NewReplacer(`\t`, "\t", `\n`, "\n")
+
+// Expand separators in literal output. Quoted arguments use Go template syntax.
+func expandRowText(list *parse.ListNode) {
+	if list == nil {
+		return
+	}
+	for _, node := range list.Nodes {
+		var branch *parse.BranchNode
+		switch n := node.(type) {
+		case *parse.TextNode:
+			n.Text = []byte(rowTextEscapes.Replace(string(n.Text)))
+		case *parse.IfNode:
+			branch = &n.BranchNode
+		case *parse.RangeNode:
+			branch = &n.BranchNode
+		case *parse.WithNode:
+			branch = &n.BranchNode
+		}
+		if branch != nil {
+			expandRowText(branch.List)
+			expandRowText(branch.ElseList)
+		}
+	}
 }
 
 // A table header comes from the selected field paths, including for an empty list.
