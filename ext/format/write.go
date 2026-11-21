@@ -2,10 +2,12 @@ package format
 
 import (
 	"bytes"
+	jsonv1 "encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/SCKelemen/clix/v2"
@@ -15,9 +17,13 @@ import (
 )
 
 // Write prints data, a command's result, to ctx.App.Out as the output
-// flags ask. When the running command has list flags (see ListFlags),
-// Write first keeps the elements --filter selects, sorts them by
-// --sort-by and keeps the first --limit of them; the output flags then
+// flags ask. When data has a Schema (a Document, a result that
+// implements Schema, or a slice or array whose element type does), Write
+// first replaces it with its canonical document, the JSON output with
+// every declared field a record lacks filled in, so that everything below
+// reads the same fields. When the running command has list flags (see
+// ListFlags), Write then keeps the elements --filter selects, sorts them
+// by --sort-by and keeps the first --limit of them; the output flags then
 // print what is left:
 //
 //   - With none of --json, --jq and --template, it is
@@ -26,14 +32,16 @@ import (
 //     otherwise), or --format json / yaml.
 //   - --json prints the JSON output of clix.FormatData. With fields
 //     ("--json name,owner.login"), each object, or each object in a list,
-//     keeps only those fields, in the order the full output has them; a
-//     dotted path keeps a nested field and works through lists. With no
+//     keeps only those fields, in the order the full output has them, and
+//     gets null for a selected field it lacks; a dotted path keeps a
+//     nested field and works through lists. With no
 //     fields ("--json" alone or "--json="), Write returns a usage error
 //     that lists the available fields, as does a field the data does not
 //     have. The available fields are the keys of the object, or of the
 //     objects in the list, plus the JSON names of the fields of the struct
 //     type behind them (so an empty list and omitempty fields have them
-//     too).
+//     too) and the fields of the schema, which also checks the nested
+//     fields it declares.
 //   - --jq runs a jq expression over that JSON (all of it, or the --json
 //     fields) and prints each result on its own line: a string as its
 //     raw text, as gh and "jq -r" print it, and any other value as jq
@@ -94,6 +102,20 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 	if err != nil {
 		return err
 	}
+	// With a schema, every output flag below prints one canonical
+	// document: the JSON output with the declared fields filled in.
+	source, sch, err := schemaOf(data)
+	if err != nil {
+		return err
+	}
+	data = source // a Document without a schema prints as its Value
+	if sch != nil {
+		canonical, err := canonicalJSON(source, sch)
+		if err != nil {
+			return err
+		}
+		data = jsonv1.RawMessage(canonical)
+	}
 	if ls.active() {
 		if data, err = applyList(data, ls); err != nil {
 			return err
@@ -112,11 +134,25 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 		return err
 	}
 	doc := raw.Bytes()
-	if s.json {
-		available, err := availableFields(doc, data)
+	var records []any // the records of the canonical document, with a schema
+	if sch != nil {
+		tree, err := decodeTree(doc)
 		if err != nil {
 			return err
 		}
+		records = recordNodes(tree)
+	}
+	if s.json {
+		available, err := availableFields(doc, source)
+		if err != nil {
+			return err
+		}
+		for _, name := range sch.names() {
+			if !slices.Contains(available, name) {
+				available = append(available, name)
+			}
+		}
+		slices.Sort(available)
 		if len(s.fields) == 0 {
 			return fieldsError("", available)
 		}
@@ -124,8 +160,24 @@ func WriteWith(ctx *clix.Context, data any, opts clix.FormatOptions) error {
 			if !fieldKnown(f, available) {
 				return fieldsError(f, available)
 			}
+			if sch != nil {
+				if ok, nested := sch.checkPath(f, records); !ok {
+					return fieldsError(f, nested)
+				}
+			}
 		}
 		if doc, err = selectFields(doc, s.fields); err != nil {
+			return err
+		}
+	}
+	if sch != nil && s.rowTemplate != nil && len(s.jsonFlagNames) == 0 {
+		available := sch.names()
+		for _, k := range recordKeys(records) {
+			if !slices.Contains(available, k) {
+				available = append(available, k)
+			}
+		}
+		if err := s.rowTemplate.checkFields(available); err != nil {
 			return err
 		}
 	}
@@ -169,7 +221,9 @@ type settings struct {
 
 // UsesRowTemplate reports whether Write will render a --format row template.
 // A command can use it to supply JSON fields normally omitted at their default
-// values. Read it after flag parsing, from the running command.
+// values. Read it after flag parsing, from the running command. To give every
+// output flag those fields, not only row templates, declare them with a Schema
+// instead (see Document).
 func UsesRowTemplate(app *clix.App) bool {
 	s, err := readSettings(app)
 	return err == nil && s.rowTemplate != nil && len(s.jsonFlagNames) == 0
@@ -226,11 +280,18 @@ func (s settings) check() error {
 // fieldsError is the usage error for --json without fields (field == "")
 // or with a field the data does not have.
 func fieldsError(field string, available []string) error {
+	return unknownFieldError("--json", field, available)
+}
+
+// unknownFieldError is the usage error for a field of flag that the data
+// does not have, listing the available fields, or, for --json, for no
+// fields (field == "").
+func unknownFieldError(flag, field string, available []string) error {
 	var b strings.Builder
 	if field == "" {
-		b.WriteString("specify one or more comma-separated fields for --json")
+		fmt.Fprintf(&b, "specify one or more comma-separated fields for %s", flag)
 	} else {
-		fmt.Fprintf(&b, "unknown field for --json: %q", field)
+		fmt.Fprintf(&b, "unknown field for %s: %q", flag, field)
 	}
 	if len(available) == 0 {
 		b.WriteString("; this output has no fields")

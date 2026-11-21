@@ -6,6 +6,7 @@ import (
 	"math"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,7 +39,8 @@ type fieldsAll struct {
 }
 
 // Selecting every field reproduces clix.FormatData's JSON byte for byte:
-// escapes, numbers, raw messages and nesting are copied as they are.
+// escapes, numbers, raw messages and nesting are copied as they are. An
+// object that omits a selected field (omitempty) gets it as null.
 func TestSelectAllFieldsIsFormatData(t *testing.T) {
 	one := 1
 	values := []any{
@@ -63,8 +65,12 @@ func TestSelectAllFieldsIsFormatData(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if string(got) != want.String() {
-			t.Errorf("selectFields(all) differs from FormatData:\ngot:  %q\nwant: %q", got, want.String())
+		wantSelected := want.String()
+		if _, list := v.([]fieldsAll); list {
+			wantSelected = strings.ReplaceAll(wantSelected, "\"labels\": {}\n  }", "\"labels\": {},\n    \"omit\": null\n  }")
+		}
+		if string(got) != wantSelected {
+			t.Errorf("selectFields(all) differs from FormatData:\ngot:  %q\nwant: %q", got, wantSelected)
 		}
 		available, err := availableFields(want.Bytes(), v)
 		if err != nil {

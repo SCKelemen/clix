@@ -158,6 +158,23 @@
 // prints uppercase headings and aligns tabs. A list's filters, sorting and
 // limit apply first. See [Write] for how flags combine.
 //
+// # Schemas and missing fields
+//
+// A Schema declares the fields of a command's records: the object it
+// prints, or each object in the list it prints. Write applies it once,
+// before any output flag runs, filling each declared field a record
+// lacks with the field's Zero, or with null when it is Nullable, so that
+// every output flag, the list flags and the gcloud formats read one
+// canonical document, and --json and row templates check field names
+// against the schema. A command's result implements Schema, its element
+// type does, or Document attaches one. Schemas describe JSON, so any
+// producer can implement one, in its own module when it needs another
+// dependency, such as a protobuf adapter built from message descriptors.
+//
+// Without a schema, a --json selection gives null for a selected field an
+// object lacks, and a row template fails on it unless
+// Extension.MissingFields is MissingZero, which prints it as nothing.
+//
 // # Template helpers
 //
 // --template is a Go text/template over the decoded JSON output (with

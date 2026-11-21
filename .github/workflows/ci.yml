@@ -80,7 +80,7 @@ jobs:
       matrix:
         # Examples with their own go.mod. Each one replaces
         # github.com/SCKelemen/clix/v2 with the working tree (../..).
-        example: [ bubbles, lipgloss, multicli, survey ]
+        example: [ bubbles, lipgloss, multicli, protoschema, survey ]
     defaults:
       run:
         working-directory: examples/${{ matrix.example }}

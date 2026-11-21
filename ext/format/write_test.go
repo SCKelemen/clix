@@ -184,14 +184,17 @@ func TestJSONSelectsFields(t *testing.T) {
 		t.Errorf("get: got %q, want %q", got, want)
 	}
 
-	// Every field selected is exactly --format json.
+	// Every field selected is exactly --format json, with null for the
+	// field both objects omit (note is omitempty).
 	all := "name,displayName,stars,owner,labels,createdAt,note,url"
 	got, err = runWrite(t, app, out, ran, "list", "--json", all)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := formatJSON(t, wRepos); got != want {
-		t.Errorf("all fields:\n%s\nwant (--format json):\n%s", got, want)
+	withNote := strings.ReplaceAll(formatJSON(t, wRepos), "\"url\": \"https://example.com/clix\"\n", "\"url\": \"https://example.com/clix\",\n    \"note\": null\n")
+	withNote = strings.ReplaceAll(withNote, "\"url\": \"https://example.com/jq\"\n", "\"url\": \"https://example.com/jq\",\n    \"note\": null\n")
+	if got != withNote {
+		t.Errorf("all fields:\n%s\nwant (--format json with a null note):\n%s", got, withNote)
 	}
 	got, _ = runWrite(t, app, out, ran, "list", "--format", "json")
 	if got != formatJSON(t, wRepos) {
