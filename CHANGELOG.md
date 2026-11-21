@@ -10,6 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `ext/format` supports opt-in Docker-style row templates through `format.Extension{RowTemplates: true}`. Use `--format '{{.name}} {{.status}}'` to print a line per resource, or `--format 'table {{.name}}\t{{.status}}'` for a table with headings.
+- `ext/format` schemas: `format.Schema` (`Fields() []format.Field`) declares the fields of a command's records, with `format.Field{Name, Zero, Nullable, Fields}` and `format.Fields`, a schema given as a list. `format.Write` applies a schema once, before any output flag runs: a record that lacks a declared field gets its `Zero`, or `null` when it is `Nullable`, and nested `Fields` fill nested objects and lists. `--format json`, `yaml` and `text`, gcloud projections, `--json`, `--jq`, `--template`, row templates and the list flags all read that one canonical document, and `--json` and row templates check field names against the schema, also for an empty list. A result implements `Schema`, its element type does, or `format.Document{Value, Schema}` attaches one without changing the result's type; `Document` prints its canonical document through `clix.FormatData` too. Schemas describe JSON, so any producer can implement one; `examples/protoschema` is a protobuf adapter in a module of its own, and clix's root module gains no dependency. See "Schemas and missing fields" in `docs/output.md`.
+- `format.Extension.MissingFields` says what a row template does with a field its record lacks: `format.MissingError`, the default and the behavior so far, is a usage error before any row is printed; `format.MissingZero` prints it as nothing, also for a field of a missing or `null` value.
+
+### Changed
+
+- `ext/format`: a `--json` selection gives `null` for a selected field that an object lacks, such as an `omitempty` field, in every object, as gh does, instead of leaving it out; for a dotted path, the first part the object lacks is `null`. Selecting every field prints `--format json` with `null` for the fields an object leaves out. Output without `--json` fields is unchanged.
 
 ## [2.10.0] - 2026-11-21
 

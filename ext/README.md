@@ -9,7 +9,7 @@ Extensions add optional, "batteries-included" features to a clix app: commands, 
 | [`ext/alias`](alias) | `alias set\|list\|delete`, and gh-style aliases that expand into the app's commands | [Alias](../docs/extensions.md#alias-clixextalias) |
 | [`ext/plugin`](plugin) | `plugin list`, and kubectl-style plugins: `myapp foo` runs `myapp-foo` from PATH | [Plugin](../docs/extensions.md#plugin-clixextplugin) |
 | [`ext/autocomplete`](autocomplete) | `autocomplete [bash\|zsh\|fish\|powershell]` | [Shell completion](../docs/completion.md) |
-| [`ext/format`](format) | gh's `--format`, `--json`, `--jq` and `--template`, and `format.Write`; gcloud's `--filter`, `--sort-by` and `--limit`, also as operations on data | [Output](../docs/output.md) |
+| [`ext/format`](format) | gh's `--format`, `--json`, `--jq` and `--template`, and `format.Write`; gcloud's `--filter`, `--sort-by` and `--limit`, also as operations on data; optional schemas that give every output flag the same fields | [Output](../docs/output.md), [Schemas and missing fields](../docs/output.md#schemas-and-missing-fields) |
 | [`ext/version`](version) | `version` and `--version` | [Version](../docs/extensions.md#version-clixextversion) |
 | [`ext/prompt`](prompt) | select and multi-select prompts, and raw-mode line editing on a terminal | [Prompting and terminals](../docs/prompting-and-terminals.md) |
 | [`ext/survey`](survey) | chained prompts: static and dynamic question flows, undo and an end card | [`survey/README.md`](survey/README.md) |
@@ -27,3 +27,5 @@ app.AddExtension(version.Extension{Version: "1.0.0"})
 ```
 
 Flag-based help (`-h`, `--help`) is handled by the core library and works without any extension.
+
+Extensions use the standard library, `golang.org/x` and `go.yaml.in/yaml/v3` only. Support for another data model plugs into an extension through an interface and lives in a module of its own: [`examples/protoschema`](../examples/protoschema) gives `ext/format` a `format.Schema` built from protobuf message descriptors, with `google.golang.org/protobuf` in its own `go.mod`.

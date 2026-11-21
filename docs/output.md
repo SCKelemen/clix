@@ -137,7 +137,7 @@ func reportDeleted(ctx *clix.Context, name string) {
 | `myapp list` | text (a table for a list of objects) |
 | `myapp list --format json` | all of the JSON |
 | `myapp list --json` (or `--json=`, or `--json` before another flag) | a usage error listing the available fields, sorted |
-| `myapp list --json name,owner.login` | the JSON with only those fields in each object (or in each object of the list), in the order the full JSON has them; `owner.login` keeps `{"owner": {"login": ...}}`, also through lists |
+| `myapp list --json name,owner.login` | the JSON with only those fields in each object (or in each object of the list), in the order the full JSON has them; `owner.login` keeps `{"owner": {"login": ...}}`, also through lists. An object that lacks a selected field gets it as `null` (see [Without a schema](#without-a-schema)) |
 | `myapp list --json nope` | a usage error naming the field and listing the available ones |
 | `myapp list --jq EXPR` | the results of a jq expression over the JSON |
 | `myapp list --json name --jq EXPR` | the results of the expression over the selected fields |
@@ -149,7 +149,7 @@ func reportDeleted(ctx *clix.Context, name string) {
 - **Command line only**: `--json`, `--jq` and `--template` depend on the command, so they are never read from the environment or the config file (`CommandLineOnly`). A `--format` from `<PREFIX>_FORMAT` or the config file gives way to them.
 - **Ambient**: all four flags choose how the result is printed, so `myapp --json name widgets create` still prompts for missing required flags (see [Context flags](routing-and-flags.md#context-flags)).
 - **Errors**: a `--jq` expression or a `--template` that does not parse, or a malformed `--json` field, is a usage error (exit status 2) before the command runs. Unknown fields and the field list are usage errors that `format.Write` returns before printing anything. An error while a jq expression or a template runs (exit status 1) comes after the output produced before it, as in jq.
-- **`--json` output** is indented like `--format json`; with every field selected it is byte for byte the same.
+- **`--json` output** is indented like `--format json`; with every field selected it is byte for byte the same, except that a field an object leaves out (such as an `omitempty` field) is `null`.
 - **`--jq` output**: each result goes on its own line. A string prints as its raw text, without quotes, as gh does (`jq -r`), with its control characters escaped on a terminal (see [Control characters](#control-characters-and-escape-sequences)); every other value prints as jq prints it, indented by two spaces. In a pipe or a file, the output is byte for byte what `myapp list --json f | jq -r EXPR` prints with jq 1.8.1.
 - **`--template` data**: objects are `map[string]any`, lists `[]any`, whole numbers `int64` (or `uint64`), other numbers `float64`, so `{{.stars}}` prints `42` and `{{if gt .stars 10}}` compares numbers. A missing key prints `<no value>`, as in gh. On a terminal, control characters in the data's strings and keys are escaped before the template runs (see [Control characters](#control-characters-and-escape-sequences)).
 
@@ -199,7 +199,128 @@ myapp projects list --format 'table {{.name}}\t{{.displayName}}'
 myapp projects list --format '{{json .}}'
 ```
 
-Row templates support Go's built-in template functions and the helpers `json VALUE`, `join LIST SEP`, `split STRING SEP`, `lower STRING` and `upper STRING`. A leading `table ` adds a heading derived from direct field selectors and aligns tab-separated columns, including in a pipe. In literal text between template actions, `\t` and `\n` select tabs and newlines. Quoted arguments inside `{{...}}` use Go template string syntax. An unknown field fails the render before any rows reach stdout. Data printed on a terminal follows the control-character escaping rules of `--template`. To format the complete list in a single template, use `--template`.
+Row templates support Go's built-in template functions and the helpers `json VALUE`, `join LIST SEP`, `split STRING SEP`, `lower STRING` and `upper STRING`. A leading `table ` adds a heading derived from direct field selectors and aligns tab-separated columns, including in a pipe. In literal text between template actions, `\t` and `\n` select tabs and newlines. Quoted arguments inside `{{...}}` use Go template string syntax. An unknown field fails the render before any rows reach stdout, unless `format.Extension{MissingFields: format.MissingZero}` prints it as nothing (see [Without a schema](#without-a-schema)); the fields a [schema](#schemas-and-missing-fields) declares are never unknown. Data printed on a terminal follows the control-character escaping rules of `--template`. To format the complete list in a single template, use `--template`.
+
+## Schemas and missing fields
+
+The output flags read a command's JSON output, and an encoder often leaves fields out of it: an `omitempty` struct field, a column a mapper skips when it is `NULL`, a protobuf field that holds its default. Each flag would treat the gap its own way: `--format json` does not show the field, `--jq` reads `null`, `--template` prints `<no value>`, and a row template fails. A `format.Schema` declares the fields of a command's records, and `format.Write` fills the gaps once, before any output flag runs, so that every flag reads one canonical document.
+
+```go
+type Instance struct {
+        Name string `json:"name"`
+        CPUs int    `json:"cpus,omitempty"`
+        Zone string `json:"zone,omitempty"`
+}
+
+// Fields declares the fields omitempty leaves out.
+func (Instance) Fields() []format.Field {
+        return []format.Field{
+                {Name: "name", Zero: ""},
+                {Name: "cpus", Zero: 0},
+                {Name: "zone", Nullable: true},
+        }
+}
+
+cmd.Run = func(ctx *clix.Context) error {
+        return format.Write(ctx, []Instance{{Name: "web-1", CPUs: 2, Zone: "eu-west1-b"}, {Name: "web-2"}})
+}
+```
+
+```text
+$ myapp instances list --format json
+[
+  {
+    "name": "web-1",
+    "cpus": 2,
+    "zone": "eu-west1-b"
+  },
+  {
+    "name": "web-2",
+    "cpus": 0,
+    "zone": null
+  }
+]
+$ myapp instances list --jq '.[] | select(.cpus == 0) | .name'
+web-2
+$ myapp instances list --format '{{.name}} {{.cpus}}'
+web-1 2
+web-2 0
+```
+
+A result whose type does not implement `Schema`, such as `json.RawMessage` values from another encoder, gets one with `format.Document`, without changing its type. `format.Fields` is a schema given as a list:
+
+```go
+import "encoding/json"
+
+records := []json.RawMessage{json.RawMessage(`{"name":"web-1","cpus":2}`), json.RawMessage(`{"name":"web-2"}`)}
+return format.Write(ctx, format.Document{Value: records, Schema: format.Fields{
+        {Name: "name", Zero: ""},
+        {Name: "cpus", Zero: 0},
+        {Name: "zone", Nullable: true},
+}})
+```
+
+- **Records**: the schema applies to the object a command prints, or to each object in the list it prints. `format.Write` finds it on a `format.Document`, on the result when it implements `Schema`, or on the element type of a slice or array when a new element implements it (with a value or a pointer receiver).
+- **Filling**: a record that lacks a field gets the field's `Zero`, encoded as `clix.FormatData` encodes JSON, or `null` when the field is `Nullable`. `Fields` declares the fields of a nested object, or of each object in a nested list, which are filled the same way; a missing field with nested fields and no `Zero` becomes an object of their values. A field the record has, even `null`, keeps its value. A filled field goes right after the field declared before it, so the canonical document follows the schema's order where the record does not say otherwise.
+- **One document**: `--format json`, `yaml` and `text`, the gcloud format expressions, `--json`, `--jq`, `--template`, row templates and `--filter`, `--sort-by` and `--limit` all read the canonical document, so they agree on every field: filled fields appear in plain JSON too. `format.Write` prints it as it prints a `json.RawMessage`, so YAML and text use the JSON field names (YAML sorts the keys) and text shows durations in ISO 8601, as JSON does. Nothing in it depends on which output flag is given; `format.Write` never asks the producer for a different document.
+- **Field names**: `--json` takes the schema's fields, also for an empty list, and where a field declares nested fields, a dotted path into it must name one of them (or a key the data has). A row template's field names are checked against the schema and the records' keys before any row is printed, even when there are no rows; this covers references through `$` and those evaluated with the record as dot, not those inside the body of `range` or `with`.
+- **Everywhere**: `format.Document` implements `json.Marshaler` and YAML's `MarshalYAML`, so `clix.FormatData` prints its canonical document as well, also inside other values. A `Document` with a nil `Schema` prints as its `Value`.
+- **Errors**: a field without a name, a field declared twice at one level, or a `Zero` that cannot be encoded is an error from `format.Write`, before anything is printed.
+
+### Without a schema
+
+The output flags treat a missing field the same way for every producer:
+
+| Output | A field the record lacks |
+| --- | --- |
+| `--format json`, `yaml`, `text` | not shown |
+| `--json FIELDS` | `null`, in each object that lacks it; for a dotted path such as `owner.login`, the first part the object lacks is `null`. It goes after the selected field before it, in the order of the objects that have them |
+| `--jq` | `null`, as in jq |
+| `--template` | `<no value>`, as in gh |
+| gcloud format expressions | an empty value |
+| Row templates (`format.Extension{RowTemplates: true}`) | a usage error, before any row is printed (`MissingFields: format.MissingError`, the default) |
+| Row templates with `MissingFields: format.MissingZero` | nothing: the field is nil, so it prints as an empty string, is false in `if`, ranges over nothing, and `lower`, `upper`, `split` and `join` take it as empty. A field of a missing or `null` value is nil too, where Go templates would fail on it |
+
+```go
+app.AddExtension(format.Extension{RowTemplates: true, MissingFields: format.MissingZero})
+```
+
+`MissingZero` changes row templates only; `--template` keeps gh's behavior. A field of a value that is not an object, such as `{{.name.first}}` on a string, is still an error.
+
+### Adapters for other data models
+
+A `Schema` describes JSON, not a Go type, so an adapter for another data model implements it in its own module and clix's root module keeps its dependencies. [`examples/protoschema`](../examples/protoschema) is a protobuf adapter: it marshals each message once with protojson's ordinary output and builds the schema from the message descriptor, with `null` for fields with presence, `[]` and `{}` for repeated fields and maps, protojson's defaults for the rest, and nested fields for message fields:
+
+```go
+// Abridged: from examples/protoschema, a module that requires google.golang.org/protobuf.
+func Marshal(o protojson.MarshalOptions, m proto.Message) (format.Document, error) {
+        b, err := o.Marshal(m)
+        if err != nil {
+                return format.Document{}, err
+        }
+        return format.Document{Value: json.RawMessage(b), Schema: Schema(m.ProtoReflect().Descriptor(), o)}, nil
+}
+
+func Schema(md protoreflect.MessageDescriptor, o protojson.MarshalOptions) format.Fields {
+        var fields format.Fields
+        for i := range md.Fields().Len() {
+                fd := md.Fields().Get(i)
+                f := format.Field{Name: fd.JSONName()}
+                switch {
+                case fd.IsMap():
+                        f.Zero = map[string]any{}
+                case fd.IsList():
+                        f.Zero, f.Fields = []any{}, nested(fd, o)
+                case fd.HasPresence(): // messages, optional fields, oneof members
+                        f.Nullable, f.Fields = true, nested(fd, o)
+                default:
+                        f.Zero = zero(fd, o) // 0, "0" for 64-bit integers, "", false, an enum's default name
+                }
+                fields = append(fields, f)
+        }
+        return fields
+}
+```
 
 ## gcloud format projections
 
