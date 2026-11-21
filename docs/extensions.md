@@ -184,7 +184,7 @@ app.AddExtension(version.Extension{
 
 ## Format (`clix/ext/format`)
 
-Adds gh's output flags to the root: `--format` / `-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq` / `-q` and `--template` / `-t`. See [Output](output.md).
+Adds gh's output flags to the root: `--format` / `-f` (`json`, `yaml` or `text`, the default), `--json [fields]`, `--jq` / `-q` and `--template` / `-t`. `Extension{FormatShort: format.NoShort}` registers `--format` without `-f`, for apps whose commands use `-f`. The package also has gcloud's `--filter`, `--sort-by` and `--limit` for list commands, and the same operations on data, with a filter's parse tree and a way to split it between a server and the client. See [Output](output.md).
 
 ## Prompt, survey and validation
 

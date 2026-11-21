@@ -182,8 +182,8 @@ func unsupportedIn(err error, flag string) error {
 
 // listSettings are the list flags of one Run.
 type listSettings struct {
-	filter *filter.Filter
-	sortBy []resource.SortKey
+	filter *Filter // nil without --filter
+	sortBy SortBy
 	limit  int64
 	names  []string // the flags given, for messages
 }
@@ -200,7 +200,7 @@ func readListSettings(ctx *clix.Context) (listSettings, error) {
 	fs := ctx.Command.Flags
 	if f := fs.Lookup("filter"); f != nil {
 		if v, ok := f.Value.(*filterValue); ok && v.set && strings.TrimSpace(v.text) != "" {
-			flt, err := filter.Parse(v.text)
+			flt, err := ParseFilter(v.text)
 			if err != nil {
 				return s, clix.UsageErrorf("invalid value for --filter: %w", err)
 			}
@@ -210,11 +210,11 @@ func readListSettings(ctx *clix.Context) (listSettings, error) {
 	}
 	if f := fs.Lookup("sort-by"); f != nil {
 		if v, ok := f.Value.(*sortByValue); ok && v.text != "" {
-			keys, err := resource.ParseSortBy(v.text)
+			sortBy, err := ParseSortBy(v.text)
 			if err != nil {
 				return s, clix.UsageErrorf("invalid value for --sort-by: %w", err)
 			}
-			s.sortBy = keys
+			s.sortBy = sortBy
 			s.names = append(s.names, "--sort-by")
 		}
 	}
@@ -228,54 +228,30 @@ func readListSettings(ctx *clix.Context) (listSettings, error) {
 }
 
 // applyList filters, sorts and limits data, a list, as the list flags
-// ask, and returns what is left: a slice of the same element type when
-// data is a slice or an array (so every output format prints the
-// elements exactly as it would print them in data), and otherwise the
-// elements' JSON.
+// ask, with the code of ListOptions.Select, and returns what is left: a
+// slice of the same element type when data is a slice or an array (so
+// every output format prints the elements exactly as it would print them
+// in data), and otherwise the elements' JSON.
 func applyList(data any, s listSettings) (any, error) {
-	var raw bytes.Buffer
-	if err := clix.FormatData(&raw, data, clix.FormatJSON); err != nil {
-		return nil, err
-	}
-	doc, err := resource.Decode(raw.Bytes())
+	d, err := decodeList(data)
 	if err != nil {
 		return nil, err
 	}
-	if doc == nil {
+	switch {
+	case d.null:
 		return data, nil // nothing to list
+	case d.notList != "":
+		return nil, clix.UsageErrorf("%s apply to a list, and this command prints a single %s", strings.Join(s.names, ", "), d.notList)
 	}
-	list, ok := doc.([]any)
-	if !ok {
-		return nil, clix.UsageErrorf("%s apply to a list, and this command prints a single %s", strings.Join(s.names, ", "), kindOf(doc))
-	}
-	order := make([]int, len(list))
-	for i := range order {
-		order[i] = i
-	}
+	var flt *filter.Filter
 	if s.filter != nil {
-		if order, err = s.filter.Select(list); err != nil {
-			return nil, clix.UsageErrorf("--filter: %w", err)
-		}
+		flt = s.filter.f
 	}
-	if len(s.sortBy) > 0 {
-		selected := make([]any, len(order))
-		for i, j := range order {
-			selected[i] = list[j]
-		}
-		sorted, err := resource.SortBy(selected, s.sortBy)
-		if err != nil {
-			return nil, clix.UsageErrorf("--sort-by: %w", unsupportedIn(err, "--sort-by"))
-		}
-		reordered := make([]int, len(sorted))
-		for i, k := range sorted {
-			reordered[i] = order[k]
-		}
-		order = reordered
+	order, failed, err := listOrder(d.list, flt, s.sortBy.keys, s.limit)
+	if err != nil {
+		return nil, clix.UsageErrorf("%s: %w", failed, err)
 	}
-	if s.limit > 0 && int64(len(order)) > s.limit {
-		order = order[:s.limit]
-	}
-	return subset(data, raw.Bytes(), len(list), order)
+	return subset(data, d.raw, len(d.list), order)
 }
 
 func kindOf(v any) string {

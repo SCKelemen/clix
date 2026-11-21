@@ -13,7 +13,8 @@ import (
 // Extension registers the output flags on the app root, modeled on the
 // GitHub CLI (gh):
 //
-//   - --format / -f selects json, yaml or text (the default).
+//   - --format / -f selects json, yaml or text (the default). FormatShort
+//     chooses another short name, or none.
 //   - --json [fields] prints JSON, restricted to the named fields when
 //     some are given (see Write).
 //   - --jq / -q <expression> filters the JSON output with a jq expression
@@ -49,6 +50,12 @@ import (
 // replaces the extension's (Write then ignores it). App.Validate reports
 // replaced flags. Adding the extension twice registers the flags once.
 //
+// A command's own -f wins after the command name: in "myapp apply -f
+// x.yaml", -f is apply's flag, while before the command name it is
+// --format. App.Validate reports that, since the two meanings of -f can
+// surprise users. To keep -f for the commands, set FormatShort to NoShort
+// (as in gcloud, whose --format has no short name) or to another letter.
+//
 // That includes gcloud's -q for --quiet: clix.App.EnableQuiet registers
 // --quiet without a short name, so -q stays --jq, as in gh. An app that
 // calls app.EnableQuiet(clix.QuietOptions{Short: "q"}) itself owns -q,
@@ -71,6 +78,36 @@ type Extension struct {
 	// and projections, and none. Off by default, so apps that do not set
 	// it are unchanged.
 	Projections bool
+
+	// FormatShort is the short name of --format: empty for the default,
+	// "f", or NoShort to register --format by its long name only. A
+	// letter that --jq (-q) or --template (-t) would use goes to
+	// --format, and that flag keeps only its long name (unless the app
+	// defines its own --format, which then has its own short name). As
+	// with any flag, "h" takes -h from --help, and an app's flag with the
+	// same letter keeps it (see clix.App.Validate).
+	FormatShort string
+}
+
+// NoShort is the Extension.FormatShort that gives --format no short name.
+const NoShort = "-"
+
+// shorts returns the short names of --format, --jq and --template.
+func (e Extension) shorts() (format, jq, template string) {
+	format, jq, template = e.FormatShort, "q", "t"
+	switch format {
+	case "":
+		format = "f"
+	case NoShort:
+		format = ""
+	}
+	if format == jq {
+		jq = ""
+	}
+	if format == template {
+		template = ""
+	}
+	return format, jq, template
 }
 
 // formats lists the values the --format flag accepts.
@@ -79,6 +116,7 @@ var formats = []string{clix.FormatJSON, clix.FormatYAML, clix.FormatText}
 // Extend implements clix.Extension.
 func (e Extension) Extend(app *clix.App) error {
 	fs := app.Flags()
+	formatShort, jqShort, templateShort := e.shorts()
 	if _, ok := ours[*formatValue](app, "format"); !ok {
 		usage, validate, names := "Output format (json, yaml, text)", validateFormat, formats
 		if e.Projections {
@@ -94,7 +132,7 @@ func (e Extension) Extend(app *clix.App) error {
 		fs.Var(clix.VarOptions{
 			FlagOptions: clix.FlagOptions{
 				Name:     "format",
-				Short:    "f",
+				Short:    formatShort,
 				Usage:    usage,
 				Validate: validate,
 				// An output setting, not an input: passing it does not stop
@@ -109,6 +147,11 @@ func (e Extension) Extend(app *clix.App) error {
 		if _, ok := ours[*formatValue](app, "format"); ok {
 			fs.SetCompletion("format", clix.CompleteValues(names...))
 		}
+	}
+	// --jq and --template give their letter up only to this extension's
+	// --format, not to an app's own.
+	if _, ok := ours[*formatValue](app, "format"); !ok {
+		jqShort, templateShort = "q", "t"
 	}
 	if _, ok := ours[*fieldsValue](app, "json"); !ok {
 		fs.Var(clix.VarOptions{
@@ -129,7 +172,7 @@ func (e Extension) Extend(app *clix.App) error {
 		fs.Var(clix.VarOptions{
 			FlagOptions: clix.FlagOptions{
 				Name:            "jq",
-				Short:           "q",
+				Short:           jqShort,
 				Usage:           "Filter JSON output using a jq expression",
 				Validate:        validateJQ,
 				Ambient:         true,
@@ -145,7 +188,7 @@ func (e Extension) Extend(app *clix.App) error {
 		fs.Var(clix.VarOptions{
 			FlagOptions: clix.FlagOptions{
 				Name:            "template",
-				Short:           "t",
+				Short:           templateShort,
 				Usage:           "Format JSON output using a Go template",
 				Validate:        validateTemplate,
 				Ambient:         true,

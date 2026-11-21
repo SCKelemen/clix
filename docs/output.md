@@ -62,7 +62,7 @@ clix (42)
 
 ### The format extension
 
-`format.Extension{}` adds gh's output flags to the root: `--format` / `-f`, `--json [fields]`, `--jq` / `-q` and `--template` / `-t` (each short name unless your app uses it). `--format` takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. `--json`, `--jq` and `--template` are read from the command line only. All four flags are `Ambient` (see [Context flags](routing-and-flags.md#context-flags)), so `myapp --format json widgets create` still prompts for missing required flags. An app flag of the same name replaces the extension's, with the app's own options, and `format.Write` then ignores it. Shell completion offers `json`, `yaml` and `text` for `--format`. Print results with `format.Write(ctx, data)` (or `format.WriteWith` to choose table columns), which applies every flag; `format.OutputFormat(app)` returns the selected format for handlers that call `clix.FormatData` themselves, falling back to `text`, and `json` with `--json`. `format.ListFlags(cmd)` (or `format.WithListFlags()`) adds gcloud's `--filter`, `--sort-by` and `--limit` to a list command, which `format.Write` applies first, and `format.FiltersTopic` is a help topic about them (see [`--filter`, `--sort-by` and `--limit`](#--filter---sort-by-and---limit)). Without this extension there are no output flags; `config list` prints YAML and `version` prints text.
+`format.Extension{}` adds gh's output flags to the root: `--format` / `-f`, `--json [fields]`, `--jq` / `-q` and `--template` / `-t` (each short name unless your app uses it). A command's own `-f` (say, gh's `api -f` for `--raw-field`) wins after the command name, while `-f` before it is still `--format`, and `App.Validate` reports the two meanings. To keep `-f` for commands, set `format.Extension{FormatShort: format.NoShort}`, which registers `--format` by its long name only, as gcloud's is, or choose another letter with `FormatShort: "o"`; the default, an empty `FormatShort`, is `-f`. `--format` takes `json`, `yaml` or `text` in any case; the default is `text`. Any other value, on the command line, in `<PREFIX>_FORMAT` or in the `format` config key, is a usage error (exit status 2) that lists the valid formats. `--json`, `--jq` and `--template` are read from the command line only. All four flags are `Ambient` (see [Context flags](routing-and-flags.md#context-flags)), so `myapp --format json widgets create` still prompts for missing required flags. An app flag of the same name replaces the extension's, with the app's own options, and `format.Write` then ignores it. Shell completion offers `json`, `yaml` and `text` for `--format`. Print results with `format.Write(ctx, data)` (or `format.WriteWith` to choose table columns), which applies every flag; `format.OutputFormat(app)` returns the selected format for handlers that call `clix.FormatData` themselves, falling back to `text`, and `json` with `--json`. `format.ListFlags(cmd)` (or `format.WithListFlags()`) adds gcloud's `--filter`, `--sort-by` and `--limit` to a list command, which `format.Write` applies first, and `format.FiltersTopic` is a help topic about them (see [`--filter`, `--sort-by` and `--limit`](#--filter---sort-by-and---limit)); the same operations are available on data (see [Filtering and sorting data](#filtering-and-sorting-data)). Without this extension there are no output flags; `config list` prints YAML and `version` prints text.
 
 ## Output formats
 
@@ -267,3 +267,99 @@ $ myapp projects list --sort-by labels.env,~name --format yaml
 - **Missing fields** are `null`, which equals the empty operand and `null`, compares as the empty string, and makes `key:*` false.
 - **Dates and times**: when the first non-empty value of a term (in list order) starts like a timestamp (`YYYY-MM-DD HH:MM:SS`, with `T` or a space), the term compares instants, as gcloud does: `createTime>=2018-01-15`. Operands and values must then be `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM[:SS[.F]]`, optionally with `Z` or an offset such as `+02:00`; without an offset, in the local time zone, as gcloud reads them.
 - **Not supported** (errors): the regular expression operators `~` and `!~`; terms without an operator (gcloud's global restrictions, such as a bare word); transforms in keys (`name.len()`) and the `*` map shorthand; `[name]` and `[1.5]` indices; `:` and lists of operands on dates and times; relative times such as `-P2W` and the other date forms gcloud's date parser reads (`2018`, `Jan 15 2018`); local times that daylight saving time skips or repeats; values of a date and time key that are not dates and times; digits outside ASCII in numbers. gcloud prints a warning when a `:` term would match differently under its planned new rules; clix evaluates the current rules and prints nothing.
+
+### Filtering and sorting data
+
+A command can use the list flags' operations on its own, on records rather than in what `format.Write` prints: to filter each page of a listing before deciding whether to read the next, for example. `format.ParseFilter` and `format.ParseSortBy` parse a `--filter` expression and a `--sort-by` value exactly as the flags do, with the same errors, and `format.ListOptions` applies a filter, a sort and a limit in gcloud's order. Records are read as their `--format json` output, so struct fields match by their JSON names, and `format.Write` applies the flags with the same code: the operations keep exactly the records it would print.
+
+```go
+type instance struct {
+        Name   string `json:"name"`
+        Status string `json:"status"`
+        CPUs   int    `json:"cpus"`
+}
+
+var instances []instance
+
+f, err := format.ParseFilter("status=RUNNING name:web*")
+if err != nil {
+        return err
+}
+sortBy, err := format.ParseSortBy("~cpus")
+if err != nil {
+        return err
+}
+// The records --filter, --sort-by and --limit 10 would keep, in order.
+kept, err := format.ApplyList(instances, format.ListOptions{Filter: f, SortBy: sortBy, Limit: 10})
+if err != nil {
+        return err
+}
+fmt.Println(len(kept))
+```
+
+| API | Does |
+| --- | --- |
+| `format.ParseFilter(expr) (*format.Filter, error)` | parses a filter; the empty expression, the nil `*Filter` and the zero `Filter` select every record |
+| `(*Filter).Select(records) ([]int, error)` | the indices of the records it selects, in order |
+| `(*Filter).Selector() *format.FilterSelector` | evaluates a list that comes in pages as one list: `Select` on each page continues where the last one stopped |
+| `(*Filter).String() string` | the expression in a canonical form that parses back to the same tree |
+| `(*Filter).Expr() format.FilterExpr` | the parse tree, nil for the empty expression (below) |
+| `(*Filter).Conjuncts() []format.FilterExpr` | the operands of the top-level `AND`, or the expression alone |
+| `(*Filter).Split(canServer) (server, client *Filter)` | divides the conjuncts between a server and the client (below) |
+| `format.NewFilter(e) *format.Filter` | a filter of one subtree, evaluated as if it were the whole expression; it panics on a node `Expr` did not return |
+| `format.ParseSortBy(value) (format.SortBy, error)` | parses a `--sort-by` value; `Keys()` returns its `SortKey`s (`Key`, `Descending`), and `Sort(records)` the order of the records |
+| `format.ListOptions{Filter, SortBy, Limit}` | `Select(records)` filters, sorts and limits, as the three flags do |
+| `format.ApplyList(records []T, opts) ([]T, error)` | the records `ListOptions.Select` keeps, in its order |
+
+`records` is a list as `format.Write` takes one: a slice, an array, a pointer to one, or a value whose JSON is a list (such as `[]json.RawMessage`); `nil` has no records. Errors from the data are those `format.Write` returns without its `--filter: ` prefix, such as a `:` on dates and times, which "is not supported in clix --filter". A term that compares dates and times decides so by the first value it sees in the list, so one `Select` of a whole list can differ from separate ones on its pages; a `FilterSelector` keeps that decision across pages.
+
+#### The parse tree
+
+`Expr` returns read-only nodes, the same ones on every call: `*format.FilterTerm` (`Key()`, `Op()`, `Operands()` and `IsList()`, for `key:(a b)`), `*format.FilterAnd` and `*format.FilterOr` (`Operands()`, two or more, with nested `AND`s and `OR`s flattened) and `*format.FilterNot` (`Operand()`, for `NOT a` and `-a`). Grouping is the shape of the tree: `a b OR c` is an `AND` whose second operand is an `OR`. A `format.Key` has `Parts()`, each a name, an `[N]` index or a `[]` slice, and `String()`, the key as an expression writes it. `FilterOp` is one of `FilterHas` (`:`), `FilterEqual`, `FilterNotEqual`, `FilterLess`, `FilterLessEqual`, `FilterGreater` and `FilterGreaterEqual`.
+
+#### Splitting a filter between a server and the client
+
+A command whose server takes a filter, such as an [AIP-160](https://google.aip.dev/160) `filter` in a List request, can send it the part of `--filter` it evaluates and evaluate the rest on what it returns. `Split` calls `canServer` with each conjunct and returns two filters whose conjunction is the whole:
+
+```go
+// aip160 writes a term as an AIP-160 restriction, for a server that
+// compares these fields as gcloud's = does (ignoring case).
+func aip160(e format.FilterExpr) (string, bool) {
+        t, ok := e.(*format.FilterTerm)
+        if !ok || t.Op() != format.FilterEqual || t.IsList() {
+                return "", false
+        }
+        switch k := t.Key().String(); k {
+        case "status", "labels.env":
+                return fmt.Sprintf("%s = %q", k, t.Operands()[0]), true
+        }
+        return "", false
+}
+
+f, err := format.ParseFilter("status=RUNNING labels.env=prod (name:web* OR cpus>4)")
+if err != nil {
+        return err
+}
+server, client := f.Split(func(e format.FilterExpr) bool {
+        _, ok := aip160(e)
+        return ok
+})
+var restrictions []string
+for _, e := range server.Conjuncts() {
+        r, _ := aip160(e)
+        restrictions = append(restrictions, r)
+}
+fmt.Println(strings.Join(restrictions, " AND ")) // status = "RUNNING" AND labels.env = "prod"
+fmt.Println(client)                              // name:web* OR cpus>4
+
+var returned []map[string]any // what the server returned
+kept, err := format.ApplyList(returned, format.ListOptions{Filter: client})
+if err != nil {
+        return err
+}
+fmt.Println(len(kept))
+```
+
+- **Only narrowing**: the client part is ANDed with the server's, never ORed, so evaluating it on the server's results can only remove records; it never adds one. `Split` moves whole conjuncts only. It never sends one operand of an `OR`, or what is under a `NOT`, to the server: the client could not bring back the records the server would then drop.
+- **Exact results**: with a server that returns exactly the records its part selects, the client part keeps exactly the whole filter's records. `canServer` must therefore accept only conjuncts the server evaluates as gcloud does or more broadly, judging the whole conjunct: a server whose `a` is broader has a `NOT a` that is narrower, and a server whose `=` is case-sensitive is narrower than gcloud's and drops records. When the server may return more than its part selects, evaluate the whole filter on its results (`f.Select`), which keeps exactly the filter's records of any superset of them. gcloud's own server-side rewrite (`resource_expr_rewrite` in the Cloud SDK) does that: when the server takes only part of a filter, the client applies the whole filter.
+- **Dates and times**: the client part sees only what the server returned, so for a key whose values mix dates and times with other text it can decide differently from the whole filter on whether to compare dates (see above).
